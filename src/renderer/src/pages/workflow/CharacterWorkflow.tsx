@@ -6,7 +6,7 @@ import {
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { clearActiveSession, clearCompletedSession, completeSession, setActiveSession, updateSessionOutputDir, updateSessionProgress } from '@renderer/store/workflow'
 import type { Model } from '@shared/types'
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Download, Info, Loader2, Mic, Play, Plus, RefreshCw, Sparkles, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Download, Info, Loader2, Mic, Play, Plus, RefreshCw, Sparkles, X } from 'lucide-react'
 import { FC, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -38,8 +38,9 @@ interface FsEntry {
 
 // --- Reusable UI Components ---
 
-const WorkflowLayout: FC<{ children: ReactNode; className?: string }> = ({ children, className }) => (
+const WorkflowLayout: FC<{ children: ReactNode; nav?: ReactNode; className?: string }> = ({ children, nav, className }) => (
   <div className={`flex flex-col h-full w-full bg-background relative group ${className || ''}`}>
+    {nav}
     <div className="flex-1 flex flex-col items-center overflow-y-auto px-6 md:px-20 lg:px-32 py-12">
       <div className="w-full max-w-4xl space-y-10 my-auto pb-20">
         {children}
@@ -138,9 +139,7 @@ const CharacterWorkflow: FC = () => {
   // 人物 TXT 合集（用于“非指定人物模式”的结果展示）
   const [characterTxtFiles, setCharacterTxtFiles] = useState<FsEntry[]>([])
   const [selectedCharacterPath, setSelectedCharacterPath] = useState<string | null>(null)
-  const [selectedCharacterText, setSelectedCharacterText] = useState<string | null>(null)
   const [isCharacterListLoading, setIsCharacterListLoading] = useState(false)
-  const [isCharacterTextLoading, setIsCharacterTextLoading] = useState(false)
 
   // 二次总结（人物志/心理独白）- 结果文件为真相，仅用于渲染的短暂状态
   type SecondaryKind = 'bio' | 'monologue'
@@ -151,7 +150,6 @@ const CharacterWorkflow: FC = () => {
   const [isSecondaryMonologueLoading, setIsSecondaryMonologueLoading] = useState(false)
   const [isSecondaryBioGenerating, setIsSecondaryBioGenerating] = useState(false)
   const [isSecondaryMonologueGenerating, setIsSecondaryMonologueGenerating] = useState(false)
-  const [expandedResultPane, setExpandedResultPane] = useState<'primary' | 'secondary'>('primary')
 
   // 阶段内进度条（用于二次总结/语音生成，提取阶段仍使用 progress）
   const [stageProgress, setStageProgress] = useState<ProcessingState | null>(null)
@@ -224,9 +222,7 @@ const CharacterWorkflow: FC = () => {
     setHistoryBookTitle(null)
     setCharacterTxtFiles([])
     setSelectedCharacterPath(null)
-    setSelectedCharacterText(null)
     setIsCharacterListLoading(false)
-    setIsCharacterTextLoading(false)
     setSecondaryKind('bio')
     setSecondaryBioText(null)
     setSecondaryMonologueText(null)
@@ -234,7 +230,6 @@ const CharacterWorkflow: FC = () => {
     setIsSecondaryMonologueLoading(false)
     setIsSecondaryBioGenerating(false)
     setIsSecondaryMonologueGenerating(false)
-    setExpandedResultPane('primary')
     setProgress({ stage: 'initializing', percentage: 0 })
     setIsRestoring(true)
 
@@ -659,37 +654,6 @@ const CharacterWorkflow: FC = () => {
       cancelled = true
     }
   }, [outputDir, sanitizeSecondaryFileStem, shouldUseCharacterTxtFolder])
-
-  // 二次总结/语音阶段：按选中人物读取对应剧情 txt（用于生成二次总结/语音）
-  useEffect(() => {
-    if (!(step === 'secondary' || step === 'tts' || step === 'done')) return
-    if (!selectedCharacterPath) {
-      setSelectedCharacterText(null)
-      setIsCharacterTextLoading(false)
-      return
-    }
-
-    let cancelled = false
-    const loadText = async () => {
-      setIsCharacterTextLoading(true)
-      try {
-        const content = await window.api.fs.readText(selectedCharacterPath)
-        if (cancelled) return
-        setSelectedCharacterText(content ?? null)
-      } catch (error) {
-        console.warn('[CharacterWorkflow] Failed to read character txt:', error)
-        if (cancelled) return
-        setSelectedCharacterText(null)
-      } finally {
-        if (!cancelled) setIsCharacterTextLoading(false)
-      }
-    }
-
-    loadText()
-    return () => {
-      cancelled = true
-    }
-  }, [step, selectedCharacterPath])
 
   const handleAddCharacter = useCallback(() => {
     const name = newCharacterName.trim()
@@ -1349,670 +1313,395 @@ const CharacterWorkflow: FC = () => {
 
     const isSecondaryInitial = step === 'secondary' && !stageProgress && !hasSecondaryOutput
 
-    stepContent = (
-      <div className="flex flex-col h-full w-full bg-background relative">
-        {step === 'secondary' && !isSecondaryInitial && (
-          <Tooltip content={t('workflow.character.stage2.next', '下一步：生成语音')}>
-            <Button
-              isIconOnly
-              radius="full"
-              color="primary"
-              variant="shadow"
-              className="absolute right-8 top-1/2 -translate-y-1/2 h-14 w-14 shadow-medium z-50"
-              onPress={() => handleGoToTtsStep({ updateProgress: false })}
-              isDisabled={!secondaryBioText && !secondaryMonologueText}
-            >
-              <ArrowRight size={24} />
-            </Button>
-          </Tooltip>
-        )}
-          <div className="flex-1 overflow-auto">
-            <div className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b border-foreground/10">
-              <div className="px-6 py-6 text-center">
-                <h1 className="text-3xl font-bold text-foreground mb-2">
-                  {step === 'secondary'
-                    ? t('workflow.character.stage2.title', '第二阶段：二次总结')
-                    : step === 'tts'
-                      ? t('workflow.character.stage3.title', '第三阶段：生成语音')
-                      : t('workflow.character.stage4.title', '最终结果：语音')}
-                </h1>
-                <p className="text-foreground/60">
-                  {step === 'secondary'
-                    ? t('workflow.character.stage2.hint', '不展示提取完成页，直接进入二次生成')
-                    : step === 'tts'
-                      ? t('workflow.character.stage3.hint', '选择音频参数与来源，生成 mp3')
-                      : t('workflow.character.stage4.hint', '已生成 mp3，可直接播放')}
-                </p>
-              </div>
-            </div>
+    if (step === 'secondary') {
+      stepContent = (
+        <WorkflowLayout
+          nav={
+            !isSecondaryInitial && (
+              <CircularNavButton
+                direction="right"
+                tooltip={t('workflow.character.stage2.next', '下一步：生成语音')}
+                onPress={() => handleGoToTtsStep({ updateProgress: false })}
+                isDisabled={!secondaryBioText && !secondaryMonologueText}
+                color="primary"
+              />
+            )
+          }
+        >
+          <StepHeader
+            title={t('workflow.character.stage2.title', '第二阶段：二次总结')}
+            hint={t('workflow.character.stage2.hint', '不展示提取完成页，直接进入二次生成')}
+          />
 
-            <div className="px-6 py-8 flex flex-col items-center">
-              {showCharacterPicker ? (
-                isSecondaryInitial ? (
-                  // Simplified view for Secondary Initial state
-                  <div className="flex flex-col items-center justify-center w-full max-w-2xl gap-8 mt-12">
-                    <div className="w-full max-w-xs">
-                      <Select
-                        aria-label={t('workflow.character.result.selectCharacter', '选择人物')}
-                        placeholder={
-                          isCharacterListLoading
-                            ? t('workflow.character.result.loadingCharacters', '正在读取人物列表...')
-                            : t('workflow.character.result.selectCharacter', '选择人物')
-                        }
-                        selectedKeys={selectedCharacterPath ? [selectedCharacterPath] : []}
-                        onChange={(e) => setSelectedCharacterPath(e.target.value || null)}
-                        variant="faded"
-                        radius="full"
-                        size="lg"
-                        classNames={{
-                          trigger: "h-14 bg-content2/50 hover:bg-content2 transition-colors",
-                          value: "text-center font-medium text-lg",
-                        }}
-                        isDisabled={isCharacterListLoading || characterTxtFiles.length === 0}
-                        popoverProps={{
-                          portalContainer: popoverPortalContainer,
-                          classNames: { content: 'z-[200]' }
-                        }}
-                        renderValue={(items) => {
-                          return items.map((item) => (
-                            <div key={item.key} className="flex-1 text-center">
-                              {item.textValue}
-                            </div>
-                          ))
-                        }}
-                      >
-                        {characterTxtFiles.map((f) => {
-                          const name = f.name.replace(/\.txt$/i, '')
-                          return (
-                            <SelectItem key={f.path} textValue={name}>
-                              <div className="text-center w-full">{name}</div>
-                            </SelectItem>
-                          )
-                        })}
-                      </Select>
-                    </div>
-
-                    {!isCharacterListLoading && characterTxtFiles.length === 0 && (
-                      <div className="text-sm text-foreground/40 text-center">
-                        {t('workflow.character.result.noCharacters', '未找到人物 TXT')}
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-6">
-                      <Button
-                        color="primary"
-                        size="lg"
-                        className="min-w-[160px] h-14 text-medium rounded-2xl shadow-lg shadow-primary/20"
-                        startContent={<Sparkles size={20} />}
-                        isDisabled={!selectedCharacterName || !selectedCharacterPath || !outputDir}
-                        isLoading={isSecondaryBioGenerating}
-                        onPress={() => handleGenerateSecondary('bio')}
-                      >
-                        {t('workflow.character.secondary.bio', '人物志')}
-                      </Button>
-                      <Button
-                        variant="flat"
-                        color="secondary"
-                        size="lg"
-                        className="min-w-[160px] h-14 text-medium rounded-2xl"
-                        startContent={<Sparkles size={20} />}
-                        isDisabled={!selectedCharacterName || !selectedCharacterPath || !outputDir}
-                        isLoading={isSecondaryMonologueGenerating}
-                        onPress={() => handleGenerateSecondary('monologue')}
-                      >
-                        {t('workflow.character.secondary.monologue', '心理独白')}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  // Standard view for other states
-                  <div className={`w-full mb-12 space-y-6 max-w-3xl`}>
-                    {step !== 'secondary' && (
-                      <div className="w-full">
-                        <label className="text-sm font-medium text-foreground/70 mb-2 block">
-                          {t('workflow.character.result.selectCharacter', '选择人物')}
-                        </label>
-
-                        <Select
-                          aria-label={t('workflow.character.result.selectCharacter', '选择人物')}
-                          placeholder={
-                            isCharacterListLoading
-                              ? t('workflow.character.result.loadingCharacters', '正在读取人物列表...')
-                              : t('workflow.character.result.selectCharacter', '选择人物')
-                          }
-                          selectedKeys={selectedCharacterPath ? [selectedCharacterPath] : []}
-                          onChange={(e) => setSelectedCharacterPath(e.target.value || null)}
-                          variant="bordered"
-                          isDisabled={isCharacterListLoading || characterTxtFiles.length === 0}
-                          popoverProps={{
-                            portalContainer: popoverPortalContainer,
-                            classNames: { content: 'z-[200]' }
-                          }}
-                        >
-                          {characterTxtFiles.map((f) => {
-                            const name = f.name.replace(/\.txt$/i, '')
-                            return (
-                              <SelectItem key={f.path}>
-                                {name}
-                              </SelectItem>
-                            )
-                          })}
-                        </Select>
-                      </div>
-                    )}
-
-                    {stageProgress && (
-                      <Card className="w-full">
-                        <CardBody className="py-6">
-                          <ProgressDisplay
-                            percentage={stageProgress.percentage}
-                            stage={stageProgress.stage}
-                            current={stageProgress.current}
-                            total={stageProgress.total}
-                          />
-                        </CardBody>
-                      </Card>
-                    )}
-
-                    {step === 'secondary' && (
-                      <Card className="w-full shadow-none border-none bg-transparent">
-                        <CardBody className="p-0 space-y-4">
-                          <div className="flex justify-center">
-                            <div className="p-1.5 bg-content2/30 rounded-2xl border border-white/5 backdrop-blur-sm">
-                              <Tabs
-                                size="lg"
-                                selectedKey={secondaryKind}
-                                onSelectionChange={(key) => setSecondaryKind(key as SecondaryKind)}
-                                variant="light"
-                                classNames={{
-                                  tabList: "gap-2",
-                                  cursor: "bg-background shadow-sm",
-                                  tab: "h-9 px-6",
-                                  tabContent: "group-data-[selected=true]:text-primary font-medium"
-                                }}
-                              >
-                                <Tab key="bio" title={t('workflow.character.secondary.bio', '人物志')} />
-                                <Tab key="monologue" title={t('workflow.character.secondary.monologue', '心理独白')} />
-                              </Tabs>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-center gap-4 py-2">
-                            <div className="bg-content2/30 rounded-2xl border border-white/5 backdrop-blur-sm p-1">
-                              <Select
-                                aria-label={t('workflow.character.result.selectCharacter', '选择人物')}
-                                placeholder={t('workflow.character.result.selectCharacter', '选择人物')}
-                                selectedKeys={selectedCharacterPath ? [selectedCharacterPath] : []}
-                                onChange={(e) => setSelectedCharacterPath(e.target.value || null)}
-                                variant="flat"
-                                size="sm"
-                                className="w-[200px]"
-                                isDisabled={isCharacterListLoading || characterTxtFiles.length === 0}
-                                popoverProps={{ classNames: { content: 'z-[200]' } }}
-                                classNames={{
-                                  trigger: "bg-transparent shadow-none hover:bg-content2/50 min-h-unit-8 h-8",
-                                  value: "text-center font-medium"
-                                }}
-                              >
-                                {characterTxtFiles.map((f) => {
-                                  const name = f.name.replace(/\.txt$/i, '')
-                                  return (
-                                    <SelectItem key={f.path} textValue={name}>
-                                      <div className="text-center w-full">{name}</div>
-                                    </SelectItem>
-                                  )
-                                })}
-                              </Select>
-                            </div>
-
-                            <Button
-                              size="sm"
-                              variant="flat"
-                              color="primary"
-                              startContent={<Sparkles size={14} />}
-                              isLoading={secondaryKind === 'bio' ? isSecondaryBioGenerating : isSecondaryMonologueGenerating}
-                              isDisabled={!selectedCharacterPath || !outputDir}
-                              onPress={() => handleGenerateSecondary(secondaryKind)}
-                              className="h-10 px-6 rounded-xl"
-                            >
-                              {secondaryKind === 'bio'
-                                ? (secondaryBioText ? t('workflow.character.secondary.regenerate', '重新生成') : t('workflow.character.secondary.generate', '生成'))
-                                : (secondaryMonologueText ? t('workflow.character.secondary.regenerate', '重新生成') : t('workflow.character.secondary.generate', '生成'))}
-                            </Button>
-                          </div>
-
-                          {/* Editable Result Box - Matches OutlineWorkflow Result Style */}
-                          <div className="relative group w-full max-w-3xl">
-                             {/* Container Card */}
-                            <Card className="w-full relative shadow-sm bg-content1/50 border border-default-200/50">
-                              <CardBody className="p-0">
-                                {secondaryKind === 'bio' ? (
-                                  <Textarea
-                                    minRows={6}
-                                    maxRows={25}
-                                    value={secondaryBioDraft}
-                                    onValueChange={setSecondaryBioDraft}
-                                    placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
-                                    classNames={{
-                                      base: "w-full h-full",
-                                      inputWrapper: "h-full !bg-transparent !shadow-none hover:!bg-transparent focus-within:!bg-transparent data-[hover=true]:!bg-transparent group-data-[focus=true]:!bg-transparent !ring-0 !ring-offset-0 !outline-none !border-none p-6 !rounded-none",
-                                      input: "h-full !text-sm !leading-[1.75] text-foreground/80 font-normal !pr-2 !outline-none !ring-0 focus:!ring-0 placeholder:text-foreground/30 caret-primary"
-                                    }}
-                                  />
-                                ) : (
-                                  <Textarea
-                                    minRows={6}
-                                    maxRows={25}
-                                    value={secondaryMonologueDraft}
-                                    onValueChange={setSecondaryMonologueDraft}
-                                    placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
-                                    classNames={{
-                                      base: "w-full h-full",
-                                      inputWrapper: "h-full !bg-transparent !shadow-none hover:!bg-transparent focus-within:!bg-transparent data-[hover=true]:!bg-transparent group-data-[focus=true]:!bg-transparent !ring-0 !ring-offset-0 !outline-none !border-none p-6 !rounded-none",
-                                      input: "h-full !text-sm !leading-[1.75] text-foreground/80 font-normal !pr-2 !outline-none !ring-0 focus:!ring-0 placeholder:text-foreground/30 caret-primary"
-                                    }}
-                                  />
-                                )}
-                              </CardBody>
-                              {/* Hover Fullscreen Button */}
-                              {((secondaryKind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft).trim()) && (
-                                <FullscreenResultViewer
-                                  content={secondaryKind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft}
-                                  kind="text"
-                                  title={[
-                                    fullscreenBaseTitle,
-                                    selectedCharacterName,
-                                    secondaryKind === 'bio'
-                                      ? t('workflow.character.secondary.bio', '人物志')
-                                      : t('workflow.character.secondary.monologue', '心理独白')
-                                  ].filter(Boolean).join(' · ')}
-                                  onSave={(newContent) => {
-                                    if (secondaryKind === 'bio') {
-                                      setSecondaryBioDraft(newContent)
-                                    } else {
-                                      setSecondaryMonologueDraft(newContent)
-                                    }
-                                  }}
-                                />
-                              )}
-                            </Card>
-                          </div>
-
-                          </CardBody>
-                        </Card>
-                  )}
-
-                  {step === 'tts' && (
-                    <div className="flex flex-col h-full w-full bg-background relative group">
-                      {/* Content - Scrollable area with side padding for buttons */}
-                      <div className="flex-1 flex flex-col items-center overflow-y-auto px-32 py-12">
-                        <div className="w-full max-w-2xl space-y-12 my-auto pb-20">
-                          {/* Header Section */}
-                          <div className="text-center space-y-6">
-                            <h1 className="text-4xl font-serif font-medium text-foreground">
-                              {t('workflow.character.stage3.actions', '生成语音 (mp3)')}
-                            </h1>
-                            <p className="text-lg text-foreground/60 font-serif">
-                              {t('workflow.character.stage3.actionsHint', '仅展示音频参数与来源选择，不展示具体内容')}
-                            </p>
-                          </div>
-
-                          {/* Controls Area */}
-                          <div className="space-y-8 p-8 bg-content2/30 rounded-3xl border border-white/5 backdrop-blur-sm">
-                            <div className="space-y-6">
-                              <Select
-                                label={t('workflow.tts.selectSource', '选择来源')}
-                                selectedKeys={[ttsSourceKind]}
-                                onChange={(e) => e.target.value && setTtsSourceKind(e.target.value as 'bio' | 'monologue')}
-                                variant="bordered"
-                                disallowEmptySelection
-                                classNames={{
-                                  trigger: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14",
-                                  value: "text-base"
-                                }}
-                                popoverProps={{
-                                  portalContainer: popoverPortalContainer,
-                                  classNames: { content: 'z-[200]' }
-                                }}
-                              >
-                                <SelectItem key="bio" isDisabled={!secondaryBioText}>
-                                  {t('workflow.character.secondary.bio', '人物志')}
-                                </SelectItem>
-                                <SelectItem key="monologue" isDisabled={!secondaryMonologueText}>
-                                  {t('workflow.character.secondary.monologue', '心理独白')}
-                                </SelectItem>
-                              </Select>
-
-                              <Select
-                                label={t('workflow.tts.voice', '选择语音')}
-                                selectedKeys={[ttsVoice]}
-                                onChange={(e) => setTtsVoice(e.target.value)}
-                                variant="bordered"
-                                classNames={{
-                                  trigger: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14",
-                                  value: "text-base"
-                                }}
-                                popoverProps={{
-                                  portalContainer: popoverPortalContainer,
-                                  classNames: { content: 'z-[200]' }
-                                }}
-                              >
-                                {ttsVoices.map((v) => (
-                                  <SelectItem key={v.value}>
-                                    {v.label}
-                                  </SelectItem>
-                                ))}
-                              </Select>
-
-                              <div className="grid grid-cols-2 gap-4">
-                                <Input
-                                  label={t('workflow.tts.rate', '语速 (Rate)')}
-                                  value={ttsRate}
-                                  onValueChange={setTtsRate}
-                                  placeholder="+0%"
-                                  variant="bordered"
-                                  classNames={{
-                                    inputWrapper: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14"
-                                  }}
-                                />
-                                <Input
-                                  label={t('workflow.tts.pitch', '音调 (Pitch)')}
-                                  value={ttsPitch}
-                                  onValueChange={setTtsPitch}
-                                  placeholder="+0Hz"
-                                  variant="bordered"
-                                  classNames={{
-                                    inputWrapper: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14"
-                                  }}
-                                />
-                              </div>
-
-                              <Input
-                                label={t('workflow.tts.volume', '音量 (Volume)')}
-                                value={ttsVolume}
-                                onValueChange={setTtsVolume}
-                                placeholder="+0%"
-                                variant="bordered"
-                                classNames={{
-                                  inputWrapper: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14"
-                                }}
-                              />
-                            </div>
-                          </div>
+          {showCharacterPicker ? (
+            isSecondaryInitial ? (
+              // Initial State: Big Selection Buttons
+              <GlassContainer className="flex flex-col items-center gap-8 py-12">
+                <div className="w-full max-w-xs">
+                  <Select
+                    aria-label={t('workflow.character.result.selectCharacter', '选择人物')}
+                    placeholder={
+                      isCharacterListLoading
+                        ? t('workflow.character.result.loadingCharacters', '正在读取人物列表...')
+                        : t('workflow.character.result.selectCharacter', '选择人物')
+                    }
+                    selectedKeys={selectedCharacterPath ? [selectedCharacterPath] : []}
+                    onChange={(e) => setSelectedCharacterPath(e.target.value || null)}
+                    variant="faded"
+                    radius="full"
+                    size="lg"
+                    classNames={{
+                      trigger: "h-14 bg-content2/50 hover:bg-content2 transition-colors",
+                      value: "text-center font-medium text-lg",
+                    }}
+                    isDisabled={isCharacterListLoading || characterTxtFiles.length === 0}
+                    popoverProps={{
+                      portalContainer: popoverPortalContainer,
+                      classNames: { content: 'z-[200]' }
+                    }}
+                    renderValue={(items) => {
+                      return items.map((item) => (
+                        <div key={item.key} className="flex-1 text-center">
+                          {item.textValue}
                         </div>
-                      </div>
-
-                      {/* Navigation Buttons - Fixed Position */}
-                      <Tooltip content={t('workflow.character.stage3.prev', '上一步')} placement="right">
-                        <Button
-                          isIconOnly
-                          radius="full"
-                          variant="light"
-                          size="lg"
-                          className="absolute left-10 top-1/2 -translate-y-1/2 h-16 w-16 z-20 text-foreground/50 hover:text-foreground hover:bg-content2/50 transition-all hover:scale-105"
-                          onPress={handleBackToSecondaryStep}
-                        >
-                          <ArrowLeft size={28} />
-                        </Button>
-                      </Tooltip>
-
-                      <Tooltip content={t('workflow.tts.generate', '开始生成')} placement="left">
-                        <Button
-                          isIconOnly
-                          radius="full"
-                          color="primary"
-                          size="lg"
-                          className="absolute right-10 top-1/2 -translate-y-1/2 h-16 w-16 z-20 shadow-xl bg-foreground text-background hover:bg-foreground/90 transition-transform hover:scale-105"
-                          onPress={handleGenerateTts}
-                          isDisabled={isTtsGenerating || (ttsSourceKind === 'bio' ? !secondaryBioText : !secondaryMonologueText)}
-                          isLoading={isTtsGenerating}
-                        >
-                          {!isTtsGenerating && <Mic size={28} />}
-                        </Button>
-                      </Tooltip>
-                    </div>
-                  )}
-
-                  {step === 'done' && (
-                    <Card className="w-full bg-success-50 border-success-200">
-                      <CardBody className="p-5 space-y-4">
-                        <div className="flex items-center justify-center gap-2 text-success-700 font-medium">
-                          <Play size={20} />
-                          {t('workflow.tts.result', '生成结果')}
-                        </div>
-
-                        {ttsAudioUrl ? (
-                          <audio controls src={ttsAudioUrl} className="w-full" />
-                        ) : (
-                          <div className="text-sm text-foreground/50 text-center">
-                            {t('workflow.tts.noAudioPreview', '音频已生成，但预览加载失败；可打开文件位置播放')}
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-center gap-2">
-                          <Button
-                            variant="flat"
-                            color="success"
-                            startContent={<Download size={16} />}
-                            isDisabled={!ttsAudioPath}
-                            onPress={handleOpenAudioFile}
-                          >
-                            {t('workflow.tts.openFile', '打开文件位置')}
-                          </Button>
-                          <Button variant="bordered" onPress={() => setStep('tts')}>
-                            {t('workflow.tts.regenerate', '重新生成语音')}
-                          </Button>
-                        </div>
-                      </CardBody>
-                    </Card>
-                  )}
-
-                  {false && (
-                  <>
-                  {/* 一次总结（人物剧情） */}
-                  <Card
-                    className="w-full cursor-pointer select-none"
-                    isPressable
-                    onPress={() => {
-                      if (expandedResultPane === 'primary') {
-                        setExpandedResultPane('secondary')
-                      } else {
-                        setExpandedResultPane('primary')
-                      }
+                      ))
                     }}
                   >
-                    <CardBody className="py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-foreground/80 truncate">
-                            {t('workflow.character.primary.title', '一次总结（人物剧情）')}
-                          </div>
-                          <div className="text-xs text-foreground/50 truncate">
-                            {selectedCharacterName ? `${selectedCharacterName}` : t('workflow.character.primary.hint', '人物剧情原文')}
-                          </div>
-                        </div>
-                        <div className="text-foreground/40">
-                          {expandedResultPane === 'primary' ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                        </div>
-                      </div>
-                    </CardBody>
-                  </Card>
+                    {characterTxtFiles.map((f) => {
+                      const name = f.name.replace(/\.txt$/i, '')
+                      return (
+                        <SelectItem key={f.path} textValue={name}>
+                          <div className="text-center w-full">{name}</div>
+                        </SelectItem>
+                      )
+                    })}
+                  </Select>
+                </div>
 
-                  {expandedResultPane === 'primary' && (
-                    <Card className="w-full relative group">
-                      <CardBody className="max-h-96 overflow-y-auto">
-                        {isCharacterTextLoading ? (
-                          <div className="flex items-center justify-center py-10 gap-3 text-foreground/60">
-                            <Loader2 size={18} className="animate-spin text-primary" />
-                            <span className="text-sm">{t('workflow.character.result.loadingText', '正在读取人物内容...')}</span>
-                          </div>
-                        ) : selectedCharacterText ? (
-                          <pre className="whitespace-pre-wrap text-sm text-foreground/80">{selectedCharacterText}</pre>
-                        ) : (
-                          <div className="text-sm text-foreground/50">
-                            {t('workflow.character.result.emptyText', '暂无可展示的内容')}
-                          </div>
-                        )}
-                      </CardBody>
-                      {selectedCharacterText && (
-                        <FullscreenResultViewer
-                          content={selectedCharacterText!}
-                          kind="text"
-                          title={selectedCharacterName ? `${fullscreenBaseTitle} · ${selectedCharacterName}` : fullscreenBaseTitle}
-                        />
-                      )}
-                    </Card>
-                  )}
+                {!isCharacterListLoading && characterTxtFiles.length === 0 && (
+                  <div className="text-sm text-foreground/40 text-center">
+                    {t('workflow.character.result.noCharacters', '未找到人物 TXT')}
+                  </div>
+                )}
 
-                  {/* 二次总结：互斥展开；当折叠二次总结时自动展开一次总结 */}
-                  {selectedCharacterName && (
-                    <div className="w-full space-y-3">
-                      <Card
-                        className="w-full cursor-pointer select-none"
-                        isPressable
-                        onPress={() => {
-                          if (expandedResultPane === 'secondary') {
-                            setExpandedResultPane('primary')
+                <div className="flex items-center gap-6">
+                  <Button
+                    color="primary"
+                    size="lg"
+                    className="min-w-[160px] h-14 text-medium rounded-2xl shadow-lg shadow-primary/20"
+                    startContent={<Sparkles size={20} />}
+                    isDisabled={!selectedCharacterName || !selectedCharacterPath || !outputDir}
+                    isLoading={isSecondaryBioGenerating}
+                    onPress={() => handleGenerateSecondary('bio')}
+                  >
+                    {t('workflow.character.secondary.bio', '人物志')}
+                  </Button>
+                  <Button
+                    variant="flat"
+                    color="secondary"
+                    size="lg"
+                    className="min-w-[160px] h-14 text-medium rounded-2xl"
+                    startContent={<Sparkles size={20} />}
+                    isDisabled={!selectedCharacterName || !selectedCharacterPath || !outputDir}
+                    isLoading={isSecondaryMonologueGenerating}
+                    onPress={() => handleGenerateSecondary('monologue')}
+                  >
+                    {t('workflow.character.secondary.monologue', '心理独白')}
+                  </Button>
+                </div>
+              </GlassContainer>
+            ) : (
+              // Result State: Tabs + Editor
+              <div className="w-full space-y-6">
+                {/* Top Bar: Character Picker + Tabs + Actions */}
+                <div className="flex flex-col items-center gap-6">
+                  <div className="p-1.5 bg-content2/30 rounded-2xl border border-white/5 backdrop-blur-sm">
+                    <Tabs
+                      size="lg"
+                      selectedKey={secondaryKind}
+                      onSelectionChange={(key) => setSecondaryKind(key as SecondaryKind)}
+                      variant="light"
+                      classNames={{
+                        tabList: "gap-2",
+                        cursor: "bg-background shadow-sm",
+                        tab: "h-9 px-6",
+                        tabContent: "group-data-[selected=true]:text-primary font-medium"
+                      }}
+                    >
+                      <Tab key="bio" title={t('workflow.character.secondary.bio', '人物志')} />
+                      <Tab key="monologue" title={t('workflow.character.secondary.monologue', '心理独白')} />
+                    </Tabs>
+                  </div>
+
+                  <div className="flex items-center gap-3 bg-content2/30 rounded-2xl border border-white/5 backdrop-blur-sm p-2">
+                    <Select
+                      aria-label={t('workflow.character.result.selectCharacter', '选择人物')}
+                      placeholder={t('workflow.character.result.selectCharacter', '选择人物')}
+                      selectedKeys={selectedCharacterPath ? [selectedCharacterPath] : []}
+                      onChange={(e) => setSelectedCharacterPath(e.target.value || null)}
+                      variant="flat"
+                      size="sm"
+                      className="w-[180px]"
+                      isDisabled={isCharacterListLoading || characterTxtFiles.length === 0}
+                      popoverProps={{ classNames: { content: 'z-[200]' } }}
+                      classNames={{
+                        trigger: "bg-transparent shadow-none hover:bg-content2/50 h-9",
+                        value: "text-center font-medium"
+                      }}
+                    >
+                      {characterTxtFiles.map((f) => {
+                        const name = f.name.replace(/\.txt$/i, '')
+                        return (
+                          <SelectItem key={f.path} textValue={name}>
+                            <div className="text-center w-full">{name}</div>
+                          </SelectItem>
+                        )
+                      })}
+                    </Select>
+
+                    <div className="w-px h-5 bg-foreground/10" />
+
+                    <Button
+                      size="sm"
+                      variant="flat"
+                      color="primary"
+                      startContent={<Sparkles size={14} />}
+                      isLoading={secondaryKind === 'bio' ? isSecondaryBioGenerating : isSecondaryMonologueGenerating}
+                      isDisabled={!selectedCharacterPath || !outputDir}
+                      onPress={() => handleGenerateSecondary(secondaryKind)}
+                      className="h-9 px-4 rounded-xl"
+                    >
+                      {secondaryKind === 'bio'
+                        ? (secondaryBioText ? t('workflow.character.secondary.regenerate', '重新生成') : t('workflow.character.secondary.generate', '生成'))
+                        : (secondaryMonologueText ? t('workflow.character.secondary.regenerate', '重新生成') : t('workflow.character.secondary.generate', '生成'))}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="light"
+                      isIconOnly
+                      startContent={<RefreshCw size={14} />}
+                      isLoading={secondaryKind === 'bio' ? isSecondaryBioLoading : isSecondaryMonologueLoading}
+                      isDisabled={!selectedCharacterPath || !outputDir}
+                      onPress={() => loadSecondaryFromDisk(secondaryKind)}
+                      className="h-9 w-9 rounded-xl text-foreground/50"
+                    />
+                  </div>
+                </div>
+
+                {stageProgress && (
+                  <GlassContainer className="py-6">
+                    <ProgressDisplay
+                      percentage={stageProgress.percentage}
+                      stage={stageProgress.stage}
+                      current={stageProgress.current}
+                      total={stageProgress.total}
+                    />
+                  </GlassContainer>
+                )}
+
+                {/* Result Area */}
+                <Card className="w-full relative shadow-sm bg-content1/50 border border-default-200/50 min-h-[500px]">
+                  <CardBody className="p-0">
+                    <Textarea
+                      minRows={15}
+                      maxRows={30}
+                      value={secondaryKind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft}
+                      onValueChange={secondaryKind === 'bio' ? setSecondaryBioDraft : setSecondaryMonologueDraft}
+                      placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
+                      classNames={{
+                        base: "w-full h-full",
+                        inputWrapper: "h-full !bg-transparent !shadow-none hover:!bg-transparent focus-within:!bg-transparent data-[hover=true]:!bg-transparent group-data-[focus=true]:!bg-transparent !ring-0 !ring-offset-0 !outline-none !border-none p-8 !rounded-none",
+                        input: "h-full !text-base !leading-[1.8] text-foreground/80 font-serif !pr-4 !outline-none !ring-0 focus:!ring-0 placeholder:text-foreground/30 caret-primary"
+                      }}
+                    />
+                  </CardBody>
+                  {/* Fullscreen Button */}
+                  {((secondaryKind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft).trim()) && (
+                    <div className="absolute top-4 right-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <FullscreenResultViewer
+                        content={secondaryKind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft}
+                        kind="text"
+                        title={[
+                          fullscreenBaseTitle,
+                          selectedCharacterName,
+                          secondaryKind === 'bio'
+                            ? t('workflow.character.secondary.bio', '人物志')
+                            : t('workflow.character.secondary.monologue', '心理独白')
+                        ].filter(Boolean).join(' · ')}
+                        onSave={(newContent) => {
+                          if (secondaryKind === 'bio') {
+                            setSecondaryBioDraft(newContent)
                           } else {
-                            setExpandedResultPane('secondary')
+                            setSecondaryMonologueDraft(newContent)
                           }
                         }}
-                      >
-                        <CardBody className="py-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="text-sm font-medium text-foreground/80 truncate">
-                                {t('workflow.character.secondary.title', '二次总结')}
-                              </div>
-                              <div className="text-xs text-foreground/50 truncate">
-                                {t('workflow.character.secondary.hint', '基于 prompt.txt 生成「人物志 / 心理独白」')}
-                              </div>
-                            </div>
-                            <div className="text-foreground/40">
-                              {expandedResultPane === 'secondary' ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                            </div>
-                          </div>
-                        </CardBody>
-                      </Card>
-
-                      {expandedResultPane === 'secondary' && (
-                        <div className="w-full space-y-3">
-                          <div className="text-center space-y-1">
-                            <div className="text-sm font-medium text-foreground/80">
-                              {t('workflow.character.secondary.generateTitle', '生成人物志 / 心理独白')}
-                            </div>
-                            <div className="text-xs text-foreground/50">
-                              {t('workflow.character.secondary.generateHint', '选择一种风格并生成落盘结果')}
-                            </div>
-                          </div>
-
-                          <div className="flex justify-center">
-                            <Tabs
-                              size="sm"
-                              selectedKey={secondaryKind}
-                              onSelectionChange={(key) => setSecondaryKind(key as SecondaryKind)}
-                              variant="underlined"
-                            >
-                              <Tab key="bio" title={t('workflow.character.secondary.bio', '人物志')} />
-                              <Tab key="monologue" title={t('workflow.character.secondary.monologue', '心理独白')} />
-                            </Tabs>
-                          </div>
-
-                          <div className="flex items-center justify-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="flat"
-                              color="primary"
-                              startContent={<Sparkles size={14} />}
-                              isLoading={secondaryKind === 'bio' ? isSecondaryBioGenerating : isSecondaryMonologueGenerating}
-                              isDisabled={!selectedCharacterPath || !outputDir}
-                              onPress={() => handleGenerateSecondary(secondaryKind)}
-                            >
-                              {secondaryKind === 'bio'
-                                ? (secondaryBioText ? t('workflow.character.secondary.regenerate', '重新生成') : t('workflow.character.secondary.generate', '生成'))
-                                : (secondaryMonologueText ? t('workflow.character.secondary.regenerate', '重新生成') : t('workflow.character.secondary.generate', '生成'))}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="bordered"
-                              startContent={<RefreshCw size={14} />}
-                              isLoading={secondaryKind === 'bio' ? isSecondaryBioLoading : isSecondaryMonologueLoading}
-                              isDisabled={!selectedCharacterPath || !outputDir}
-                              onPress={() => loadSecondaryFromDisk(secondaryKind)}
-                            >
-                              {t('workflow.character.secondary.reload', '重新读取')}
-                            </Button>
-                          </div>
-
-                          <Card className="w-full relative group">
-                            <CardBody className="max-h-96 overflow-y-auto">
-                              {secondaryKind === 'bio' ? (
-                                isSecondaryBioLoading ? (
-                                  <div className="flex items-center justify-center py-10 gap-3 text-foreground/60">
-                                    <Loader2 size={18} className="animate-spin text-primary" />
-                                    <span className="text-sm">{t('workflow.character.secondary.loading', '正在读取...')}</span>
-                                  </div>
-                                ) : secondaryBioText ? (
-                                  <pre className="whitespace-pre-wrap text-sm text-foreground/80">{secondaryBioText}</pre>
-                                ) : (
-                                  <div className="text-sm text-foreground/50 text-center">
-                                    {t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
-                                  </div>
-                                )
-                              ) : (
-                                isSecondaryMonologueLoading ? (
-                                  <div className="flex items-center justify-center py-10 gap-3 text-foreground/60">
-                                    <Loader2 size={18} className="animate-spin text-primary" />
-                                    <span className="text-sm">{t('workflow.character.secondary.loading', '正在读取...')}</span>
-                                  </div>
-                                ) : secondaryMonologueText ? (
-                                  <pre className="whitespace-pre-wrap text-sm text-foreground/80">{secondaryMonologueText}</pre>
-                                ) : (
-                                  <div className="text-sm text-foreground/50 text-center">
-                                    {t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
-                                  </div>
-                                )
-                              )}
-                            </CardBody>
-                            {secondaryKind === 'bio' ? (
-                              secondaryBioText ? (
-                                <FullscreenResultViewer
-                                  content={secondaryBioText!}
-                                  kind="text"
-                                  title={[fullscreenBaseTitle, selectedCharacterName, t('workflow.character.secondary.bio', '人物志')].filter(Boolean).join(' · ')}
-                                />
-                              ) : null
-                            ) : (
-                              secondaryMonologueText ? (
-                                <FullscreenResultViewer
-                                  content={secondaryMonologueText!}
-                                  kind="text"
-                                  title={[fullscreenBaseTitle, selectedCharacterName, t('workflow.character.secondary.monologue', '心理独白')].filter(Boolean).join(' · ')}
-                                />
-                              ) : null
-                            )}
-                          </Card>
-                        </div>
-                      )}
+                      />
                     </div>
                   )}
-                  </>
-                  )}
-                </div>
-              )) : (
-                <Card className="w-full max-w-3xl mb-8">
-                  <CardBody className="py-10 text-center text-foreground/60">
-                    {isCharacterListLoading
-                      ? t('workflow.character.result.loadingCharacters', '正在读取人物列表...')
-                      : t('workflow.character.result.noCharacters', '未找到人物 TXT')}
-                  </CardBody>
                 </Card>
-              )}
+              </div>
+            )
+          ) : (
+            <GlassContainer className="py-12 text-center text-foreground/60">
+              {isCharacterListLoading
+                ? t('workflow.character.result.loadingCharacters', '正在读取人物列表...')
+                : t('workflow.character.result.noCharacters', '未找到人物 TXT')}
+            </GlassContainer>
+          )}
+        </WorkflowLayout>
+      )
+    } else if (step === 'tts') {
+      stepContent = (
+        <WorkflowLayout
+          nav={
+            <>
+              <CircularNavButton
+                direction="left"
+                tooltip={t('workflow.character.stage3.prev', '上一步')}
+                onPress={handleBackToSecondaryStep}
+              />
+              <CircularNavButton
+                direction="right"
+                tooltip={t('workflow.tts.generate', '开始生成')}
+                icon={<Mic size={28} />}
+                onPress={handleGenerateTts}
+                isDisabled={isTtsGenerating || (ttsSourceKind === 'bio' ? !secondaryBioText : !secondaryMonologueText)}
+                isLoading={isTtsGenerating}
+                color="primary"
+              />
+            </>
+          }
+        >
+          <StepHeader
+            title={t('workflow.character.stage3.actions', '生成语音 (mp3)')}
+            hint={t('workflow.character.stage3.actionsHint', '仅展示音频参数与来源选择，不展示具体内容')}
+          />
 
+          <GlassContainer className="space-y-8">
+            <div className="space-y-6">
+              <Select
+                label={t('workflow.tts.selectSource', '选择来源')}
+                selectedKeys={[ttsSourceKind]}
+                onChange={(e) => e.target.value && setTtsSourceKind(e.target.value as 'bio' | 'monologue')}
+                variant="bordered"
+                disallowEmptySelection
+                classNames={{
+                  trigger: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14",
+                  value: "text-base"
+                }}
+                popoverProps={{
+                  portalContainer: popoverPortalContainer,
+                  classNames: { content: 'z-[200]' }
+                }}
+              >
+                <SelectItem key="bio" isDisabled={!secondaryBioText}>
+                  {t('workflow.character.secondary.bio', '人物志')}
+                </SelectItem>
+                <SelectItem key="monologue" isDisabled={!secondaryMonologueText}>
+                  {t('workflow.character.secondary.monologue', '心理独白')}
+                </SelectItem>
+              </Select>
+
+              <Select
+                label={t('workflow.tts.voice', '选择语音')}
+                selectedKeys={[ttsVoice]}
+                onChange={(e) => setTtsVoice(e.target.value)}
+                variant="bordered"
+                classNames={{
+                  trigger: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14",
+                  value: "text-base"
+                }}
+                popoverProps={{
+                  portalContainer: popoverPortalContainer,
+                  classNames: { content: 'z-[200]' }
+                }}
+              >
+                {ttsVoices.map((v) => (
+                  <SelectItem key={v.value}>
+                    {v.label}
+                  </SelectItem>
+                ))}
+              </Select>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label={t('workflow.tts.rate', '语速 (Rate)')}
+                  value={ttsRate}
+                  onValueChange={setTtsRate}
+                  placeholder="+0%"
+                  variant="bordered"
+                  classNames={{
+                    inputWrapper: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14"
+                  }}
+                />
+                <Input
+                  label={t('workflow.tts.pitch', '音调 (Pitch)')}
+                  value={ttsPitch}
+                  onValueChange={setTtsPitch}
+                  placeholder="+0Hz"
+                  variant="bordered"
+                  classNames={{
+                    inputWrapper: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14"
+                  }}
+                />
+              </div>
+
+              <Input
+                label={t('workflow.tts.volume', '音量 (Volume)')}
+                value={ttsVolume}
+                onValueChange={setTtsVolume}
+                placeholder="+0%"
+                variant="bordered"
+                classNames={{
+                  inputWrapper: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14"
+                }}
+              />
             </div>
-          </div>
-        </div>
-    )
+          </GlassContainer>
+        </WorkflowLayout>
+      )
+    } else {
+      // Done Step
+      stepContent = (
+        <WorkflowLayout>
+          <StepHeader
+            title={t('workflow.character.stage4.title', '最终结果：语音')}
+            hint={t('workflow.character.stage4.hint', '已生成 mp3，可直接播放')}
+          />
+
+          <GlassContainer className="bg-success-50/50 border-success-200/50">
+             <div className="flex items-center justify-center gap-2 text-success-700 font-medium mb-6">
+               <Play size={20} />
+               {t('workflow.tts.result', '生成结果')}
+             </div>
+
+             {ttsAudioUrl ? (
+               <audio controls src={ttsAudioUrl} className="w-full mb-8" />
+             ) : (
+               <div className="text-sm text-foreground/50 text-center mb-8">
+                 {t('workflow.tts.noAudioPreview', '音频已生成，但预览加载失败；可打开文件位置播放')}
+               </div>
+             )}
+
+             <div className="flex items-center justify-center gap-4">
+               <Button
+                 variant="shadow"
+                 color="success"
+                 startContent={<Download size={18} />}
+                 isDisabled={!ttsAudioPath}
+                 onPress={handleOpenAudioFile}
+                 className="font-medium text-white shadow-success/20"
+               >
+                 {t('workflow.tts.openFile', '打开文件位置')}
+               </Button>
+               <Button variant="bordered" onPress={() => setStep('tts')}>
+                 {t('workflow.tts.regenerate', '重新生成语音')}
+               </Button>
+             </div>
+          </GlassContainer>
+        </WorkflowLayout>
+      )
+    }
   } else {
     // Config step (default)
     stepContent = (
