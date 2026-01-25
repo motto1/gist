@@ -1544,8 +1544,8 @@ const CharacterWorkflow: FC = () => {
                                     placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
                                     classNames={{
                                       base: "h-full",
-                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent h-full !rounded-none !border-none",
-                                      input: "py-6 px-8 text-base leading-relaxed text-foreground/80 font-serif"
+                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent h-full !rounded-none !border-none p-6",
+                                      input: "text-sm leading-[1.75] text-foreground/80 font-normal !pr-2"
                                     }}
                                   />
                                 ) : (
@@ -1556,8 +1556,8 @@ const CharacterWorkflow: FC = () => {
                                     placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
                                     classNames={{
                                       base: "h-full",
-                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent h-full !rounded-none !border-none",
-                                      input: "py-6 px-8 text-base leading-relaxed text-foreground/80 font-serif"
+                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent h-full !rounded-none !border-none p-6",
+                                      input: "text-sm leading-[1.75] text-foreground/80 font-normal !pr-2"
                                     }}
                                   />
                                 )}
