@@ -1582,99 +1582,134 @@ const CharacterWorkflow: FC = () => {
                   )}
 
                   {step === 'tts' && (
-                    <Card className="w-full">
-                      <CardBody className="p-5 space-y-5">
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-foreground">
-                            {t('workflow.character.stage3.actions', '生成语音 (mp3)')}
+                    <div className="flex flex-col h-full w-full bg-background relative">
+                      {/* Content - Scrollable area */}
+                      <div className="flex-1 flex flex-col items-center overflow-y-auto px-6 py-12">
+                        <div className="w-full max-w-2xl space-y-12 my-auto pb-20">
+                          {/* Header Section */}
+                          <div className="text-center space-y-6">
+                            <h1 className="text-4xl font-serif font-medium text-foreground">
+                              {t('workflow.character.stage3.actions', '生成语音 (mp3)')}
+                            </h1>
+                            <p className="text-lg text-foreground/60 font-serif">
+                              {t('workflow.character.stage3.actionsHint', '仅展示音频参数与来源选择，不展示具体内容')}
+                            </p>
                           </div>
-                          <div className="text-sm text-foreground/50 mt-1">
-                            {t('workflow.character.stage3.actionsHint', '仅展示音频参数与来源选择，不展示具体内容')}
+
+                          {/* Controls Area */}
+                          <div className="space-y-8 p-8 bg-content2/30 rounded-3xl border border-white/5 backdrop-blur-sm">
+                            <div className="space-y-6">
+                              <Select
+                                label={t('workflow.tts.selectSource', '选择来源')}
+                                selectedKeys={[ttsSourceKind]}
+                                onChange={(e) => e.target.value && setTtsSourceKind(e.target.value as 'bio' | 'monologue')}
+                                variant="bordered"
+                                disallowEmptySelection
+                                classNames={{
+                                  trigger: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14",
+                                  value: "text-base"
+                                }}
+                                popoverProps={{
+                                  portalContainer: popoverPortalContainer,
+                                  classNames: { content: 'z-[200]' }
+                                }}
+                              >
+                                <SelectItem key="bio" isDisabled={!secondaryBioText}>
+                                  {t('workflow.character.secondary.bio', '人物志')}
+                                </SelectItem>
+                                <SelectItem key="monologue" isDisabled={!secondaryMonologueText}>
+                                  {t('workflow.character.secondary.monologue', '心理独白')}
+                                </SelectItem>
+                              </Select>
+
+                              <Select
+                                label={t('workflow.tts.voice', '选择语音')}
+                                selectedKeys={[ttsVoice]}
+                                onChange={(e) => setTtsVoice(e.target.value)}
+                                variant="bordered"
+                                classNames={{
+                                  trigger: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14",
+                                  value: "text-base"
+                                }}
+                                popoverProps={{
+                                  portalContainer: popoverPortalContainer,
+                                  classNames: { content: 'z-[200]' }
+                                }}
+                              >
+                                {ttsVoices.map((v) => (
+                                  <SelectItem key={v.value}>
+                                    {v.label}
+                                  </SelectItem>
+                                ))}
+                              </Select>
+
+                              <div className="grid grid-cols-2 gap-4">
+                                <Input
+                                  label={t('workflow.tts.rate', '语速 (Rate)')}
+                                  value={ttsRate}
+                                  onValueChange={setTtsRate}
+                                  placeholder="+0%"
+                                  variant="bordered"
+                                  classNames={{
+                                    inputWrapper: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14"
+                                  }}
+                                />
+                                <Input
+                                  label={t('workflow.tts.pitch', '音调 (Pitch)')}
+                                  value={ttsPitch}
+                                  onValueChange={setTtsPitch}
+                                  placeholder="+0Hz"
+                                  variant="bordered"
+                                  classNames={{
+                                    inputWrapper: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14"
+                                  }}
+                                />
+                              </div>
+
+                              <Input
+                                label={t('workflow.tts.volume', '音量 (Volume)')}
+                                value={ttsVolume}
+                                onValueChange={setTtsVolume}
+                                placeholder="+0%"
+                                variant="bordered"
+                                classNames={{
+                                  inputWrapper: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14"
+                                }}
+                              />
+                            </div>
                           </div>
                         </div>
+                      </div>
 
-                        <div className="flex justify-center">
-                          <Select
-                            label={t('workflow.tts.selectSource', '选择来源')}
-                            selectedKeys={[ttsSourceKind]}
-                            onChange={(e) => e.target.value && setTtsSourceKind(e.target.value as 'bio' | 'monologue')}
-                            variant="bordered"
-                            className="max-w-xs"
-                            disallowEmptySelection
-                            popoverProps={{
-                              portalContainer: popoverPortalContainer,
-                              classNames: { content: 'z-[200]' }
-                            }}
-                          >
-                            <SelectItem key="bio" isDisabled={!secondaryBioText}>
-                              {t('workflow.character.secondary.bio', '人物志')}
-                            </SelectItem>
-                            <SelectItem key="monologue" isDisabled={!secondaryMonologueText}>
-                              {t('workflow.character.secondary.monologue', '心理独白')}
-                            </SelectItem>
-                          </Select>
-                        </div>
-
-                        <Select
-                          label={t('workflow.tts.voice', '选择语音')}
-                          selectedKeys={[ttsVoice]}
-                          onChange={(e) => setTtsVoice(e.target.value)}
-                          variant="bordered"
-                          popoverProps={{
-                            portalContainer: popoverPortalContainer,
-                            classNames: { content: 'z-[200]' }
-                          }}
+                      {/* Navigation Buttons */}
+                      <Tooltip content={t('workflow.character.stage3.prev', '上一步')} placement="right">
+                        <Button
+                          isIconOnly
+                          radius="full"
+                          variant="light"
+                          size="lg"
+                          className="absolute left-8 top-1/2 -translate-y-1/2 h-16 w-16 z-20 text-foreground/50 hover:text-foreground hover:bg-content2/50 transition-all hover:scale-105"
+                          onPress={handleBackToSecondaryStep}
                         >
-                          {ttsVoices.map((v) => (
-                            <SelectItem key={v.value}>
-                              {v.label}
-                            </SelectItem>
-                          ))}
-                        </Select>
+                          <ArrowLeft size={28} />
+                        </Button>
+                      </Tooltip>
 
-                        <div className="grid grid-cols-2 gap-4">
-                          <Input
-                            label={t('workflow.tts.rate', '语速 (Rate)')}
-                            value={ttsRate}
-                            onValueChange={setTtsRate}
-                            placeholder="+0%"
-                            variant="bordered"
-                          />
-                          <Input
-                            label={t('workflow.tts.pitch', '音调 (Pitch)')}
-                            value={ttsPitch}
-                            onValueChange={setTtsPitch}
-                            placeholder="+0Hz"
-                            variant="bordered"
-                          />
-                        </div>
-
-                        <Input
-                          label={t('workflow.tts.volume', '音量 (Volume)')}
-                          value={ttsVolume}
-                          onValueChange={setTtsVolume}
-                          placeholder="+0%"
-                          variant="bordered"
-                        />
-
-                        <div className="flex items-center justify-center gap-3 pt-2">
-                          <Button variant="bordered" onPress={handleBackToSecondaryStep}>
-                            {t('workflow.character.stage3.prev', '上一步')}
-                          </Button>
-                          <Button
-                            color="primary"
-                            size="lg"
-                            className="min-w-[240px]"
-                            startContent={<Mic size={18} />}
-                            isDisabled={isTtsGenerating || (ttsSourceKind === 'bio' ? !secondaryBioText : !secondaryMonologueText)}
-                            isLoading={isTtsGenerating}
-                            onPress={handleGenerateTts}
-                          >
-                            {t('workflow.tts.generate', '开始生成')}
-                          </Button>
-                        </div>
-                      </CardBody>
-                    </Card>
+                      <Tooltip content={t('workflow.tts.generate', '开始生成')} placement="left">
+                        <Button
+                          isIconOnly
+                          radius="full"
+                          color="primary"
+                          size="lg"
+                          className="absolute right-8 top-1/2 -translate-y-1/2 h-16 w-16 z-20 shadow-xl bg-foreground text-background hover:bg-foreground/90 transition-transform hover:scale-105"
+                          onPress={handleGenerateTts}
+                          isDisabled={isTtsGenerating || (ttsSourceKind === 'bio' ? !secondaryBioText : !secondaryMonologueText)}
+                          isLoading={isTtsGenerating}
+                        >
+                          {!isTtsGenerating && <Mic size={28} />}
+                        </Button>
+                      </Tooltip>
+                    </div>
                   )}
 
                   {step === 'done' && (
