@@ -1582,9 +1582,9 @@ const CharacterWorkflow: FC = () => {
                   )}
 
                   {step === 'tts' && (
-                    <div className="flex flex-col h-full w-full bg-background relative">
-                      {/* Content - Scrollable area */}
-                      <div className="flex-1 flex flex-col items-center overflow-y-auto px-6 py-12">
+                    <div className="flex flex-col h-full w-full bg-background relative group">
+                      {/* Content - Scrollable area with side padding for buttons */}
+                      <div className="flex-1 flex flex-col items-center overflow-y-auto px-32 py-12">
                         <div className="w-full max-w-2xl space-y-12 my-auto pb-20">
                           {/* Header Section */}
                           <div className="text-center space-y-6">
@@ -1681,14 +1681,14 @@ const CharacterWorkflow: FC = () => {
                         </div>
                       </div>
 
-                      {/* Navigation Buttons */}
+                      {/* Navigation Buttons - Fixed Position */}
                       <Tooltip content={t('workflow.character.stage3.prev', '上一步')} placement="right">
                         <Button
                           isIconOnly
                           radius="full"
                           variant="light"
                           size="lg"
-                          className="absolute left-8 top-1/2 -translate-y-1/2 h-16 w-16 z-20 text-foreground/50 hover:text-foreground hover:bg-content2/50 transition-all hover:scale-105"
+                          className="absolute left-10 top-1/2 -translate-y-1/2 h-16 w-16 z-20 text-foreground/50 hover:text-foreground hover:bg-content2/50 transition-all hover:scale-105"
                           onPress={handleBackToSecondaryStep}
                         >
                           <ArrowLeft size={28} />
@@ -1701,7 +1701,7 @@ const CharacterWorkflow: FC = () => {
                           radius="full"
                           color="primary"
                           size="lg"
-                          className="absolute right-8 top-1/2 -translate-y-1/2 h-16 w-16 z-20 shadow-xl bg-foreground text-background hover:bg-foreground/90 transition-transform hover:scale-105"
+                          className="absolute right-10 top-1/2 -translate-y-1/2 h-16 w-16 z-20 shadow-xl bg-foreground text-background hover:bg-foreground/90 transition-transform hover:scale-105"
                           onPress={handleGenerateTts}
                           isDisabled={isTtsGenerating || (ttsSourceKind === 'bio' ? !secondaryBioText : !secondaryMonologueText)}
                           isLoading={isTtsGenerating}
