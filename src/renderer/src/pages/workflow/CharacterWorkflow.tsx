@@ -36,6 +36,67 @@ interface FsEntry {
   size: number
 }
 
+// --- Reusable UI Components ---
+
+const WorkflowLayout: FC<{ children: ReactNode; className?: string }> = ({ children, className }) => (
+  <div className={`flex flex-col h-full w-full bg-background relative group ${className || ''}`}>
+    <div className="flex-1 flex flex-col items-center overflow-y-auto px-6 md:px-20 lg:px-32 py-12">
+      <div className="w-full max-w-4xl space-y-10 my-auto pb-20">
+        {children}
+      </div>
+    </div>
+  </div>
+)
+
+const StepHeader: FC<{ title: string; hint?: string }> = ({ title, hint }) => (
+  <div className="text-center space-y-6">
+    <h1 className="text-4xl font-serif font-medium text-foreground">
+      {title}
+    </h1>
+    {hint && (
+      <p className="text-lg text-foreground/60 font-serif">
+        {hint}
+      </p>
+    )}
+  </div>
+)
+
+const GlassContainer: FC<{ children: ReactNode; className?: string }> = ({ children, className }) => (
+  <div className={`p-8 bg-content2/30 rounded-3xl border border-white/5 backdrop-blur-sm ${className || ''}`}>
+    {children}
+  </div>
+)
+
+const CircularNavButton: FC<{
+  direction: 'left' | 'right'
+  onPress: () => void
+  isDisabled?: boolean
+  isLoading?: boolean
+  tooltip: string
+  icon?: ReactNode
+  color?: "primary" | "light"
+}> = ({ direction, onPress, isDisabled, isLoading, tooltip, icon, color = "light" }) => (
+  <Tooltip content={tooltip} placement={direction === 'left' ? 'right' : 'left'}>
+    <Button
+      isIconOnly
+      radius="full"
+      variant={color === 'light' ? 'light' : 'solid'}
+      color={color === 'primary' ? 'primary' : 'default'}
+      size="lg"
+      className={`absolute ${direction === 'left' ? 'left-10' : 'right-10'} top-1/2 -translate-y-1/2 h-16 w-16 z-50 ${
+        color === 'light'
+          ? 'text-foreground/50 hover:text-foreground hover:bg-content2/50'
+          : 'shadow-xl bg-foreground text-background hover:bg-foreground/90'
+      } transition-all hover:scale-105`}
+      onPress={onPress}
+      isDisabled={isDisabled}
+      isLoading={isLoading}
+    >
+      {!isLoading && (icon || (direction === 'left' ? <ArrowLeft size={28} /> : <ArrowRight size={28} />))}
+    </Button>
+  </Tooltip>
+)
+
 const CharacterWorkflow: FC = () => {
   const { t } = useTranslation()
   const navigate = useNavigate()
