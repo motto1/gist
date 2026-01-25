@@ -1405,7 +1405,7 @@ const CharacterWorkflow: FC = () => {
                   </div>
                 ) : (
                   // Standard view for other states
-                  <div className={`w-full mb-12 space-y-6 ${step === 'secondary' ? 'max-w-5xl' : 'max-w-3xl'}`}>
+                  <div className={`w-full mb-12 space-y-6 max-w-3xl`}>
                     {step !== 'secondary' && (
                       <div className="w-full">
                         <label className="text-sm font-medium text-foreground/70 mb-2 block">
@@ -1531,32 +1531,34 @@ const CharacterWorkflow: FC = () => {
                             </Button>
                           </div>
 
-                          {/* Editable Result Box - Matches OutlineWorkflow Result Style */}
+                          {/* Editable Result Box - Matches OutlineWorkflow Result Style */
                           <div className="relative group">
                              {/* Container Card */}
                             <Card className="w-full relative shadow-sm bg-content1/50 border border-default-200/50">
-                              <CardBody className="p-0 min-h-[400px]">
+                              <CardBody className="p-0">
                                 {secondaryKind === 'bio' ? (
                                   <Textarea
-                                    minRows={15}
+                                    minRows={6}
+                                    maxRows={25}
                                     value={secondaryBioDraft}
                                     onValueChange={setSecondaryBioDraft}
                                     placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
                                     classNames={{
-                                      base: "h-full",
-                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent h-full !rounded-none !border-none p-6",
+                                      base: "w-full",
+                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent !rounded-none !border-none p-6",
                                       input: "text-sm leading-[1.75] text-foreground/80 font-normal !pr-2"
                                     }}
                                   />
                                 ) : (
                                   <Textarea
-                                    minRows={15}
+                                    minRows={6}
+                                    maxRows={25}
                                     value={secondaryMonologueDraft}
                                     onValueChange={setSecondaryMonologueDraft}
                                     placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
                                     classNames={{
-                                      base: "h-full",
-                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent h-full !rounded-none !border-none p-6",
+                                      base: "w-full",
+                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent !rounded-none !border-none p-6",
                                       input: "text-sm leading-[1.75] text-foreground/80 font-normal !pr-2"
                                     }}
                                   />
