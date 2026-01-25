@@ -1,0 +1,153 @@
+--- a/src/renderer/src/pages/compress/NovelCompressionPage.tsx
++++ b/src/renderer/src/pages/compress/NovelCompressionPage.tsx
+@@ -1,5 +1,6 @@
+ import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
+ import { IndeterminateProgress } from '@renderer/components/IndeterminateProgress'
++import { Card } from '@heroui/react'
+ import ModelSelectButton from '@renderer/components/ModelSelectButton'
+ import SelectModelPopup from '@renderer/components/Popups/SelectModelPopup'
+ import { isEmbeddingModel, isRerankModel, isTextToImageModel } from '@renderer/config/models'
+@@ -160,6 +161,91 @@
+   )
+ }
+ 
++/**
++ * 模型池健康度视图组件
++ * 显示每个模型的实时健康状况、成功率、错误信息等
++ */
++const ModelPoolHealthView: React.FC<{ modelHealthStats: NovelCompressionState['modelHealthStats'] }> = ({
++  modelHealthStats
++}) => {
++  const { t } = useTranslation()
++
++  if (!modelHealthStats || modelHealthStats.length === 0) {
++    return (
++      <Typography.Text type="secondary">
++        等待模型池初始化...
++      </Typography.Text>
++    )
++  }
++
++  return (
++    <Flex vertical gap={12}>
++      {modelHealthStats.map((stat) => (
++        <ModelHealthCard
++          key={stat.index}
++          style={{
++            borderLeft: stat.healthy ? '3px solid #52c41a' : '3px solid #ff4d4f'
++          }}
++        >
++          {/* 模型名称和状态 */}
++          <Flex justify="space-between" align="center" style={{ marginBottom: 8 }}>
++            <Space size={8}>
++              <Typography.Text strong style={{ fontSize: 14 }}>
++                #{stat.index} {stat.model}
++              </Typography.Text>
++              <Tag color={stat.healthy ? 'success' : 'error'}>
++                {stat.healthy ? '健康' : '不健康'}
++              </Tag>
++            </Space>
++            <Typography.Text
++              strong
++              style={{
++                fontSize: 16,
++                color: stat.healthy ? '#52c41a' : '#ff4d4f'
++              }}
++            >
++              {stat.successRate}
++            </Typography.Text>
++          </Flex>
++
++          {/* 提供商信息 */}
++          <Flex vertical gap={4} style={{ marginBottom: 8 }}>
++            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
++              提供商: {stat.provider}
++            </Typography.Text>
++            {stat.baseUrl && stat.baseUrl !== 'N/A' && (
++              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
++                端点: {stat.baseUrl}...
++              </Typography.Text>
++            )}
++          </Flex>
++
++          {/* 统计数据 */}
++          <Flex justify="space-between" align="center" style={{ marginTop: 8 }}>
++            <Space size={16}>
++              <Space size={4} direction="vertical" style={{ alignItems: 'center' }}>
++                <Typography.Text type="secondary" style={{ fontSize: 11 }}>成功</Typography.Text>
++                <Typography.Text strong style={{ color: '#52c41a', fontSize: 14 }}>
++                  {stat.successes}
++                </Typography.Text>
++              </Space>
++              <Space size={4} direction="vertical" style={{ alignItems: 'center' }}>
++                <Typography.Text type="secondary" style={{ fontSize: 11 }}>失败</Typography.Text>
++                <Typography.Text strong style={{ color: '#ff4d4f', fontSize: 14 }}>
++                  {stat.failures}
++                </Typography.Text>
++              </Space>
++              <Space size={4} direction="vertical" style={{ alignItems: 'center' }}>
++                <Typography.Text type="secondary" style={{ fontSize: 11 }}>总计</Typography.Text>
++                <Typography.Text strong style={{ fontSize: 14 }}>{stat.total}</Typography.Text>
++              </Space>
++            </Space>
++          </Flex>
++        </ModelHealthCard>
++      ))}
++    </Flex>
++  )
++}
++
+ const LogView: React.FC<{ logs: NovelCompressionState['logs'] }> = ({ logs }) => {
+   const { t } = useTranslation()
+   if (!logs.length) {
+@@ -625,6 +711,15 @@
+                       key: 'chunks',
+                       label: t('novel.result.details'),
+                       children: <ChunkStatusView chunkSummaries={chunkSummaries} />
++                    },
++                    {
++                      key: 'health',
++                      label: '模型池健康度',
++                      children: state.modelHealthStats && state.modelHealthStats.length > 0 ? (
++                        <ModelPoolHealthView modelHealthStats={state.modelHealthStats} />
++                      ) : (
++                        <Typography.Text type="secondary">等待模型池初始化...</Typography.Text>
++                      )
+                     },
+                     { key: 'logs', label: t('novel.section.logs'), children: <LogView logs={logs} /> }
+                   ]}
+@@ -685,6 +780,15 @@
+                     key: 'chunks',
+                     label: t('novel.result.details'),
+                     children: <ChunkStatusView chunkSummaries={chunkSummaries} />
++                  },
++                  {
++                    key: 'health',
++                    label: '模型池健康度',
++                    children: state.modelHealthStats && state.modelHealthStats.length > 0 ? (
++                      <ModelPoolHealthView modelHealthStats={state.modelHealthStats} />
++                    ) : (
++                      <Typography.Text type="secondary">等待模型池初始化...</Typography.Text>
++                    )
+                   },
+                   { key: 'logs', label: t('novel.section.logs'), children: <LogView logs={logs} /> }
+                 ]}
+@@ -1200,6 +1304,18 @@
+   }
+ `
+ 
++const ModelHealthCard = styled.div`
++  background: var(--color-background-soft);
++  border: 1px solid var(--color-border);
++  border-radius: 8px;
++  padding: 12px 16px;
++  transition: all 0.2s ease;
++
++  &:hover {
++    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
++  }
++`
++
+ const ModelInfoContainer = styled.div`
+   background: var(--color-background);
+   border: 1px solid var(--color-border);

@@ -1,0 +1,3 @@
+# @readnomore/ai-core
+
+Core

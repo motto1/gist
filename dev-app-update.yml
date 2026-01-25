@@ -1,0 +1,5 @@
+# provider: generic
+provider: github
+owner: motto1
+repo: Read-No-More
+updaterCacheDirName: read-no-more-updater

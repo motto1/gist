@@ -1,0 +1,82 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  build-win:
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NODE_OPTIONS: --max-old-space-size=8192
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v5
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install corepack (Yarn)
+        run: corepack enable
+
+      - name: Ensure .env exists
+        shell: pwsh
+        run: |
+          if (-not (Test-Path ".env")) {
+            Copy-Item ".env.example" ".env"
+          }
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        shell: pwsh
+        run: |
+          "dir=$(yarn config get cacheFolder)" >> $env:GITHUB_OUTPUT
+
+      - name: Cache yarn dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.yarn-cache-dir-path.outputs.dir }}
+            node_modules
+          key: windows-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            windows-yarn-
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Type Check
+        run: yarn typecheck
+
+      - name: Build Windows
+        # 仅构建 x64，避免同时生成 x64+arm64 导致产物体积翻倍
+        run: yarn build:win:x64
+
+      - name: Prepare artifacts (exclude unpacked)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Copy-Item -Path dist\*-x64-setup.exe -Destination artifacts -ErrorAction SilentlyContinue
+          Write-Host "Artifacts to upload:"
+          Get-ChildItem -Path artifacts -File | Select-Object Name, Length | Format-Table -AutoSize
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-setup-${{ github.sha }}
+          path: artifacts/**
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 9
