@@ -407,13 +407,9 @@ const CharacterWorkflow: FC = () => {
               setProgress(activeSession.progress)
             }
           } else if (activeSession.status === 'complete') {
-            const dir = activeSession.outputDir || null
-            setOutputDir(dir)
-            setStep(dir ? await detectStepByOutputDir(dir) : 'secondary')
-
-            // 修复：主动归档到历史记录，防止任务卡在"进行中"状态
-            // 检测到 Redux 中任务已完成但仍在 activeSessions 中，需要立即归档
-            // Legacy: 旧版本可能把人物志任务标记为 complete；新流程以 mp3 落盘为完成标志，不在此处归档。
+            // 已完成任务：从 Launcher 再进入时应当开始新任务；旧结果请通过历史记录访问。
+            // （人物志整体以 mp3 落盘为完成标志，避免在这里恢复旧目录导致“查看页/新任务”语义混乱。）
+            dispatch(clearActiveSession('character'))
           }
         }
         // Note: Don't restore completed state from main process when entering from launcher

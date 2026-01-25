@@ -7,11 +7,11 @@ import { TextReaderMarkdown } from '@renderer/pages/textReader/components/TextRe
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { clearActiveSession, clearCompletedSession, completeSession, setActiveSession, updateSessionProgress } from '@renderer/store/workflow'
 import type { Model } from '@shared/types'
-import { ArrowLeft, ArrowRight, FolderOpen, Loader2, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, FolderOpen, Loader2 } from 'lucide-react'
 import { FC, ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import remarkGfm from 'remark-gfm'
 
 import DragBar from './components/DragBar'
@@ -30,9 +30,70 @@ interface ProcessingState {
   total?: number
 }
 
+// --- Reusable UI Components (match CharacterWorkflow) ---
+
+const WorkflowLayout: FC<{ children: ReactNode; nav?: ReactNode; className?: string }> = ({ children, nav, className }) => (
+  <div className={`flex flex-col h-full w-full bg-background relative group ${className || ''}`}>
+    <div className="flex-1 flex flex-col items-center overflow-y-auto px-6 md:px-20 lg:px-32 py-12">
+      <div className="w-full max-w-4xl space-y-10 my-auto pb-20">
+        {children}
+      </div>
+    </div>
+    {nav}
+  </div>
+)
+
+const StepHeader: FC<{ title: string; hint?: string }> = ({ title, hint }) => (
+  <div className="text-center space-y-6">
+    <h1 className="text-4xl font-serif font-medium text-foreground">
+      {title}
+    </h1>
+    {hint && (
+      <p className="text-lg text-foreground/60 font-serif">
+        {hint}
+      </p>
+    )}
+  </div>
+)
+
+const GlassContainer: FC<{ children: ReactNode; className?: string }> = ({ children, className }) => (
+  <div className={`p-8 bg-content2/30 rounded-3xl border border-white/5 backdrop-blur-sm ${className || ''}`}>
+    {children}
+  </div>
+)
+
+const CircularNavButton: FC<{
+  direction: 'left' | 'right'
+  onPress: () => void
+  isDisabled?: boolean
+  isLoading?: boolean
+  tooltip: string
+  icon?: ReactNode
+  color?: 'primary' | 'light'
+}> = ({ direction, onPress, isDisabled, isLoading, tooltip, icon, color = 'light' }) => (
+  <Tooltip content={tooltip} placement={direction === 'left' ? 'right' : 'left'}>
+    <Button
+      isIconOnly
+      radius="full"
+      variant={color === 'light' ? 'light' : 'solid'}
+      color={color === 'primary' ? 'primary' : 'default'}
+      size="lg"
+      className={`absolute ${direction === 'left' ? 'left-10' : 'right-10'} top-1/2 -translate-y-1/2 h-16 w-16 z-50 ${
+        color === 'light'
+          ? 'text-foreground/50 hover:text-foreground hover:bg-content2/50'
+          : 'shadow-xl bg-foreground text-background hover:bg-foreground/90'
+      } transition-all hover:scale-105`}
+      onPress={onPress}
+      isDisabled={isDisabled}
+      isLoading={isLoading}
+    >
+      {!isLoading && (icon || (direction === 'left' ? <ArrowLeft size={28} /> : <ArrowRight size={28} />))}
+    </Button>
+  </Tooltip>
+)
+
 const OutlineWorkflow: FC = () => {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const dispatch = useAppDispatch()
   const [searchParams] = useSearchParams()
 
@@ -595,71 +656,79 @@ const OutlineWorkflow: FC = () => {
 
   let stepContent: ReactNode
 
+  const handleStartNewTask = () => {
+    dispatch(clearActiveSession('outline'))
+    setStep('config')
+    setResult(null)
+    setOutputDir(null)
+    setProgress({ stage: 'initializing', percentage: 0 })
+  }
+
   // Render based on step
   if (step === 'processing') {
+    const navButtons = (
+      <CircularNavButton
+        direction="left"
+        tooltip={t('workflow.processing.cancel', '取消任务')}
+        onPress={handleCancel}
+      />
+    )
+
     stepContent = (
-      <div className="flex flex-col items-center justify-center h-full w-full overflow-auto bg-background px-6 py-12">
-        <div className="text-center mb-12 flex-shrink-0">
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            {t('workflow.outline.processing', '正在生成大纲')}
-          </h1>
-          <p className="text-foreground/60">
-            {t('workflow.outline.processingHint', '请耐心等待，处理完成后将自动显示结果')}
-          </p>
-        </div>
+      <WorkflowLayout nav={navButtons}>
+        <StepHeader
+          title={t('workflow.outline.processing', '正在生成大纲')}
+          hint={t('workflow.outline.processingHint', '请耐心等待，处理完成后将自动显示结果')}
+        />
 
         {/* 失败状态提示 */}
         {progress.stage === 'failed' && (
-          <Card className="w-full max-w-lg mb-6 border-warning-200 bg-warning-50">
+          <Card className="w-full border-warning-200 bg-warning-50">
             <CardBody>
               <div className="text-warning-600 font-semibold mb-2">
                 ⚠️ 任务失败：部分分块未能生成
               </div>
               <div className="text-sm text-foreground/60">
                 已成功处理 {progress.current}/{progress.total} 个分块。
-                系统将在3秒后自动重试，或点击"取消任务"后手动重新开始。
+                系统将在3秒后自动重试，或取消任务后手动重新开始。
               </div>
             </CardBody>
           </Card>
         )}
 
-        <ProgressDisplay
-          percentage={progress.percentage}
-          stage={progress.stage}
-          current={progress.current}
-          total={progress.total}
-        />
+        <div className="w-full max-w-2xl mx-auto bg-content1/50 rounded-3xl p-8 border border-white/5 backdrop-blur-sm">
+          <ProgressDisplay
+            percentage={progress.percentage}
+            stage={progress.stage}
+            current={progress.current}
+            total={progress.total}
+          />
 
-        {progress.stage !== 'failed' && (
-          <div className="mt-8 flex items-center gap-4">
-            <Loader2 size={32} className="animate-spin text-primary" />
-          </div>
-        )}
-
-        <Button
-          variant="bordered"
-          color="danger"
-          className="mt-8"
-          startContent={<X size={16} />}
-          onPress={handleCancel}
-        >
-          {t('workflow.processing.cancel', '取消任务')}
-        </Button>
-      </div>
+          {progress.stage !== 'failed' && (
+            <div className="mt-8 flex items-center justify-center gap-4">
+              <Loader2 size={32} className="animate-spin text-primary" />
+            </div>
+          )}
+        </div>
+      </WorkflowLayout>
     )
   } else if (step === 'complete') {
-    stepContent = (
-      <div className="flex flex-col items-center justify-center h-full w-full overflow-auto bg-background px-6 py-12">
-        <div className="text-center mb-8 flex-shrink-0">
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            {t('workflow.outline.complete', '生成完成')}
-          </h1>
-          <p className="text-foreground/60">
-            {t('workflow.outline.completeHint', '大纲已生成完成')}
-          </p>
-        </div>
+    const navButtons = (
+      <CircularNavButton
+        direction="right"
+        tooltip={t('workflow.complete.newTask', '开始新任务')}
+        onPress={handleStartNewTask}
+      />
+    )
 
-        <Card className="w-full max-w-3xl mb-8 relative group">
+    stepContent = (
+      <WorkflowLayout nav={navButtons}>
+        <StepHeader
+          title={t('workflow.outline.complete', '生成完成')}
+          hint={t('workflow.outline.completeHint', '大纲已生成完成')}
+        />
+
+        <Card className="w-full max-w-3xl relative group">
           <CardBody className="max-h-96 overflow-y-auto">
             {result ? (
               <TextReaderMarkdown className="markdown">
@@ -680,75 +749,50 @@ const OutlineWorkflow: FC = () => {
           )}
         </Card>
 
-        <div className="flex gap-4">
-          <Button variant="bordered" onPress={() => navigate('/')}>
-            {t('workflow.complete.backToHome', '返回首页')}
-          </Button>
-          <Button variant="bordered" startContent={<FolderOpen size={16} />} onPress={handleOpenTaskDir} isDisabled={!outputDir}>
+        <div className="flex items-center justify-center gap-4">
+          <Button
+            variant="bordered"
+            startContent={<FolderOpen size={16} />}
+            onPress={handleOpenTaskDir}
+            isDisabled={!outputDir}
+            className="h-12 px-6"
+          >
             {t('workflow.complete.openTaskDir', '打开任务目录')}
           </Button>
-          <Button color="primary" onPress={handleSaveResult}>
+          <Button color="primary" onPress={handleSaveResult} className="h-12 px-6">
             {t('workflow.complete.saveResult', '保存结果')}
           </Button>
         </div>
-      </div>
+      </WorkflowLayout>
     )
   } else {
     // Config step (default)
+    const navButtons = (
+      <CircularNavButton
+        direction="right"
+        tooltip={t('workflow.config.start', '确认开始')}
+        onPress={handleStart}
+        isDisabled={!canStart || isStarting}
+        isLoading={isStarting}
+      />
+    )
+
     stepContent = (
-      <div className="flex flex-col h-full w-full bg-background relative">
-        {/* Header - Back button only */}
-        <div
-          className="flex items-center gap-4 px-6 py-4 relative z-10"
-          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-        >
-          <Button isIconOnly variant="light" onPress={() => navigate('/')} className="[-webkit-app-region:no-drag]">
-            <ArrowLeft size={20} />
-          </Button>
-        </div>
+      <WorkflowLayout nav={navButtons}>
+        <StepHeader
+          title={t('workflow.outline.title', '生成大纲')}
+          hint={t('workflow.outline.configHint', '选择模型和小说文件，开始生成故事大纲')}
+        />
 
-        {/* Content - Scrollable area */}
-        <div className="flex-1 flex flex-col items-center overflow-y-auto px-6 py-12">
-          <div className="w-full max-w-2xl space-y-12 my-auto pb-20">
-            {/* Header Section */}
-            <div className="text-center space-y-6">
-              <h1 className="text-4xl font-serif font-medium text-foreground">
-                {t('workflow.outline.title', '生成大纲')}
-              </h1>
-              <div className="space-y-2">
-                <p className="text-lg text-foreground/60 font-serif">
-                  {t('workflow.outline.configHint', '选择模型和小说文件，开始生成故事大纲')}
-                </p>
-                <p className="text-xs text-foreground/30 font-mono tracking-wide uppercase">
-                  {t('workflow.outline.settings', '分块方式: 按字数强制分块 | 分块大小: 15万字')}
-                </p>
-              </div>
-            </div>
+        <p className="text-xs text-foreground/30 font-mono tracking-wide uppercase text-center -mt-4 mb-8">
+          {t('workflow.outline.settings', '分块方式: 按字数强制分块 | 分块大小: 15万字')}
+        </p>
 
-            {/* Selection Area */}
-            <div className="space-y-8 p-8 bg-content2/30 rounded-3xl border border-white/5 backdrop-blur-sm">
-              <ModelSelector selectedModel={selectedModel} onModelSelect={setSelectedModel} />
-              <NovelPicker selectedFile={selectedFile} onFileSelect={setSelectedFile} />
-            </div>
-          </div>
-        </div>
-
-        <Tooltip content={t('workflow.config.start', '确认开始')} placement="left">
-          <Button
-            isIconOnly
-            radius="full"
-            color="primary"
-            size="lg"
-            className="absolute right-8 top-1/2 -translate-y-1/2 h-16 w-16 z-20 shadow-xl bg-foreground text-background hover:bg-foreground/90 transition-transform hover:scale-105"
-            onPress={handleStart}
-            isDisabled={!canStart || isStarting}
-            isLoading={isStarting}
-            aria-label={t('workflow.config.start', '确认开始')}
-          >
-            {!isStarting && <ArrowRight size={28} />}
-          </Button>
-        </Tooltip>
-      </div>
+        <GlassContainer className="space-y-8">
+          <ModelSelector selectedModel={selectedModel} onModelSelect={setSelectedModel} />
+          <NovelPicker selectedFile={selectedFile} onFileSelect={setSelectedFile} />
+        </GlassContainer>
+      </WorkflowLayout>
     )
   }
 
