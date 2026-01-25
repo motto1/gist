@@ -1518,17 +1518,6 @@ const CharacterWorkflow: FC = () => {
                                 ? (secondaryBioText ? t('workflow.character.secondary.regenerate', '重新生成') : t('workflow.character.secondary.generate', '生成'))
                                 : (secondaryMonologueText ? t('workflow.character.secondary.regenerate', '重新生成') : t('workflow.character.secondary.generate', '生成'))}
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="bordered"
-                              startContent={<RefreshCw size={14} />}
-                              isLoading={secondaryKind === 'bio' ? isSecondaryBioLoading : isSecondaryMonologueLoading}
-                              isDisabled={!selectedCharacterPath || !outputDir}
-                              onPress={() => loadSecondaryFromDisk(secondaryKind)}
-                              className="h-10 rounded-xl"
-                            >
-                              {t('workflow.character.secondary.reload', '重新读取')}
-                            </Button>
                           </div>
 
                           {/* Editable Result Box - Matches OutlineWorkflow Result Style */}
@@ -1544,9 +1533,9 @@ const CharacterWorkflow: FC = () => {
                                     onValueChange={setSecondaryBioDraft}
                                     placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
                                     classNames={{
-                                      base: "w-full",
-                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent !rounded-none !border-none p-6",
-                                      input: "text-sm leading-[1.75] text-foreground/80 font-normal !pr-2"
+                                      base: "w-full h-full",
+                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent data-[hover=true]:!bg-transparent group-data-[focus=true]:!bg-transparent !ring-0 !ring-offset-0 !outline-none !rounded-none !border-none p-6 h-full",
+                                      input: "text-sm leading-[1.75] text-foreground/80 font-normal !pr-2 h-full"
                                     }}
                                   />
                                 ) : (
@@ -1557,9 +1546,9 @@ const CharacterWorkflow: FC = () => {
                                     onValueChange={setSecondaryMonologueDraft}
                                     placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
                                     classNames={{
-                                      base: "w-full",
-                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent !rounded-none !border-none p-6",
-                                      input: "text-sm leading-[1.75] text-foreground/80 font-normal !pr-2"
+                                      base: "w-full h-full",
+                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent data-[hover=true]:!bg-transparent group-data-[focus=true]:!bg-transparent !ring-0 !ring-offset-0 !outline-none !rounded-none !border-none p-6 h-full",
+                                      input: "text-sm leading-[1.75] text-foreground/80 font-normal !pr-2 h-full"
                                     }}
                                   />
                                 )}
