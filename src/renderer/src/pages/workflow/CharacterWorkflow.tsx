@@ -2003,7 +2003,7 @@ const CharacterWorkflow: FC = () => {
                               if (e.key === 'Enter') handleAddCharacter()
                             }}
                             classNames={{
-                              inputWrapper: \"bg-content2/50 hover:bg-content2/70 focus-within:bg-content2/70\"
+                              inputWrapper: "bg-content2/50 hover:bg-content2/70 focus-within:bg-content2/70"
                             }}
                             className="flex-1"
                           />
@@ -2020,15 +2020,15 @@ const CharacterWorkflow: FC = () => {
                         </div>
 
                         {targetCharacters.length > 0 ? (
-                          <div className=\"flex flex-wrap gap-1.5\">
+                          <div className="flex flex-wrap gap-1.5">
                             {targetCharacters.map((char, index) => (
-                              <Chip key={`${char}-${index}`} onClose={() => handleRemoveCharacter(index)} size=\"sm\" variant=\"flat\">
+                              <Chip key={`${char}-${index}`} onClose={() => handleRemoveCharacter(index)} size="sm" variant="flat">
                                 {char}
                               </Chip>
                             ))}
                           </div>
                         ) : (
-                          <div className=\"text-xs text-foreground/40\">
+                          <div className="text-xs text-foreground/40">
                             {t('workflow.character.targetEmpty', '请添加要分析的人物')}
                           </div>
                         )}
