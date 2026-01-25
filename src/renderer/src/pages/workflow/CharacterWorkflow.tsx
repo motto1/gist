@@ -1764,142 +1764,122 @@ const CharacterWorkflow: FC = () => {
     )
   }
     // Config step (default)
-    stepContent = (
-      <div className="flex flex-col h-full w-full bg-background relative">
-        {/* Header - Back button only */}
-        <div
-          className="flex items-center gap-4 px-6 py-4 relative z-10"
-          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+    const navButtons = (
+      <Tooltip content={t('workflow.config.start', '确认开始')} placement="left">
+        <Button
+          isIconOnly
+          radius="full"
+          color="primary"
+          size="lg"
+          className="absolute right-10 top-1/2 -translate-y-1/2 h-16 w-16 z-20 shadow-xl bg-foreground text-background hover:bg-foreground/90 transition-transform hover:scale-105"
+          onPress={handleStart}
+          isDisabled={!canStart || isStarting}
+          isLoading={isStarting}
+          aria-label={t('workflow.config.start', '确认开始')}
         >
-          <Button isIconOnly variant="light" onPress={() => navigate('/')} className="[-webkit-app-region:no-drag]">
-            <ArrowLeft size={20} />
-          </Button>
-        </div>
+          {!isStarting && <ArrowRight size={28} />}
+        </Button>
+      </Tooltip>
+    )
 
-        {/* Content - Scrollable area */}
-        <div className="flex-1 flex flex-col items-center overflow-y-auto px-6 py-12">
-          <div className="w-full max-w-2xl space-y-12 my-auto pb-20">
-            {/* Header Section */}
-            <div className="text-center space-y-6">
-              <h1 className="text-4xl font-serif font-medium text-foreground">
-                {t('workflow.character.title', '生成人物志')}
-              </h1>
-              <div className="space-y-2">
-                <p className="text-lg text-foreground/60 font-serif">
-                  {t('workflow.character.configHint', '选择模型和小说文件，开始提取人物信息')}
-                </p>
-                <p className="text-xs text-foreground/30 font-mono tracking-wide uppercase">
-                  {t('workflow.character.settings', '分块方式: 按章节 | 目标字数: ~15万字/块')}
-                </p>
-              </div>
-            </div>
+    stepContent = (
+      <WorkflowLayout nav={navButtons}>
+        <StepHeader
+          title={t('workflow.character.title', '生成人物志')}
+          hint={t('workflow.character.configHint', '选择模型和小说文件，开始提取人物信息')}
+        />
+        <p className="text-xs text-foreground/30 font-mono tracking-wide uppercase text-center -mt-4 mb-8">
+          {t('workflow.character.settings', '分块方式: 按章节 | 目标字数: ~15万字/块')}
+        </p>
 
-            {/* Selection Area - Glass Container */}
-            <div className="space-y-8 p-8 bg-content2/30 rounded-3xl border border-white/5 backdrop-blur-sm">
-              <ModelSelector selectedModel={selectedModel} onModelSelect={setSelectedModel} />
-              <NovelPicker selectedFile={selectedFile} onFileSelect={setSelectedFile} />
+        <div className="space-y-8 p-8 bg-content2/30 rounded-3xl border border-white/5 backdrop-blur-sm">
+          <ModelSelector selectedModel={selectedModel} onModelSelect={setSelectedModel} />
+          <NovelPicker selectedFile={selectedFile} onFileSelect={setSelectedFile} />
 
-              {/* Target character mode */}
-              <div className="w-full">
-                <label className="text-sm font-medium text-foreground/70 mb-2 block">
-                  {t('workflow.character.targetMode', '指定人物（可选）')}
-                </label>
-                <Card className="w-full bg-content1/50 border border-white/5 shadow-sm">
-                  <CardBody className="p-4 space-y-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-foreground/80">
-                            {t('workflow.character.targetModeLabel', '仅分析指定人物')}
-                          </span>
-                          <Tooltip content={t('workflow.character.targetModeTip', '只分析指定人物的剧情')}>
-                            <span className="inline-flex items-center text-foreground/40 cursor-help">
-                              <Info size={14} />
-                            </span>
-                          </Tooltip>
-                        </div>
-                        <p className="text-xs text-foreground/50">
-                          {t('workflow.character.targetModeHint', '开启后需要填写人物名称，否则无法开始任务')}
-                        </p>
-                      </div>
-                      <Switch
+          {/* Target character mode */}
+          <div className="w-full">
+            <label className="text-sm font-medium text-foreground/70 mb-2 block">
+              {t('workflow.character.targetMode', '指定人物（可选）')}
+            </label>
+            <Card className="w-full bg-content1/50 border border-white/5 shadow-sm">
+              <CardBody className="p-4 space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-foreground/80">
+                        {t('workflow.character.targetModeLabel', '仅分析指定人物')}
+                      </span>
+                      <Tooltip content={t('workflow.character.targetModeTip', '只分析指定人物的剧情')}>
+                        <span className="inline-flex items-center text-foreground/40 cursor-help">
+                          <Info size={14} />
+                        </span>
+                      </Tooltip>
+                    </div>
+                    <p className="text-xs text-foreground/50">
+                      {t('workflow.character.targetModeHint', '开启后需要填写人物名称，否则无法开始任务')}
+                    </p>
+                  </div>
+                  <Switch
+                    size="sm"
+                    isSelected={isTargetCharacterModeEnabled}
+                    onValueChange={(checked) => {
+                      setIsTargetCharacterModeEnabled(checked)
+                      if (!checked) {
+                        setNewCharacterName('')
+                      }
+                    }}
+                  />
+                </div>
+
+                {isTargetCharacterModeEnabled && (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Input
                         size="sm"
-                        isSelected={isTargetCharacterModeEnabled}
-                        onValueChange={(checked) => {
-                          setIsTargetCharacterModeEnabled(checked)
-                          if (!checked) {
-                            setNewCharacterName('')
-                          }
+                        value={newCharacterName}
+                        onValueChange={setNewCharacterName}
+                        placeholder={t('workflow.character.targetPlaceholder', '输入人物名称')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleAddCharacter()
                         }}
+                        classNames={{
+                          inputWrapper: "bg-content2/50 hover:bg-content2/70 focus-within:bg-content2/70"
+                        }}
+                        className="flex-1"
+                        variant="flat"
                       />
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        className="h-10"
+                        startContent={<Plus size={14} />}
+                        onPress={handleAddCharacter}
+                        isDisabled={!newCharacterName.trim()}
+                      >
+                        {t('workflow.character.targetAdd', '添加')}
+                      </Button>
                     </div>
 
-                    {isTargetCharacterModeEnabled && (
-                      <div className="space-y-2">
-                        <div className="flex gap-2">
-                          <Input
-                            size="sm"
-                            value={newCharacterName}
-                            onValueChange={setNewCharacterName}
-                            placeholder={t('workflow.character.targetPlaceholder', '输入人物名称')}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleAddCharacter()
-                            }}
-                            classNames={{
-                              inputWrapper: "bg-content2/50 hover:bg-content2/70 focus-within:bg-content2/70"
-                            }}
-                            className="flex-1"
-                          />
-                          <Button
-                            size="sm"
-                            variant="flat"
-                            className="h-10"
-                            startContent={<Plus size={14} />}
-                            onPress={handleAddCharacter}
-                            isDisabled={!newCharacterName.trim()}
-                          >
-                            {t('workflow.character.targetAdd', '添加')}
-                          </Button>
-                        </div>
-
-                        {targetCharacters.length > 0 ? (
-                          <div className="flex flex-wrap gap-1.5">
-                            {targetCharacters.map((char, index) => (
-                              <Chip key={`${char}-${index}`} onClose={() => handleRemoveCharacter(index)} size="sm" variant="flat">
-                                {char}
-                              </Chip>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-foreground/40">
-                            {t('workflow.character.targetEmpty', '请添加要分析的人物')}
-                          </div>
-                        )}
+                    {targetCharacters.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {targetCharacters.map((char, index) => (
+                          <Chip key={`${char}-${index}`} onClose={() => handleRemoveCharacter(index)} size="sm" variant="flat">
+                            {char}
+                          </Chip>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-foreground/40">
+                        {t('workflow.character.targetEmpty', '请添加要分析的人物')}
                       </div>
                     )}
-                  </CardBody>
-                </Card>
-              </div>
-            </div>
+                  </div>
+                )}
+              </CardBody>
+            </Card>
           </div>
         </div>
-
-        <Tooltip content={t('workflow.config.start', '确认开始')} placement="left">
-          <Button
-            isIconOnly
-            radius="full"
-            color="primary"
-            size="lg"
-            className="absolute right-8 top-1/2 -translate-y-1/2 h-16 w-16 z-20 shadow-xl bg-foreground text-background hover:bg-foreground/90 transition-transform hover:scale-105"
-            onPress={handleStart}
-            isDisabled={!canStart || isStarting}
-            isLoading={isStarting}
-            aria-label={t('workflow.config.start', '确认开始')}
-          >
-            {!isStarting && <ArrowRight size={28} />}
-          </Button>
-        </Tooltip>
-      </div>
+      </WorkflowLayout>
     )
   }
 
