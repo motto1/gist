@@ -1457,47 +1457,52 @@ const CharacterWorkflow: FC = () => {
                       <Card className="w-full shadow-none border-none bg-transparent">
                         <CardBody className="p-0 space-y-4">
                           <div className="flex justify-center">
-                            <Tabs
-                              size="lg"
-                              selectedKey={secondaryKind}
-                              onSelectionChange={(key) => setSecondaryKind(key as SecondaryKind)}
-                              variant="underlined"
-                              classNames={{
-                                tabList: "gap-6 w-full relative rounded-none p-0 border-b border-divider",
-                                cursor: "w-full bg-primary",
-                                tab: "max-w-fit px-2 h-10",
-                                tabContent: "group-data-[selected=true]:text-primary font-medium text-base"
-                              }}
-                            >
-                              <Tab key="bio" title={t('workflow.character.secondary.bio', '人物志')} />
-                              <Tab key="monologue" title={t('workflow.character.secondary.monologue', '心理独白')} />
-                            </Tabs>
+                            <div className="p-1.5 bg-content2/30 rounded-2xl border border-white/5 backdrop-blur-sm">
+                              <Tabs
+                                size="lg"
+                                selectedKey={secondaryKind}
+                                onSelectionChange={(key) => setSecondaryKind(key as SecondaryKind)}
+                                variant="light"
+                                classNames={{
+                                  tabList: "gap-2",
+                                  cursor: "bg-background shadow-sm",
+                                  tab: "h-9 px-6",
+                                  tabContent: "group-data-[selected=true]:text-primary font-medium"
+                                }}
+                              >
+                                <Tab key="bio" title={t('workflow.character.secondary.bio', '人物志')} />
+                                <Tab key="monologue" title={t('workflow.character.secondary.monologue', '心理独白')} />
+                              </Tabs>
+                            </div>
                           </div>
 
                           <div className="flex items-center justify-center gap-4 py-2">
-                            <Select
-                              aria-label={t('workflow.character.result.selectCharacter', '选择人物')}
-                              placeholder={t('workflow.character.result.selectCharacter', '选择人物')}
-                              selectedKeys={selectedCharacterPath ? [selectedCharacterPath] : []}
-                              onChange={(e) => setSelectedCharacterPath(e.target.value || null)}
-                              variant="bordered"
-                              size="sm"
-                              className="w-[200px]"
-                              isDisabled={isCharacterListLoading || characterTxtFiles.length === 0}
-                              popoverProps={{ classNames: { content: 'z-[200]' } }}
-                              classNames={{
-                                trigger: "min-h-unit-8 h-8"
-                              }}
-                            >
-                              {characterTxtFiles.map((f) => {
-                                const name = f.name.replace(/\.txt$/i, '')
-                                return (
-                                  <SelectItem key={f.path}>
-                                    {name}
-                                  </SelectItem>
-                                )
-                              })}
-                            </Select>
+                            <div className="bg-content2/30 rounded-2xl border border-white/5 backdrop-blur-sm p-1">
+                              <Select
+                                aria-label={t('workflow.character.result.selectCharacter', '选择人物')}
+                                placeholder={t('workflow.character.result.selectCharacter', '选择人物')}
+                                selectedKeys={selectedCharacterPath ? [selectedCharacterPath] : []}
+                                onChange={(e) => setSelectedCharacterPath(e.target.value || null)}
+                                variant="flat"
+                                size="sm"
+                                className="w-[200px]"
+                                isDisabled={isCharacterListLoading || characterTxtFiles.length === 0}
+                                popoverProps={{ classNames: { content: 'z-[200]' } }}
+                                classNames={{
+                                  trigger: "bg-transparent shadow-none hover:bg-content2/50 min-h-unit-8 h-8",
+                                  value: "text-center font-medium"
+                                }}
+                              >
+                                {characterTxtFiles.map((f) => {
+                                  const name = f.name.replace(/\.txt$/i, '')
+                                  return (
+                                    <SelectItem key={f.path} textValue={name}>
+                                      <div className="text-center w-full">{name}</div>
+                                    </SelectItem>
+                                  )
+                                })}
+                              </Select>
+                            </div>
 
                             <Button
                               size="sm"
@@ -1507,78 +1512,58 @@ const CharacterWorkflow: FC = () => {
                               isLoading={secondaryKind === 'bio' ? isSecondaryBioGenerating : isSecondaryMonologueGenerating}
                               isDisabled={!selectedCharacterPath || !outputDir}
                               onPress={() => handleGenerateSecondary(secondaryKind)}
-                              className="h-8"
+                              className="h-10 px-6 rounded-xl"
                             >
                               {secondaryKind === 'bio'
                                 ? (secondaryBioText ? t('workflow.character.secondary.regenerate', '重新生成') : t('workflow.character.secondary.generate', '生成'))
                                 : (secondaryMonologueText ? t('workflow.character.secondary.regenerate', '重新生成') : t('workflow.character.secondary.generate', '生成'))}
                             </Button>
+                            <Button
+                              size="sm"
+                              variant="bordered"
+                              startContent={<RefreshCw size={14} />}
+                              isLoading={secondaryKind === 'bio' ? isSecondaryBioLoading : isSecondaryMonologueLoading}
+                              isDisabled={!selectedCharacterPath || !outputDir}
+                              onPress={() => loadSecondaryFromDisk(secondaryKind)}
+                              className="h-10 rounded-xl"
+                            >
+                              {t('workflow.character.secondary.reload', '重新读取')}
+                            </Button>
                           </div>
 
-                          <div className="relative">
-                              {secondaryKind === 'bio' ? (
-                                <Textarea
-                                  minRows={10}
-                                  variant="bordered"
-                                  value={secondaryBioDraft}
-                                  onValueChange={setSecondaryBioDraft}
-                                  placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
-                                  classNames={{
-                                    base: 'outline-none focus:outline-none focus-visible:outline-none',
-                                    inputWrapper: [
-                                      '!border-foreground/15',
-                                      'data-[hover=true]:!border-foreground/25',
-                                      'data-[focus=true]:!border-transparent',
-                                      'data-[focus-visible=true]:!border-transparent',
-                                      'data-[focus-within=true]:!border-transparent',
-                                      '!shadow-none',
-                                      'data-[focus=true]:!shadow-none',
-                                      'data-[focus-visible=true]:!shadow-none',
-                                      'data-[focus-within=true]:!shadow-none',
-                                      'focus-within:ring-2 focus-within:ring-primary/30 focus-within:ring-offset-0',
-                                      'data-[focus-visible=true]:outline-none data-[focus-visible=true]:outline-0',
-                                      'data-[focus-visible=true]:ring-0 data-[focus-visible=true]:ring-transparent',
-                                      'data-[focus-visible=true]:shadow-none',
-                                      'before:!shadow-none before:!border-0 before:!ring-0',
-                                      'after:!shadow-none after:!border-0 after:!ring-0'
-                                    ].join(' '),
-                                    input: '!outline-none !shadow-none focus:!outline-none focus-visible:!outline-none'
-                                  }}
-                                />
-                              ) : (
-                                <Textarea
-                                  minRows={10}
-                                  variant="bordered"
-                                  value={secondaryMonologueDraft}
-                                  onValueChange={setSecondaryMonologueDraft}
-                                  placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
-                                  classNames={{
-                                    base: 'outline-none focus:outline-none focus-visible:outline-none',
-                                    inputWrapper: [
-                                      '!border-foreground/15',
-                                      'data-[hover=true]:!border-foreground/25',
-                                      'data-[focus=true]:!border-transparent',
-                                      'data-[focus-visible=true]:!border-transparent',
-                                      'data-[focus-within=true]:!border-transparent',
-                                      '!shadow-none',
-                                      'data-[focus=true]:!shadow-none',
-                                      'data-[focus-visible=true]:!shadow-none',
-                                      'data-[focus-within=true]:!shadow-none',
-                                      'focus-within:ring-2 focus-within:ring-primary/30 focus-within:ring-offset-0',
-                                      'data-[focus-visible=true]:outline-none data-[focus-visible=true]:outline-0',
-                                      'data-[focus-visible=true]:ring-0 data-[focus-visible=true]:ring-transparent',
-                                      'data-[focus-visible=true]:shadow-none',
-                                      'before:!shadow-none before:!border-0 before:!ring-0',
-                                      'after:!shadow-none after:!border-0 after:!ring-0'
-                                    ].join(' '),
-                                    input: '!outline-none !shadow-none focus:!outline-none focus-visible:!outline-none'
-                                  }}
-                                />
-                              )}
-
-                              {(
-                                (secondaryKind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft).trim()
-                              ) ? (
+                          {/* Editable Result Box - Matches OutlineWorkflow Result Style */}
+                          <div className="relative group">
+                             {/* Container Card */}
+                            <Card className="w-full relative shadow-sm bg-content1/50 border border-default-200/50">
+                              <CardBody className="p-0 min-h-[400px]">
+                                {secondaryKind === 'bio' ? (
+                                  <Textarea
+                                    minRows={15}
+                                    value={secondaryBioDraft}
+                                    onValueChange={setSecondaryBioDraft}
+                                    placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
+                                    classNames={{
+                                      base: "h-full",
+                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent h-full !rounded-none !border-none",
+                                      input: "py-6 px-8 text-base leading-relaxed text-foreground/80 font-serif"
+                                    }}
+                                  />
+                                ) : (
+                                  <Textarea
+                                    minRows={15}
+                                    value={secondaryMonologueDraft}
+                                    onValueChange={setSecondaryMonologueDraft}
+                                    placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
+                                    classNames={{
+                                      base: "h-full",
+                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent h-full !rounded-none !border-none",
+                                      input: "py-6 px-8 text-base leading-relaxed text-foreground/80 font-serif"
+                                    }}
+                                  />
+                                )}
+                              </CardBody>
+                              {/* Hover Fullscreen Button */}
+                              {((secondaryKind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft).trim()) && (
                                 <FullscreenResultViewer
                                   content={secondaryKind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft}
                                   kind="text"
@@ -1590,8 +1575,9 @@ const CharacterWorkflow: FC = () => {
                                       : t('workflow.character.secondary.monologue', '心理独白')
                                   ].filter(Boolean).join(' · ')}
                                 />
-                              ) : null}
-                            </div>
+                              )}
+                            </Card>
+                          </div>
 
                           </CardBody>
                         </Card>
@@ -1937,161 +1923,140 @@ const CharacterWorkflow: FC = () => {
     // Config step (default)
     stepContent = (
       <div className="flex flex-col h-full w-full bg-background relative">
-      {/* Header - 整个区域可拖动，按钮除外 */}
-      <div
-        className="flex items-center gap-4 px-6 py-4 border-b border-foreground/10 relative z-10"
-        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-      >
-        <Button isIconOnly variant="light" onPress={() => navigate('/')} className="[-webkit-app-region:no-drag]">
-          <ArrowLeft size={20} />
-        </Button>
-        <h1 className="text-xl font-semibold">{t('workflow.character.title', '生成人物志')}</h1>
-      </div>
+        {/* Header - Back button only */}
+        <div
+          className="flex items-center gap-4 px-6 py-4 relative z-10"
+          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        >
+          <Button isIconOnly variant="light" onPress={() => navigate('/')} className="[-webkit-app-region:no-drag]">
+            <ArrowLeft size={20} />
+          </Button>
+        </div>
 
-      {/* Content - 可滚动区域 */}
-      <div className="flex-1 flex flex-col items-center overflow-y-auto px-6 py-12">
-        <div className="w-full max-w-lg space-y-8 my-auto">
-          {/* Description */}
-          <div className="text-center mb-8">
-            <p className="text-foreground/60">
-              {t('workflow.character.configHint', '选择模型和小说文件，开始提取人物信息')}
-            </p>
-            <p className="text-sm text-foreground/40 mt-2">
-              {t('workflow.character.settings', '分块方式: 按章节 | 目标字数: ~15万字/块')}
-            </p>
-          </div>
+        {/* Content - Scrollable area */}
+        <div className="flex-1 flex flex-col items-center overflow-y-auto px-6 py-12">
+          <div className="w-full max-w-2xl space-y-12 my-auto pb-20">
+            {/* Header Section */}
+            <div className="text-center space-y-6">
+              <h1 className="text-4xl font-serif font-medium text-foreground">
+                {t('workflow.character.title', '生成人物志')}
+              </h1>
+              <div className="space-y-2">
+                <p className="text-lg text-foreground/60 font-serif">
+                  {t('workflow.character.configHint', '选择模型和小说文件，开始提取人物信息')}
+                </p>
+                <p className="text-xs text-foreground/30 font-mono tracking-wide uppercase">
+                  {t('workflow.character.settings', '分块方式: 按章节 | 目标字数: ~15万字/块')}
+                </p>
+              </div>
+            </div>
 
-          {/* Model Selector */}
-          <ModelSelector selectedModel={selectedModel} onModelSelect={setSelectedModel} />
+            {/* Selection Area - Glass Container */}
+            <div className="space-y-8 p-8 bg-content2/30 rounded-3xl border border-white/5 backdrop-blur-sm">
+              <ModelSelector selectedModel={selectedModel} onModelSelect={setSelectedModel} />
+              <NovelPicker selectedFile={selectedFile} onFileSelect={setSelectedFile} />
 
-          {/* Novel Picker */}
-          <NovelPicker selectedFile={selectedFile} onFileSelect={setSelectedFile} />
-
-          {/* Target character mode */}
-          <div className="w-full">
-            <label className="text-sm font-medium text-foreground/70 mb-2 block">
-              {t('workflow.character.targetMode', '指定人物（可选）')}
-            </label>
-            <Card className="w-full">
-              <CardBody className="p-4 space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-foreground/80">
-                        {t('workflow.character.targetModeLabel', '仅分析指定人物')}
-                      </span>
-                      <Tooltip content={t('workflow.character.targetModeTip', '只分析指定人物的剧情')}>
-                        <span className="inline-flex items-center text-foreground/40 cursor-help">
-                          <Info size={14} />
-                        </span>
-                      </Tooltip>
-                    </div>
-                    <p className="text-xs text-foreground/50">
-                      {t('workflow.character.targetModeHint', '开启后需要填写人物名称，否则无法开始任务')}
-                    </p>
-                  </div>
-                  <Switch
-                    size="sm"
-                    isSelected={isTargetCharacterModeEnabled}
-                    onValueChange={(checked) => {
-                      setIsTargetCharacterModeEnabled(checked)
-                      if (!checked) {
-                        setNewCharacterName('')
-                      }
-                    }}
-                  />
-                </div>
-
-                {isTargetCharacterModeEnabled && (
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <Input
-                        size="sm"
-                        value={newCharacterName}
-                        onValueChange={setNewCharacterName}
-                        placeholder={t('workflow.character.targetPlaceholder', '输入人物名称')}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleAddCharacter()
-                        }}
-                        classNames={{
-                          base: 'outline-none focus:outline-none focus-visible:outline-none',
-                          mainWrapper: 'outline-none focus:outline-none focus-visible:outline-none',
-                          inputWrapper: [
-                            'h-10',
-                            // Keep border subtle; rely on ring for focus indication.
-                            '!border-foreground/15',
-                            'data-[hover=true]:!border-foreground/25',
-                            // 聚焦时移除“内圈”，仅保留柔和外发光
-                            'data-[focus=true]:!border-transparent',
-                            'data-[focus-visible=true]:!border-transparent',
-                            'data-[focus-within=true]:!border-transparent',
-                            '!shadow-none',
-                            'data-[focus=true]:!shadow-none',
-                            'data-[focus-visible=true]:!shadow-none',
-                            'data-[focus-within=true]:!shadow-none',
-                            'focus-within:ring-2 focus-within:ring-primary/30 focus-within:ring-offset-0',
-                            'data-[focus-visible=true]:outline-none data-[focus-visible=true]:outline-0',
-                            'data-[focus-visible=true]:ring-0 data-[focus-visible=true]:ring-transparent',
-                            'data-[focus-visible=true]:shadow-none',
-                            'outline-none focus:outline-none focus-visible:outline-none',
-                            // Defensive: remove internal pseudo-element borders/shadows from HeroUI defaults.
-                            'before:!shadow-none before:!border-0 before:!ring-0',
-                            'after:!shadow-none after:!border-0 after:!ring-0'
-                          ].join(' '),
-                          input: '!border-0 !outline-none !shadow-none focus:!outline-none focus-visible:!outline-none'
-                        }}
-                        className="flex-1"
-                      />
-                      <Button
-                        size="sm"
-                        variant="flat"
-                        className="h-10"
-                        startContent={<Plus size={14} />}
-                        onPress={handleAddCharacter}
-                        isDisabled={!newCharacterName.trim()}
-                      >
-                        {t('workflow.character.targetAdd', '添加')}
-                      </Button>
-                    </div>
-
-                    {targetCharacters.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {targetCharacters.map((char, index) => (
-                          <Chip key={`${char}-${index}`} onClose={() => handleRemoveCharacter(index)} size="sm" variant="flat">
-                            {char}
-                          </Chip>
-                        ))}
+              {/* Target character mode */}
+              <div className="w-full">
+                <label className="text-sm font-medium text-foreground/70 mb-2 block">
+                  {t('workflow.character.targetMode', '指定人物（可选）')}
+                </label>
+                <Card className="w-full bg-content1/50 border border-white/5 shadow-sm">
+                  <CardBody className="p-4 space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-foreground/80">
+                            {t('workflow.character.targetModeLabel', '仅分析指定人物')}
+                          </span>
+                          <Tooltip content={t('workflow.character.targetModeTip', '只分析指定人物的剧情')}>
+                            <span className="inline-flex items-center text-foreground/40 cursor-help">
+                              <Info size={14} />
+                            </span>
+                          </Tooltip>
+                        </div>
+                        <p className="text-xs text-foreground/50">
+                          {t('workflow.character.targetModeHint', '开启后需要填写人物名称，否则无法开始任务')}
+                        </p>
                       </div>
-                    ) : (
-                      <div className="text-xs text-foreground/40">
-                        {t('workflow.character.targetEmpty', '请添加要分析的人物')}
+                      <Switch
+                        size="sm"
+                        isSelected={isTargetCharacterModeEnabled}
+                        onValueChange={(checked) => {
+                          setIsTargetCharacterModeEnabled(checked)
+                          if (!checked) {
+                            setNewCharacterName('')
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {isTargetCharacterModeEnabled && (
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <Input
+                            size="sm"
+                            value={newCharacterName}
+                            onValueChange={setNewCharacterName}
+                            placeholder={t('workflow.character.targetPlaceholder', '输入人物名称')}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleAddCharacter()
+                            }}
+                            classNames={{
+                              inputWrapper: \"bg-content2/50 hover:bg-content2/70 focus-within:bg-content2/70\"
+                            }}
+                            className="flex-1"
+                          />
+                          <Button
+                            size="sm"
+                            variant="flat"
+                            className="h-10"
+                            startContent={<Plus size={14} />}
+                            onPress={handleAddCharacter}
+                            isDisabled={!newCharacterName.trim()}
+                          >
+                            {t('workflow.character.targetAdd', '添加')}
+                          </Button>
+                        </div>
+
+                        {targetCharacters.length > 0 ? (
+                          <div className=\"flex flex-wrap gap-1.5\">
+                            {targetCharacters.map((char, index) => (
+                              <Chip key={`${char}-${index}`} onClose={() => handleRemoveCharacter(index)} size=\"sm\" variant=\"flat\">
+                                {char}
+                              </Chip>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className=\"text-xs text-foreground/40\">
+                            {t('workflow.character.targetEmpty', '请添加要分析的人物')}
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
-              </CardBody>
-            </Card>
+                  </CardBody>
+                </Card>
+              </div>
+            </div>
           </div>
-
         </div>
-      </div>
 
-      <Tooltip content={t('workflow.config.start', '确认开始')} placement="left">
-        <Button
-          isIconOnly
-          radius="full"
-          color="primary"
-          variant="shadow"
-          className="absolute right-6 top-1/2 -translate-y-1/2 h-12 w-12 z-20 shadow-lg"
-          onPress={handleStart}
-          isDisabled={!canStart || isStarting}
-          isLoading={isStarting}
-          aria-label={t('workflow.config.start', '确认开始')}
-        >
-          {!isStarting && <Play size={20} />}
-        </Button>
-      </Tooltip>
-    </div>
+        <Tooltip content={t('workflow.config.start', '确认开始')} placement="left">
+          <Button
+            isIconOnly
+            radius="full"
+            color="primary"
+            size="lg"
+            className="absolute right-8 top-1/2 -translate-y-1/2 h-16 w-16 z-20 shadow-xl bg-foreground text-background hover:bg-foreground/90 transition-transform hover:scale-105"
+            onPress={handleStart}
+            isDisabled={!canStart || isStarting}
+            isLoading={isStarting}
+            aria-label={t('workflow.config.start', '确认开始')}
+          >
+            {!isStarting && <ArrowRight size={28} />}
+          </Button>
+        </Tooltip>
+      </div>
     )
   }
 

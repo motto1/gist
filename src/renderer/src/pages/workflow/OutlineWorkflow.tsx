@@ -7,7 +7,7 @@ import { TextReaderMarkdown } from '@renderer/pages/textReader/components/TextRe
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { clearActiveSession, clearCompletedSession, completeSession, setActiveSession, updateSessionProgress } from '@renderer/store/workflow'
 import type { Model } from '@shared/types'
-import { ArrowLeft, FolderOpen, Loader2, Play, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, FolderOpen, Loader2, X } from 'lucide-react'
 import { FC, ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
@@ -697,36 +697,39 @@ const OutlineWorkflow: FC = () => {
     // Config step (default)
     stepContent = (
       <div className="flex flex-col h-full w-full bg-background relative">
-        {/* Header - 整个区域可拖动，按钮除外 */}
+        {/* Header - Back button only */}
         <div
-          className="flex items-center gap-4 px-6 py-4 border-b border-foreground/10 relative z-10"
+          className="flex items-center gap-4 px-6 py-4 relative z-10"
           style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
         >
           <Button isIconOnly variant="light" onPress={() => navigate('/')} className="[-webkit-app-region:no-drag]">
             <ArrowLeft size={20} />
           </Button>
-          <h1 className="text-xl font-semibold">{t('workflow.outline.title', '生成大纲')}</h1>
         </div>
 
-        {/* Content - 可滚动区域 */}
+        {/* Content - Scrollable area */}
         <div className="flex-1 flex flex-col items-center overflow-y-auto px-6 py-12">
-          <div className="w-full max-w-lg space-y-8 my-auto">
-            {/* Description */}
-            <div className="text-center mb-8">
-              <p className="text-foreground/60">
-                {t('workflow.outline.configHint', '选择模型和小说文件，开始生成故事大纲')}
-              </p>
-              <p className="text-sm text-foreground/40 mt-2">
-                {t('workflow.outline.settings', '分块方式: 按字数强制分块 | 分块大小: 15万字')}
-              </p>
+          <div className="w-full max-w-2xl space-y-12 my-auto pb-20">
+            {/* Header Section */}
+            <div className="text-center space-y-6">
+              <h1 className="text-4xl font-serif font-medium text-foreground">
+                {t('workflow.outline.title', '生成大纲')}
+              </h1>
+              <div className="space-y-2">
+                <p className="text-lg text-foreground/60 font-serif">
+                  {t('workflow.outline.configHint', '选择模型和小说文件，开始生成故事大纲')}
+                </p>
+                <p className="text-xs text-foreground/30 font-mono tracking-wide uppercase">
+                  {t('workflow.outline.settings', '分块方式: 按字数强制分块 | 分块大小: 15万字')}
+                </p>
+              </div>
             </div>
 
-            {/* Model Selector */}
-            <ModelSelector selectedModel={selectedModel} onModelSelect={setSelectedModel} />
-
-            {/* Novel Picker */}
-            <NovelPicker selectedFile={selectedFile} onFileSelect={setSelectedFile} />
-
+            {/* Selection Area */}
+            <div className="space-y-8 p-8 bg-content2/30 rounded-3xl border border-white/5 backdrop-blur-sm">
+              <ModelSelector selectedModel={selectedModel} onModelSelect={setSelectedModel} />
+              <NovelPicker selectedFile={selectedFile} onFileSelect={setSelectedFile} />
+            </div>
           </div>
         </div>
 
@@ -735,14 +738,14 @@ const OutlineWorkflow: FC = () => {
             isIconOnly
             radius="full"
             color="primary"
-            variant="shadow"
-            className="absolute right-6 top-1/2 -translate-y-1/2 h-12 w-12 z-20 shadow-lg"
+            size="lg"
+            className="absolute right-8 top-1/2 -translate-y-1/2 h-16 w-16 z-20 shadow-xl bg-foreground text-background hover:bg-foreground/90 transition-transform hover:scale-105"
             onPress={handleStart}
             isDisabled={!canStart || isStarting}
             isLoading={isStarting}
             aria-label={t('workflow.config.start', '确认开始')}
           >
-            {!isStarting && <Play size={20} />}
+            {!isStarting && <ArrowRight size={28} />}
           </Button>
         </Tooltip>
       </div>
