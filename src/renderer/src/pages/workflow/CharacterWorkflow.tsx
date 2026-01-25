@@ -1295,54 +1295,54 @@ const CharacterWorkflow: FC = () => {
   // Render based on step
   if (step === 'extracting') {
     stepContent = (
-      <div className="flex flex-col items-center justify-center h-full w-full overflow-auto bg-background px-6 py-12">
-      <div className="text-center mb-12 flex-shrink-0">
-        <h1 className="text-3xl font-bold text-foreground mb-2">
-          {t('workflow.character.processing', '正在提取人物')}
-        </h1>
-        <p className="text-foreground/60">
-          {t('workflow.character.processingHint', '请耐心等待，处理完成后将自动显示结果')}
-        </p>
-      </div>
+      <WorkflowLayout>
+        <StepHeader
+          title={t('workflow.character.processing', '正在提取人物')}
+          hint={t('workflow.character.processingHint', '请耐心等待，处理完成后将自动显示结果')}
+        />
 
-      {/* 失败状态提示 */}
-      {progress.stage === 'failed' && (
-        <Card className="w-full max-w-lg mb-6 border-warning-200 bg-warning-50">
-          <CardBody>
-            <div className="text-warning-600 font-semibold mb-2">
-              ⚠️ 任务失败：部分分块未能生成
-            </div>
-            <div className="text-sm text-foreground/60">
-              已成功处理 {progress.current}/{progress.total} 个分块。
-              系统将在3秒后自动重试，或点击"取消任务"后手动重新开始。
-            </div>
-          </CardBody>
-        </Card>
-      )}
+        <div className="w-full max-w-2xl mx-auto flex flex-col items-center gap-8">
+          {/* 失败状态提示 */}
+          {progress.stage === 'failed' && (
+            <Card className="w-full border-warning-200 bg-warning-50">
+              <CardBody>
+                <div className="text-warning-600 font-semibold mb-2">
+                  ⚠️ 任务失败：部分分块未能生成
+                </div>
+                <div className="text-sm text-foreground/60">
+                  已成功处理 {progress.current}/{progress.total} 个分块。
+                  系统将在3秒后自动重试，或点击"取消任务"后手动重新开始。
+                </div>
+              </CardBody>
+            </Card>
+          )}
 
-      <ProgressDisplay
-        percentage={progress.percentage}
-        stage={progress.stage}
-        current={progress.current}
-        total={progress.total}
-      />
+          <div className="w-full bg-content1/50 rounded-3xl p-8 border border-white/5 backdrop-blur-sm">
+            <ProgressDisplay
+              percentage={progress.percentage}
+              stage={progress.stage}
+              current={progress.current}
+              total={progress.total}
+            />
 
-      {progress.stage !== 'failed' && (
-        <div className="mt-8 flex items-center gap-4">
-          <Loader2 size={32} className="animate-spin text-primary" />
+            {progress.stage !== 'failed' && (
+              <div className="mt-8 flex items-center justify-center gap-4">
+                <Loader2 size={32} className="animate-spin text-primary" />
+              </div>
+            )}
+          </div>
+
+          <Button
+            variant="flat"
+            color="danger"
+            className="px-8 h-12 rounded-2xl"
+            startContent={<X size={18} />}
+            onPress={handleCancel}
+          >
+            {t('workflow.processing.cancel', '取消任务')}
+          </Button>
         </div>
-      )}
-
-      <Button
-        variant="bordered"
-        color="danger"
-        className="mt-8"
-        startContent={<X size={16} />}
-        onPress={handleCancel}
-      >
-        {t('workflow.processing.cancel', '取消任务')}
-      </Button>
-    </div>
+      </WorkflowLayout>
     )
   } else if (step === 'secondary' || step === 'tts' || step === 'done') {
     const showCharacterPicker = shouldUseCharacterTxtFolder
@@ -1763,23 +1763,6 @@ const CharacterWorkflow: FC = () => {
       </WorkflowLayout>
     )
   }
-                  )}
-                </div>
-              )) : (
-                <Card className="w-full max-w-3xl mb-8">
-                  <CardBody className="py-10 text-center text-foreground/60">
-                    {isCharacterListLoading
-                      ? t('workflow.character.result.loadingCharacters', '正在读取人物列表...')
-                      : t('workflow.character.result.noCharacters', '未找到人物 TXT')}
-                  </CardBody>
-                </Card>
-              )}
-
-            </div>
-          </div>
-        </div>
-    )
-  } else {
     // Config step (default)
     stepContent = (
       <div className="flex flex-col h-full w-full bg-background relative">
