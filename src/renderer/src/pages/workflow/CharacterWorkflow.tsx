@@ -38,13 +38,14 @@ interface FsEntry {
 
 // --- Reusable UI Components ---
 
-const WorkflowLayout: FC<{ children: ReactNode; className?: string }> = ({ children, className }) => (
+const WorkflowLayout: FC<{ children: ReactNode; nav?: ReactNode; className?: string }> = ({ children, nav, className }) => (
   <div className={`flex flex-col h-full w-full bg-background relative group ${className || ''}`}>
     <div className="flex-1 flex flex-col items-center overflow-y-auto px-6 md:px-20 lg:px-32 py-12">
       <div className="w-full max-w-4xl space-y-10 my-auto pb-20">
         {children}
       </div>
     </div>
+    {nav}
   </div>
 )
 
