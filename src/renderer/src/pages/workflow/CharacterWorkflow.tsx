@@ -1592,44 +1592,74 @@ const CharacterWorkflow: FC = () => {
         )}
 
         {step === 'tts' && (
-          <div className="w-full flex flex-col items-center gap-10">
+          <div className="w-full flex flex-col items-center gap-8">
             <StepHeader
               title={t('workflow.character.stage3.actions', '生成语音 (mp3)')}
               hint={t('workflow.character.stage3.actionsHint', '仅展示音频参数与来源选择，不展示具体内容')}
             />
 
-            <GlassContainer className="w-full max-w-2xl space-y-8">
-              <div className="space-y-6">
-                <Select
-                  label={t('workflow.tts.selectSource', '选择来源')}
-                  selectedKeys={[ttsSourceKind]}
-                  onChange={(e) => e.target.value && setTtsSourceKind(e.target.value as 'bio' | 'monologue')}
-                  variant="bordered"
-                  disallowEmptySelection
+            {/* Controls: Tabs & Character Select */}
+            <div className="flex flex-col items-center gap-4">
+              {/* Tabs for Source */}
+              <div className="p-1.5 bg-content2/30 rounded-2xl border border-white/5 backdrop-blur-sm">
+                <Tabs
+                  size="lg"
+                  selectedKey={ttsSourceKind}
+                  onSelectionChange={(key) => setTtsSourceKind(key as 'bio' | 'monologue')}
+                  variant="light"
                   classNames={{
-                    trigger: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14",
-                    value: "text-base"
-                  }}
-                  popoverProps={{
-                    portalContainer: popoverPortalContainer,
-                    classNames: { content: 'z-[200]' }
+                    tabList: "gap-2",
+                    cursor: "bg-background shadow-sm",
+                    tab: "h-9 px-6",
+                    tabContent: "group-data-[selected=true]:text-primary font-medium"
                   }}
                 >
-                  <SelectItem key="bio" isDisabled={!secondaryBioText}>
-                    {t('workflow.character.secondary.bio', '人物志')}
-                  </SelectItem>
-                  <SelectItem key="monologue" isDisabled={!secondaryMonologueText}>
-                    {t('workflow.character.secondary.monologue', '心理独白')}
-                  </SelectItem>
-                </Select>
+                  <Tab key="bio" title={t('workflow.character.secondary.bio', '人物志')} />
+                  <Tab key="monologue" title={t('workflow.character.secondary.monologue', '心理独白')} />
+                </Tabs>
+              </div>
 
+              {/* Character Selector */}
+              <div className="bg-content2/30 rounded-2xl border border-white/5 backdrop-blur-sm p-1">
+                <Select
+                  aria-label={t('workflow.character.result.selectCharacter', '选择人物')}
+                  placeholder={t('workflow.character.result.selectCharacter', '选择人物')}
+                  selectedKeys={selectedCharacterPath ? [selectedCharacterPath] : []}
+                  onChange={(e) => setSelectedCharacterPath(e.target.value || null)}
+                  variant="flat"
+                  size="sm"
+                  className="w-[200px]"
+                  isDisabled={isCharacterListLoading || characterTxtFiles.length === 0}
+                  popoverProps={{ classNames: { content: 'z-[200]' } }}
+                  classNames={{
+                    trigger: "bg-transparent shadow-none hover:bg-content2/50 min-h-unit-8 h-8",
+                    value: "text-center font-medium"
+                  }}
+                >
+                  {characterTxtFiles.map((f) => {
+                    const name = f.name.replace(/\.txt$/i, '')
+                    return (
+                      <SelectItem key={f.path} textValue={name}>
+                        <div className="text-center w-full">{name}</div>
+                      </SelectItem>
+                    )
+                  })}
+                </Select>
+              </div>
+            </div>
+
+            {/* Configuration Card */}
+            <Card className="w-full max-w-2xl bg-content1/50 border border-white/5 shadow-sm backdrop-blur-md">
+              <CardBody className="p-8 space-y-8">
                 <Select
                   label={t('workflow.tts.voice', '选择语音')}
                   selectedKeys={[ttsVoice]}
                   onChange={(e) => setTtsVoice(e.target.value)}
-                  variant="bordered"
+                  variant="flat"
+                  labelPlacement="outside"
+                  placeholder="选择一个语音"
                   classNames={{
-                    trigger: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14",
+                    trigger: "bg-content2/50 hover:bg-content2/80 transition-colors h-12",
                     value: "text-base"
                   }}
                   popoverProps={{
@@ -1644,15 +1674,16 @@ const CharacterWorkflow: FC = () => {
                   ))}
                 </Select>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-6">
                   <Input
                     label={t('workflow.tts.rate', '语速 (Rate)')}
                     value={ttsRate}
                     onValueChange={setTtsRate}
                     placeholder="+0%"
-                    variant="bordered"
+                    variant="flat"
+                    labelPlacement="outside"
                     classNames={{
-                      inputWrapper: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14"
+                      inputWrapper: "bg-content2/50 hover:bg-content2/80 transition-colors h-12"
                     }}
                   />
                   <Input
@@ -1660,9 +1691,10 @@ const CharacterWorkflow: FC = () => {
                     value={ttsPitch}
                     onValueChange={setTtsPitch}
                     placeholder="+0Hz"
-                    variant="bordered"
+                    variant="flat"
+                    labelPlacement="outside"
                     classNames={{
-                      inputWrapper: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14"
+                      inputWrapper: "bg-content2/50 hover:bg-content2/80 transition-colors h-12"
                     }}
                   />
                 </div>
@@ -1672,13 +1704,14 @@ const CharacterWorkflow: FC = () => {
                   value={ttsVolume}
                   onValueChange={setTtsVolume}
                   placeholder="+0%"
-                  variant="bordered"
+                  variant="flat"
+                  labelPlacement="outside"
                   classNames={{
-                    inputWrapper: "bg-content1/50 border-default-200/50 hover:bg-content1/80 transition-colors h-14"
+                    inputWrapper: "bg-content2/50 hover:bg-content2/80 transition-colors h-12"
                   }}
                 />
-              </div>
-            </GlassContainer>
+              </CardBody>
+            </Card>
           </div>
         )}
 
