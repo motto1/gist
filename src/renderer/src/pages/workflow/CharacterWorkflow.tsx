@@ -1531,8 +1531,8 @@ const CharacterWorkflow: FC = () => {
                             </Button>
                           </div>
 
-                          {/* Editable Result Box - Matches OutlineWorkflow Result Style */
-                          <div className="relative group">
+                          {/* Editable Result Box - Matches OutlineWorkflow Result Style */}
+                          <div className="relative group w-full max-w-3xl">
                              {/* Container Card */}
                             <Card className="w-full relative shadow-sm bg-content1/50 border border-default-200/50">
                               <CardBody className="p-0">
