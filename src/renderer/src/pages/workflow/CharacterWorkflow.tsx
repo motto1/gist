@@ -6,7 +6,7 @@ import {
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { clearActiveSession, clearCompletedSession, completeSession, setActiveSession, updateSessionOutputDir, updateSessionProgress } from '@renderer/store/workflow'
 import type { Model } from '@shared/types'
-import { ArrowLeft, ChevronDown, ChevronUp, Download, Info, Loader2, Mic, Play, Plus, RefreshCw, Sparkles, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Download, Info, Loader2, Mic, Play, Plus, RefreshCw, Sparkles, X } from 'lucide-react'
 import { FC, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -1297,11 +1297,11 @@ const CharacterWorkflow: FC = () => {
               radius="full"
               color="primary"
               variant="shadow"
-              className="absolute right-6 top-1/2 -translate-y-1/2 h-12 w-12 shadow-lg"
+              className="absolute right-8 top-1/2 -translate-y-1/2 h-14 w-14 shadow-medium z-50"
               onPress={() => handleGoToTtsStep({ updateProgress: false })}
               isDisabled={!secondaryBioText && !secondaryMonologueText}
             >
-              <Mic size={20} />
+              <ArrowRight size={24} />
             </Button>
           </Tooltip>
         )}
@@ -1405,7 +1405,7 @@ const CharacterWorkflow: FC = () => {
                   </div>
                 ) : (
                   // Standard view for other states
-                  <div className="w-full max-w-3xl mb-8 space-y-4">
+                  <div className={`w-full mb-12 space-y-6 ${step === 'secondary' ? 'max-w-5xl' : 'max-w-3xl'}`}>
                     {step !== 'secondary' && (
                       <div className="w-full">
                         <label className="text-sm font-medium text-foreground/70 mb-2 block">
