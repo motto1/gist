@@ -807,12 +807,14 @@ const CharacterWorkflow: FC = () => {
       })
 
       // Now transition to extracting step after state is properly set
+      setStepDirection(1)
       setStep('extracting')
 
       // Start character extraction
       await window.api.novelCharacter.startCompression(providerConfigs, undefined, { autoRetry: true })
     } catch (error) {
       console.error('Failed to start character extraction:', error)
+      setStepDirection(-1)
       setStep('config') // Revert to config on error
     } finally {
       setIsStarting(false)  // 重置防重复提交状态
@@ -886,6 +888,7 @@ const CharacterWorkflow: FC = () => {
     // 同步处理状态
     if (mainProcessState.isProcessing && currentStep !== 'extracting') {
       console.log('[CharacterWorkflow] Transitioning to extracting step')
+      setStepDirection(1)
       setStep('extracting')
     }
 
@@ -951,6 +954,7 @@ const CharacterWorkflow: FC = () => {
         // 转换步骤：人物提取完成后直接进入二次总结阶段（不显示“提取完成”）
         if (currentStep === 'extracting') {
           console.log('[CharacterWorkflow] Transitioning to secondary step')
+          setStepDirection(1)
           setStep('secondary')
           dispatch(updateSessionProgress({
             type: 'character',
@@ -1071,6 +1075,7 @@ const CharacterWorkflow: FC = () => {
     loadSecondaryFromDisk('bio')
     loadSecondaryFromDisk('monologue')
 
+    setStepDirection(1)
     setStep('tts')
 
     if (opts?.updateProgress === false) return
@@ -1086,6 +1091,7 @@ const CharacterWorkflow: FC = () => {
     ttsGenerationTokenRef.current += 1
     stopStageProgress()
     setIsTtsGenerating(false)
+    setStepDirection(-1)
     setStep('secondary')
   }, [stopStageProgress])
 
@@ -1148,6 +1154,7 @@ const CharacterWorkflow: FC = () => {
       stopStageProgress({ finalPercentage: 100 })
 
       // 最终结果：渲染音频播放器，并将任务归档为完成
+      setStepDirection(1)
       setStep('done')
       dispatch(completeSession({ type: 'character', outputDir }))
       window.toast?.success?.(t('workflow.tts.success', '生成成功'))
