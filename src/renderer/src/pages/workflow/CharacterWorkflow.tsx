@@ -910,7 +910,13 @@ const CharacterWorkflow: FC = () => {
     const currentOutputDir = outputDirRef.current
 
     // 同步处理状态
-    if (mainProcessState.isProcessing && currentStep !== 'extracting') {
+    // 仅在用户仍处于“配置/提取”阶段时，才自动切换到提取进度页。
+    // 避免用户在二次总结/语音/完成阶段手动浏览时被主进程状态强制拉回，导致“无法回退/闪烁/内容重叠”。
+    if (
+      mainProcessState.isProcessing &&
+      (currentStep === 'config' || currentStep === 'extracting') &&
+      currentStep !== 'extracting'
+    ) {
       console.log('[CharacterWorkflow] Transitioning to extracting step')
       setStepDirection(1)
       setStep('extracting')
@@ -1322,14 +1328,6 @@ const CharacterWorkflow: FC = () => {
 
     const navButtons = (
       <>
-        {step === 'secondary' && (
-          <CircularNavButton
-            direction="left"
-            tooltip={t('workflow.character.stage2.prev', '上一步')}
-            onPress={handleBackToConfigStep}
-          />
-        )}
-
         {step === 'secondary' && !isSecondaryInitial && (
           <CircularNavButton
             direction="right"
@@ -1350,8 +1348,16 @@ const CharacterWorkflow: FC = () => {
               direction="right"
               tooltip={t('workflow.tts.generate', '开始生成')}
               onPress={handleGenerateTts}
-              isDisabled={isTtsGenerating || (ttsSourceKind === 'bio' ? !secondaryBioText : !secondaryMonologueText)}
-              isLoading={isTtsGenerating}
+              isDisabled={
+                isTtsGenerating ||
+                (ttsSourceKind === 'bio'
+                  ? (isSecondaryBioLoading || !secondaryBioText)
+                  : (isSecondaryMonologueLoading || !secondaryMonologueText))
+              }
+              isLoading={
+                isTtsGenerating ||
+                (ttsSourceKind === 'bio' ? isSecondaryBioLoading : isSecondaryMonologueLoading)
+              }
               color="primary"
               icon={<Mic size={28} />}
             />
@@ -1529,7 +1535,11 @@ const CharacterWorkflow: FC = () => {
                         variant="flat"
                         color="primary"
                         startContent={<Sparkles size={14} />}
-                        isLoading={secondaryKind === 'bio' ? isSecondaryBioGenerating : isSecondaryMonologueGenerating}
+                        isLoading={
+                          secondaryKind === 'bio'
+                            ? (isSecondaryBioGenerating || isSecondaryBioLoading)
+                            : (isSecondaryMonologueGenerating || isSecondaryMonologueLoading)
+                        }
                         isDisabled={!selectedCharacterPath || !outputDir}
                         onPress={() => handleGenerateSecondary(secondaryKind)}
                         className="h-10 px-6 rounded-xl"

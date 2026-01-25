@@ -14,15 +14,17 @@ interface Props {
 const variants: Variants = {
   enter: (direction: Direction) => ({
     x: direction > 0 ? 48 : direction < 0 ? -48 : 0,
-    opacity: 1
+    opacity: 0
   }),
   center: {
     x: 0,
-    opacity: 1
+    opacity: 1,
+    pointerEvents: 'auto'
   },
   exit: (direction: Direction) => ({
     x: direction > 0 ? -48 : direction < 0 ? 48 : 0,
-    opacity: 1
+    opacity: 0,
+    pointerEvents: 'none'
   })
 }
 
