@@ -6,10 +6,10 @@ import {
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { clearActiveSession, clearCompletedSession, completeSession, setActiveSession, updateSessionOutputDir, updateSessionProgress } from '@renderer/store/workflow'
 import type { Model } from '@shared/types'
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Download, Info, Loader2, Mic, Play, Plus, RefreshCw, Sparkles, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Download, Info, Loader2, Mic, Play, Plus, Sparkles } from 'lucide-react'
 import { FC, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 
 import DragBar from './components/DragBar'
 import FullscreenResultViewer from './components/FullscreenResultViewer'
@@ -100,7 +100,6 @@ const CircularNavButton: FC<{
 
 const CharacterWorkflow: FC = () => {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const dispatch = useAppDispatch()
   const [searchParams] = useSearchParams()
 
@@ -139,9 +138,7 @@ const CharacterWorkflow: FC = () => {
   // 人物 TXT 合集（用于“非指定人物模式”的结果展示）
   const [characterTxtFiles, setCharacterTxtFiles] = useState<FsEntry[]>([])
   const [selectedCharacterPath, setSelectedCharacterPath] = useState<string | null>(null)
-  const [selectedCharacterText, setSelectedCharacterText] = useState<string | null>(null)
   const [isCharacterListLoading, setIsCharacterListLoading] = useState(false)
-  const [isCharacterTextLoading, setIsCharacterTextLoading] = useState(false)
 
   // 二次总结（人物志/心理独白）- 结果文件为真相，仅用于渲染的短暂状态
   type SecondaryKind = 'bio' | 'monologue'
@@ -152,7 +149,6 @@ const CharacterWorkflow: FC = () => {
   const [isSecondaryMonologueLoading, setIsSecondaryMonologueLoading] = useState(false)
   const [isSecondaryBioGenerating, setIsSecondaryBioGenerating] = useState(false)
   const [isSecondaryMonologueGenerating, setIsSecondaryMonologueGenerating] = useState(false)
-  const [expandedResultPane, setExpandedResultPane] = useState<'primary' | 'secondary'>('primary')
 
   // 阶段内进度条（用于二次总结/语音生成，提取阶段仍使用 progress）
   const [stageProgress, setStageProgress] = useState<ProcessingState | null>(null)
@@ -225,9 +221,7 @@ const CharacterWorkflow: FC = () => {
     setHistoryBookTitle(null)
     setCharacterTxtFiles([])
     setSelectedCharacterPath(null)
-    setSelectedCharacterText(null)
     setIsCharacterListLoading(false)
-    setIsCharacterTextLoading(false)
     setSecondaryKind('bio')
     setSecondaryBioText(null)
     setSecondaryMonologueText(null)
@@ -235,7 +229,6 @@ const CharacterWorkflow: FC = () => {
     setIsSecondaryMonologueLoading(false)
     setIsSecondaryBioGenerating(false)
     setIsSecondaryMonologueGenerating(false)
-    setExpandedResultPane('primary')
     setProgress({ stage: 'initializing', percentage: 0 })
     setIsRestoring(true)
 
@@ -660,37 +653,6 @@ const CharacterWorkflow: FC = () => {
       cancelled = true
     }
   }, [outputDir, sanitizeSecondaryFileStem, shouldUseCharacterTxtFolder])
-
-  // 二次总结/语音阶段：按选中人物读取对应剧情 txt（用于生成二次总结/语音）
-  useEffect(() => {
-    if (!(step === 'secondary' || step === 'tts' || step === 'done')) return
-    if (!selectedCharacterPath) {
-      setSelectedCharacterText(null)
-      setIsCharacterTextLoading(false)
-      return
-    }
-
-    let cancelled = false
-    const loadText = async () => {
-      setIsCharacterTextLoading(true)
-      try {
-        const content = await window.api.fs.readText(selectedCharacterPath)
-        if (cancelled) return
-        setSelectedCharacterText(content ?? null)
-      } catch (error) {
-        console.warn('[CharacterWorkflow] Failed to read character txt:', error)
-        if (cancelled) return
-        setSelectedCharacterText(null)
-      } finally {
-        if (!cancelled) setIsCharacterTextLoading(false)
-      }
-    }
-
-    loadText()
-    return () => {
-      cancelled = true
-    }
-  }, [step, selectedCharacterPath])
 
   const handleAddCharacter = useCallback(() => {
     const name = newCharacterName.trim()
@@ -1262,7 +1224,17 @@ const CharacterWorkflow: FC = () => {
     dispatch(clearActiveSession('character'))
     setStep('config')
     setProgress({ stage: 'initializing', percentage: 0 })
-  }, [dispatch, loadSecondaryFromDisk, stopStageProgress])
+  }, [dispatch, stopStageProgress])
+
+  const handleBackToConfigStep = useCallback(() => {
+    // 仅做 UI 导航，不主动取消主进程任务（避免误删已生成结果）
+    ttsGenerationTokenRef.current += 1
+    stopStageProgress()
+    setIsTtsGenerating(false)
+    setIsSecondaryBioGenerating(false)
+    setIsSecondaryMonologueGenerating(false)
+    setStep('config')
+  }, [stopStageProgress])
 
   useEffect(() => {
     const order: Record<WorkflowStep, number> = {
@@ -1294,10 +1266,18 @@ const CharacterWorkflow: FC = () => {
 
   // Render based on step
   if (step === 'extracting') {
+    const navButtons = (
+      <CircularNavButton
+        direction="left"
+        tooltip={t('workflow.processing.cancel', '取消并返回')}
+        onPress={handleCancel}
+      />
+    )
+
     stepContent = (
-      <WorkflowLayout>
+      <WorkflowLayout nav={navButtons}>
         <StepHeader
-          title={t('workflow.character.processing', '正在提取人物')}
+          title={t('workflow.character.stage1.title', '第一阶段：人物提取')}
           hint={t('workflow.character.processingHint', '请耐心等待，处理完成后将自动显示结果')}
         />
 
@@ -1331,16 +1311,6 @@ const CharacterWorkflow: FC = () => {
               </div>
             )}
           </div>
-
-          <Button
-            variant="flat"
-            color="danger"
-            className="px-8 h-12 rounded-2xl"
-            startContent={<X size={18} />}
-            onPress={handleCancel}
-          >
-            {t('workflow.processing.cancel', '取消任务')}
-          </Button>
         </div>
       </WorkflowLayout>
     )
@@ -1352,6 +1322,14 @@ const CharacterWorkflow: FC = () => {
 
     const navButtons = (
       <>
+        {step === 'secondary' && (
+          <CircularNavButton
+            direction="left"
+            tooltip={t('workflow.character.stage2.prev', '上一步')}
+            onPress={handleBackToConfigStep}
+          />
+        )}
+
         {step === 'secondary' && !isSecondaryInitial && (
           <CircularNavButton
             direction="right"
@@ -1376,6 +1354,21 @@ const CharacterWorkflow: FC = () => {
               isLoading={isTtsGenerating}
               color="primary"
               icon={<Mic size={28} />}
+            />
+          </>
+        )}
+
+        {step === 'done' && (
+          <>
+            <CircularNavButton
+              direction="left"
+              tooltip={t('workflow.character.stage4.prev', '上一步')}
+              onPress={() => setStep('tts')}
+            />
+            <CircularNavButton
+              direction="right"
+              tooltip={t('workflow.character.stage4.next', '开始新任务')}
+              onPress={handleBackToConfigStep}
             />
           </>
         )}
@@ -1762,24 +1755,16 @@ const CharacterWorkflow: FC = () => {
         )}
       </WorkflowLayout>
     )
-  }
+  } else {
     // Config step (default)
     const navButtons = (
-      <Tooltip content={t('workflow.config.start', '确认开始')} placement="left">
-        <Button
-          isIconOnly
-          radius="full"
-          color="primary"
-          size="lg"
-          className="absolute right-10 top-1/2 -translate-y-1/2 h-16 w-16 z-20 shadow-xl bg-foreground text-background hover:bg-foreground/90 transition-transform hover:scale-105"
-          onPress={handleStart}
-          isDisabled={!canStart || isStarting}
-          isLoading={isStarting}
-          aria-label={t('workflow.config.start', '确认开始')}
-        >
-          {!isStarting && <ArrowRight size={28} />}
-        </Button>
-      </Tooltip>
+      <CircularNavButton
+        direction="right"
+        tooltip={t('workflow.config.start', '确认开始')}
+        onPress={handleStart}
+        isDisabled={!canStart || isStarting}
+        isLoading={isStarting}
+      />
     )
 
     stepContent = (
@@ -1792,7 +1777,7 @@ const CharacterWorkflow: FC = () => {
           {t('workflow.character.settings', '分块方式: 按章节 | 目标字数: ~15万字/块')}
         </p>
 
-        <div className="space-y-8 p-8 bg-content2/30 rounded-3xl border border-white/5 backdrop-blur-sm">
+        <GlassContainer className="space-y-8">
           <ModelSelector selectedModel={selectedModel} onModelSelect={setSelectedModel} />
           <NovelPicker selectedFile={selectedFile} onFileSelect={setSelectedFile} />
 
@@ -1878,7 +1863,7 @@ const CharacterWorkflow: FC = () => {
               </CardBody>
             </Card>
           </div>
-        </div>
+        </GlassContainer>
       </WorkflowLayout>
     )
   }
