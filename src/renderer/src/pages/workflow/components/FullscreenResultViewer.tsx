@@ -1,7 +1,7 @@
-import { Button } from '@heroui/react'
+import { Button, Textarea } from '@heroui/react'
 import { TextReaderMarkdown } from '@renderer/pages/textReader/components/TextReaderMarkdown'
-import { Maximize2, Minimize2, X } from 'lucide-react'
-import { FC, useState } from 'react'
+import { Edit2, Maximize2, Minimize2, Save, X } from 'lucide-react'
+import { FC, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -12,6 +12,7 @@ interface FullscreenResultViewerProps {
   content: string
   kind: 'text' | 'markdown'
   title?: string
+  onSave?: (newContent: string) => void
 }
 
 /**
@@ -22,11 +23,48 @@ interface FullscreenResultViewerProps {
 const FullscreenResultViewer: FC<FullscreenResultViewerProps> = ({
   content,
   kind,
-  title
+  title,
+  onSave
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState(content)
+
+  // Reset edit content when content prop changes or when entering fullscreen
+  useEffect(() => {
+    setEditContent(content)
+  }, [content, isFullscreen])
+
+  const handleSave = () => {
+    if (onSave) {
+      onSave(editContent)
+      setIsEditing(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditContent(content)
+    setIsEditing(false)
+  }
 
   const renderContent = () => {
+    if (isEditing) {
+      return (
+        <Textarea
+          value={editContent}
+          onValueChange={setEditContent}
+          minRows={20}
+          maxRows={100}
+          classNames={{
+            base: "w-full h-full min-h-[500px]",
+            inputWrapper: "h-full !bg-transparent !shadow-none !rounded-none !outline-none !ring-0 !border-none p-4 hover:!bg-transparent focus-within:!bg-transparent",
+            input: "text-base leading-[1.75] font-normal !pr-2 h-full !outline-none !ring-0 focus:!ring-0 caret-primary"
+          }}
+          autoFocus
+        />
+      )
+    }
+
     if (kind === 'markdown') {
       return (
         <TextReaderMarkdown className="markdown">
@@ -46,32 +84,73 @@ const FullscreenResultViewer: FC<FullscreenResultViewerProps> = ({
             <h2 className="text-lg font-semibold text-foreground">
               {title || '查看内容'}
             </h2>
-            <Button
-              isIconOnly
-              variant="light"
-              onPress={() => setIsFullscreen(false)}
-            >
-              <X size={20} />
-            </Button>
+            <div className="flex items-center gap-2">
+              {onSave && !isEditing && (
+                <Button
+                  isIconOnly
+                  variant="light"
+                  onPress={() => setIsEditing(true)}
+                  title="编辑"
+                >
+                  <Edit2 size={20} />
+                </Button>
+              )}
+              <Button
+                isIconOnly
+                variant="light"
+                onPress={() => {
+                  setIsFullscreen(false)
+                  setIsEditing(false)
+                }}
+              >
+                <X size={20} />
+              </Button>
+            </div>
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-auto p-6">
-            <div className="max-w-4xl mx-auto">
+          <div className="flex-1 overflow-auto p-6 bg-content1/20">
+            <div className={`mx-auto ${isEditing ? 'max-w-4xl h-full' : 'max-w-4xl'}`}>
               {renderContent()}
             </div>
           </div>
 
-          {/* Footer with minimize button */}
-          <div className="flex justify-end px-6 py-3 border-t border-foreground/10 flex-shrink-0">
-            <Button
-              variant="bordered"
-              size="sm"
-              startContent={<Minimize2 size={16} />}
-              onPress={() => setIsFullscreen(false)}
-            >
-              退出全屏
-            </Button>
+          {/* Footer */}
+          <div className="flex justify-between items-center px-6 py-3 border-t border-foreground/10 flex-shrink-0 bg-background">
+            <div className="text-sm text-foreground/40">
+              {isEditing ? `${editContent.length} 字` : `${content.length} 字`}
+            </div>
+
+            <div className="flex gap-2">
+              {isEditing ? (
+                <>
+                  <Button
+                    variant="flat"
+                    size="sm"
+                    onPress={handleCancelEdit}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    color="primary"
+                    size="sm"
+                    startContent={<Save size={16} />}
+                    onPress={handleSave}
+                  >
+                    保存修改
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="bordered"
+                  size="sm"
+                  startContent={<Minimize2 size={16} />}
+                  onPress={() => setIsFullscreen(false)}
+                >
+                  退出全屏
+                </Button>
+              )}
+            </div>
           </div>
         </div>,
         document.body

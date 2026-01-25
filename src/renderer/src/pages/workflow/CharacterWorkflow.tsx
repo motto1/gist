@@ -1534,8 +1534,8 @@ const CharacterWorkflow: FC = () => {
                                     placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
                                     classNames={{
                                       base: "w-full h-full",
-                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent data-[hover=true]:!bg-transparent group-data-[focus=true]:!bg-transparent !ring-0 !ring-offset-0 !outline-none !rounded-none !border-none p-6 h-full",
-                                      input: "text-sm leading-[1.75] text-foreground/80 font-normal !pr-2 h-full"
+                                      inputWrapper: "h-full !bg-transparent !shadow-none hover:!bg-transparent focus-within:!bg-transparent data-[hover=true]:!bg-transparent group-data-[focus=true]:!bg-transparent !ring-0 !ring-offset-0 !outline-none !border-none p-6 !rounded-none",
+                                      input: "h-full !text-sm !leading-[1.75] text-foreground/80 font-normal !pr-2 !outline-none !ring-0 focus:!ring-0 placeholder:text-foreground/30 caret-primary"
                                     }}
                                   />
                                 ) : (
@@ -1547,8 +1547,8 @@ const CharacterWorkflow: FC = () => {
                                     placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
                                     classNames={{
                                       base: "w-full h-full",
-                                      inputWrapper: "!bg-transparent shadow-none hover:!bg-transparent focus-within:!bg-transparent data-[hover=true]:!bg-transparent group-data-[focus=true]:!bg-transparent !ring-0 !ring-offset-0 !outline-none !rounded-none !border-none p-6 h-full",
-                                      input: "text-sm leading-[1.75] text-foreground/80 font-normal !pr-2 h-full"
+                                      inputWrapper: "h-full !bg-transparent !shadow-none hover:!bg-transparent focus-within:!bg-transparent data-[hover=true]:!bg-transparent group-data-[focus=true]:!bg-transparent !ring-0 !ring-offset-0 !outline-none !border-none p-6 !rounded-none",
+                                      input: "h-full !text-sm !leading-[1.75] text-foreground/80 font-normal !pr-2 !outline-none !ring-0 focus:!ring-0 placeholder:text-foreground/30 caret-primary"
                                     }}
                                   />
                                 )}
@@ -1565,6 +1565,13 @@ const CharacterWorkflow: FC = () => {
                                       ? t('workflow.character.secondary.bio', '人物志')
                                       : t('workflow.character.secondary.monologue', '心理独白')
                                   ].filter(Boolean).join(' · ')}
+                                  onSave={(newContent) => {
+                                    if (secondaryKind === 'bio') {
+                                      setSecondaryBioDraft(newContent)
+                                    } else {
+                                      setSecondaryMonologueDraft(newContent)
+                                    }
+                                  }}
                                 />
                               )}
                             </Card>
