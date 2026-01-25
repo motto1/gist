@@ -45,8 +45,8 @@ const ModelSelector: FC<ModelSelectorProps> = ({ selectedModel, onModelSelect })
 
       {/* Selected Model Display / Trigger */}
       <Button
-        variant="bordered"
-        className="w-full justify-between h-14"
+        variant="flat"
+        className="w-full justify-between h-14 bg-content2/50 hover:bg-content2/80 transition-colors"
         onPress={() => setIsOpen(!isOpen)}
         endContent={<ChevronDown size={20} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />}
       >
