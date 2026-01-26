@@ -155,15 +155,7 @@ const SettingsPage: FC = () => {
             </MenuItem>
           </MenuItemLink>
         </SettingMenus>
-        <SettingContent
-          tabIndex={0}
-          onWheel={(e) => {
-            // 在某些 Windows/Electron 组合下，滚轮事件不会触发默认滚动。
-            // 这里显式推进 scrollTop，确保设置页可滚动。
-            const el = e.currentTarget
-            if (el.scrollHeight <= el.clientHeight) return
-            el.scrollTop += e.deltaY
-          }}>
+        <SettingContent>
           <Routes>
             <Route path="provider" element={<ProviderList />} />
             <Route path="model" element={<ModelSettings />} />
@@ -242,12 +234,14 @@ const MenuItem = styled.li`
   }
 `
 
-const SettingContent = styled(Scrollbar)`
+const SettingContent = styled.div`
   display: flex;
+  flex-direction: column;
   height: 100%;
   flex: 1;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   -webkit-app-region: no-drag;
 `
 
