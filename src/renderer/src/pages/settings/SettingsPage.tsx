@@ -184,6 +184,9 @@ const Container = styled.div`
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
 `
 
 const ContentContainer = styled.div`
@@ -191,6 +194,9 @@ const ContentContainer = styled.div`
   flex: 1;
   flex-direction: row;
   height: calc(100vh - var(--navbar-height));
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   padding: 1px 0;
 `
 
@@ -198,6 +204,8 @@ const SettingMenus = styled(Scrollbar)`
   display: flex;
   flex-direction: column;
   min-width: var(--settings-width);
+  height: 100%;
+  min-height: 0;
   border-right: 0.5px solid var(--color-border);
   padding: 10px;
   user-select: none;
