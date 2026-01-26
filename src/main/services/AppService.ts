@@ -29,7 +29,7 @@ export class AppService {
     } else if (isLinux) {
       try {
         const autostartDir = path.join(os.homedir(), '.config', 'autostart')
-        const desktopFile = path.join(autostartDir, isDev ? 'read-no-more-dev.desktop' : 'read-no-more.desktop')
+        const desktopFile = path.join(autostartDir, isDev ? 'gist-dev.desktop' : 'gist.desktop')
 
         if (isLaunchOnBoot) {
           // Ensure autostart directory exists
@@ -49,7 +49,7 @@ export class AppService {
           // Create desktop file content
           const desktopContent = `[Desktop Entry]
   Type=Application
-  Name=Read-No-More
+  Name=gist
   Comment=A powerful AI assistant for producer.
   Exec=${executablePath}
   Icon=read-no-more

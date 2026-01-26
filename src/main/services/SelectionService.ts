@@ -530,7 +530,7 @@ export class SelectionService {
     // [macOS] a hacky way
     // when set `skipTransformProcessType: true`, if the selection is in self app, it will make the selection canceled after toolbar showing
     // so we just don't set `skipTransformProcessType: true` when in self app
-    const isSelf = ['com.github.Electron', 'com.motto1.readnomore'].includes(programName)
+    const isSelf = ['com.github.Electron', 'com.motto1.readnomore', 'com.motto1.gist'].includes(programName)
 
     if (!isSelf) {
       // [macOS] an ugly hacky way

@@ -1,5 +1,5 @@
-appId: com.motto1.readnomore
-productName: Read-No-More
+appId: com.motto1.gist
+productName: gist
 electronLanguages:
   - zh-CN
   - zh-TW
@@ -15,7 +15,7 @@ nodeGypRebuild: false
 npmRebuild: false
 
 protocols:
-  - name: Read-No-More
+  - name: gist
     schemes:
       - readnomore
 files:
@@ -100,7 +100,7 @@ asarUnpack:
   - "**/*.{metal,exp,lib}"
   - "node_modules/@img/sharp-libvips-*/**"
 win:
-  executableName: ReadNoMore
+  executableName: gist
   artifactName: ${productName}-${version}-${arch}-setup.${ext}
   target:
     - target: nsis
@@ -142,7 +142,7 @@ linux:
   category: Utility
   desktop:
     entry:
-      StartupWMClass: ReadNoMore
+      StartupWMClass: gist
   mimeTypes:
     - x-scheme-handler/readnomore
 rpm:
