@@ -10,6 +10,7 @@ import useUserTheme from '@renderer/hooks/useUserTheme'
 import { useAppDispatch } from '@renderer/store'
 import {
   AssistantIconType,
+  initialState,
   setAssistantIconType,
   setClickAssistantToShowTopic,
   setCustomCss,
@@ -101,6 +102,14 @@ const DisplaySettings: FC = () => {
     setVisibleIcons([...DEFAULT_SIDEBAR_ICONS])
     setDisabledIcons([])
     dispatch(setSidebarIcons({ visible: DEFAULT_SIDEBAR_ICONS, disabled: [] }))
+  }, [dispatch])
+
+  const handleResetThemeColor = useCallback(() => {
+    handleColorPrimaryChange(initialState.userTheme.colorPrimary)
+  }, [handleColorPrimaryChange])
+
+  const handleResetCustomCss = useCallback(() => {
+    dispatch(setCustomCss(initialState.customCss))
   }, [dispatch])
 
   const themeOptions = useMemo(
@@ -233,6 +242,7 @@ const DisplaySettings: FC = () => {
                 }
               ]}
             />
+            <Button onClick={handleResetThemeColor} icon={<ResetIcon size="14" />} color="default" variant="text" />
           </HStack>
         </SettingRow>
         {isMac && (
@@ -423,9 +433,18 @@ const DisplaySettings: FC = () => {
       <SettingGroup theme={theme}>
         <SettingTitle>
           {t('settings.display.custom.css.label')}
-          <TitleExtra onClick={() => window.api.openWebsite('https://cherrycss.com/')}>
-            {t('settings.display.custom.css.cherrycss')}
-          </TitleExtra>
+          <HStack gap="8px" alignItems="center">
+            <TitleExtra onClick={() => window.api.openWebsite('https://cherrycss.com/')}>
+              {t('settings.display.custom.css.cherrycss')}
+            </TitleExtra>
+            <Button
+              onClick={handleResetCustomCss}
+              icon={<ResetIcon size="14" />}
+              color="default"
+              variant="text"
+              aria-label={t('common.reset')}
+            />
+          </HStack>
         </SettingTitle>
         <SettingDivider />
         <CodeEditor
