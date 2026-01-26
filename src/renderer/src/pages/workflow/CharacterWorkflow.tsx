@@ -1333,7 +1333,6 @@ const CharacterWorkflow: FC = () => {
               onPress={() => handleGenerateSecondary('bio')}
               isDisabled={!selectedCharacterName || !selectedCharacterPath || !outputDir || isSecondaryBioGenerating || isSecondaryBioLoading}
               isLoading={isSecondaryBioGenerating || isSecondaryBioLoading}
-              color="primary"
               className="-mt-12"
             />
             <CircularNavButton
@@ -1342,7 +1341,6 @@ const CharacterWorkflow: FC = () => {
               onPress={() => handleGenerateSecondary('monologue')}
               isDisabled={!selectedCharacterName || !selectedCharacterPath || !outputDir || isSecondaryMonologueGenerating || isSecondaryMonologueLoading}
               isLoading={isSecondaryMonologueGenerating || isSecondaryMonologueLoading}
-              color="primary"
               className="mt-12"
             />
           </>
