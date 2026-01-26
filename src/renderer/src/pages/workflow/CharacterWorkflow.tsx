@@ -550,6 +550,10 @@ const CharacterWorkflow: FC = () => {
     if (!outputDir) return
     if (isTtsGenerating) return
 
+    // 用户从最终结果页返回到语音页时，应允许停留在语音页调整参数/重新生成。
+    // 此时通常已经有 ttsAudioPath（以及可选的 ttsAudioUrl），不应再次自动跳回 done。
+    if (ttsAudioPath) return
+
     let cancelled = false
     ;(async () => {
       const audioPath = await findAnyAudioFile()
@@ -566,7 +570,7 @@ const CharacterWorkflow: FC = () => {
     return () => {
       cancelled = true
     }
-  }, [activeSession?.status, dispatch, findAnyAudioFile, isTtsGenerating, loadAudioByPath, outputDir, step])
+  }, [activeSession?.status, dispatch, findAnyAudioFile, isTtsGenerating, loadAudioByPath, outputDir, step, ttsAudioPath])
 
   // done 阶段：确保能从磁盘加载音频预览（history/重启后也能直接播放）
   useEffect(() => {
