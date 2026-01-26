@@ -51,7 +51,7 @@ const LauncherPage: FC = () => {
             </div>
 
             {/* Workflow Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full">
+            <div className="grid grid-cols-3 gap-2 w-full">
               {workflows.map((workflow) => (
                 <WorkflowCard
                   key={workflow.route}
