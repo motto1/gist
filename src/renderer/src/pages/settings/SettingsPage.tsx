@@ -155,7 +155,15 @@ const SettingsPage: FC = () => {
             </MenuItem>
           </MenuItemLink>
         </SettingMenus>
-        <SettingContent>
+        <SettingContent
+          tabIndex={0}
+          onWheel={(e) => {
+            // 在某些 Windows/Electron 组合下，滚轮事件不会触发默认滚动。
+            // 这里显式推进 scrollTop，确保设置页可滚动。
+            const el = e.currentTarget
+            if (el.scrollHeight <= el.clientHeight) return
+            el.scrollTop += e.deltaY
+          }}>
           <Routes>
             <Route path="provider" element={<ProviderList />} />
             <Route path="model" element={<ModelSettings />} />
