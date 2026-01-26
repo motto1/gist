@@ -39,6 +39,13 @@ const TTSGenerator: FC = () => {
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [audioPath, setAudioPath] = useState<string | null>(null)
 
+  const toFileUrl = useCallback((filePath: string) => {
+    const normalized = filePath.replace(/\\/g, '/')
+    if (/^[a-zA-Z]:\//.test(normalized)) return `file:///${encodeURI(normalized)}`
+    if (normalized.startsWith('/')) return `file://${encodeURI(normalized)}`
+    return `file:///${encodeURI(normalized)}`
+  }, [])
+
   const voices = [
     { value: 'zh-CN-XiaoxiaoNeural', label: 'Chinese (Mandarin) - Xiaoxiao (Female)' },
     { value: 'zh-CN-YunxiNeural', label: 'Chinese (Mandarin) - Yunxi (Male)' },
@@ -79,7 +86,7 @@ const TTSGenerator: FC = () => {
         setAudioPath(result.filePath)
         // Read file as base64 to play
         const base64 = await window.api.fs.read(result.filePath, 'base64')
-        setAudioUrl(`data:audio/mp3;base64,${base64}`)
+        setAudioUrl(`data:audio/mpeg;base64,${base64}`)
         window.toast?.success?.(t('workflow.tts.success', '生成成功'))
       }
     } catch (error) {
@@ -241,7 +248,10 @@ const TTSGenerator: FC = () => {
                       {t('workflow.tts.result', '生成结果')}
                     </div>
 
-                    <audio controls src={audioUrl} className="w-full" />
+                    <audio controls preload="metadata" className="w-full">
+                      <source src={audioUrl} type="audio/mpeg" />
+                      {audioPath && <source src={toFileUrl(audioPath)} type="audio/mpeg" />}
+                    </audio>
 
                     <div className="flex gap-2">
                        <Button

@@ -468,10 +468,27 @@ const CharacterWorkflow: FC = () => {
     }
   }, [outputDir])
 
+  const toFileUrl = useCallback((filePath: string) => {
+    const normalized = filePath.replace(/\\/g, '/')
+
+    // Windows absolute path: C:/...
+    if (/^[a-zA-Z]:\//.test(normalized)) {
+      return `file:///${encodeURI(normalized)}`
+    }
+
+    // POSIX absolute path: /...
+    if (normalized.startsWith('/')) {
+      return `file://${encodeURI(normalized)}`
+    }
+
+    // Fallback (shouldn't happen)
+    return `file:///${encodeURI(normalized)}`
+  }, [])
+
   const loadAudioByPath = useCallback(async (audioPath: string) => {
     try {
       const base64 = await window.api.fs.read(audioPath, 'base64')
-      const url = `data:audio/mp3;base64,${base64}`
+      const url = `data:audio/mpeg;base64,${base64}`
       setTtsAudioPath(audioPath)
       setTtsAudioUrl(url)
       return audioPath
@@ -1181,7 +1198,7 @@ const CharacterWorkflow: FC = () => {
       if (generationToken !== ttsGenerationTokenRef.current) return
 
       setTtsAudioPath(audioPath)
-      setTtsAudioUrl(`data:audio/mp3;base64,${base64}`)
+      setTtsAudioUrl(`data:audio/mpeg;base64,${base64}`)
       stopStageProgress({ finalPercentage: 100 })
 
       // 最终结果：渲染音频播放器，并将任务归档为完成
@@ -1730,7 +1747,10 @@ const CharacterWorkflow: FC = () => {
                 </div>
 
                 {ttsAudioUrl ? (
-                  <audio controls src={ttsAudioUrl} className="w-full" />
+                  <audio controls preload="metadata" className="w-full">
+                    <source src={ttsAudioUrl} type="audio/mpeg" />
+                    {ttsAudioPath && <source src={toFileUrl(ttsAudioPath)} type="audio/mpeg" />}
+                  </audio>
                 ) : (
                   <div className="text-sm text-foreground/50 text-center">
                     {t('workflow.tts.noAudioPreview', '音频已生成，但预览加载失败；可打开文件位置播放')}
