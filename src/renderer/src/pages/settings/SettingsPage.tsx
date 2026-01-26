@@ -238,6 +238,10 @@ const SettingContent = styled.div`
   display: flex;
   height: 100%;
   flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
 `
 
 const Divider = styled(AntDivider)`
