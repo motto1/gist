@@ -76,7 +76,8 @@ const CircularNavButton: FC<{
   tooltip: string
   icon?: ReactNode
   color?: "primary" | "light"
-}> = ({ direction, onPress, isDisabled, isLoading, tooltip, icon, color = "light" }) => (
+  className?: string
+}> = ({ direction, onPress, isDisabled, isLoading, tooltip, icon, color = "light", className }) => (
   <Tooltip content={tooltip} placement={direction === 'left' ? 'right' : 'left'}>
     <Button
       isIconOnly
@@ -88,7 +89,7 @@ const CircularNavButton: FC<{
         color === 'light'
           ? 'text-foreground/50 hover:text-foreground hover:bg-content2/50'
           : 'shadow-xl bg-foreground text-background hover:bg-foreground/90'
-      } transition-all hover:scale-105`}
+      } transition-all hover:scale-105 ${className || ''}`}
       onPress={onPress}
       isDisabled={isDisabled}
       isLoading={isLoading}
@@ -1324,6 +1325,29 @@ const CharacterWorkflow: FC = () => {
 
     const navButtons = (
       <>
+        {step === 'secondary' && isSecondaryInitial && (
+          <>
+            <CircularNavButton
+              direction="right"
+              tooltip={t('workflow.character.secondary.generateBio', '生成：人物志')}
+              onPress={() => handleGenerateSecondary('bio')}
+              isDisabled={!selectedCharacterName || !selectedCharacterPath || !outputDir || isSecondaryBioGenerating || isSecondaryBioLoading}
+              isLoading={isSecondaryBioGenerating || isSecondaryBioLoading}
+              color="primary"
+              className="-mt-12"
+            />
+            <CircularNavButton
+              direction="right"
+              tooltip={t('workflow.character.secondary.generateMonologue', '生成：心理独白')}
+              onPress={() => handleGenerateSecondary('monologue')}
+              isDisabled={!selectedCharacterName || !selectedCharacterPath || !outputDir || isSecondaryMonologueGenerating || isSecondaryMonologueLoading}
+              isLoading={isSecondaryMonologueGenerating || isSecondaryMonologueLoading}
+              color="primary"
+              className="mt-12"
+            />
+          </>
+        )}
+
         {step === 'secondary' && !isSecondaryInitial && (
           <CircularNavButton
             direction="right"
@@ -1437,31 +1461,6 @@ const CharacterWorkflow: FC = () => {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-6">
-                    <Button
-                      color="primary"
-                      size="lg"
-                      className="min-w-[160px] h-14 text-medium rounded-2xl shadow-lg shadow-primary/20"
-                      startContent={<Sparkles size={20} />}
-                      isDisabled={!selectedCharacterName || !selectedCharacterPath || !outputDir}
-                      isLoading={isSecondaryBioGenerating}
-                      onPress={() => handleGenerateSecondary('bio')}
-                    >
-                      {t('workflow.character.secondary.bio', '人物志')}
-                    </Button>
-                    <Button
-                      variant="flat"
-                      color="secondary"
-                      size="lg"
-                      className="min-w-[160px] h-14 text-medium rounded-2xl"
-                      startContent={<Sparkles size={20} />}
-                      isDisabled={!selectedCharacterName || !selectedCharacterPath || !outputDir}
-                      isLoading={isSecondaryMonologueGenerating}
-                      onPress={() => handleGenerateSecondary('monologue')}
-                    >
-                      {t('workflow.character.secondary.monologue', '心理独白')}
-                    </Button>
-                  </div>
                 </div>
               ) : (
                 // Standard View
