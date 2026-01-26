@@ -234,13 +234,12 @@ const MenuItem = styled.li`
   }
 `
 
-const SettingContent = styled.div`
+const SettingContent = styled(Scrollbar)`
   display: flex;
   height: 100%;
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
   -webkit-app-region: no-drag;
 `
 
