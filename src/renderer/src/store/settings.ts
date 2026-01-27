@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
-import { isMac } from '@renderer/config/constant'
+import { DEFAULT_COLOR_PRIMARY, isMac } from '@renderer/config/constant'
 import { TRANSLATE_PROMPT } from '@renderer/config/prompts'
 import { DEFAULT_SIDEBAR_ICONS } from '@renderer/config/sidebar'
 import {
@@ -244,7 +244,7 @@ export const initialState: SettingsState = {
   tray: true,
   theme: ThemeMode.system,
   userTheme: {
-    colorPrimary: '#00b96b',
+    colorPrimary: DEFAULT_COLOR_PRIMARY,
     userFontFamily: '',
     userCodeFontFamily: ''
   },
@@ -311,30 +311,27 @@ export const initialState: SettingsState = {
   enableTopicNaming: true,
   customCss: `/*
 ========================
-流云 (Liu-yun)
+Liu-yun (Flowing Clouds)
 ========================
-Theme inspired by flowing clouds in traditional Chinese paintings,
-featuring ethereal blue tones that capture the dynamic movement
-of clouds across mountain landscapes. The colors reflect the
-various states of clouds from dawn to dusk.
+This theme is inspired by the flowing clouds in traditional Chinese paintings, featuring ethereal blue tones that capture the dynamic movement of clouds across mountain landscapes. The colors reflect the various states of clouds from dawn to dusk.
 */
 
 /* Root variables */
 :root {
     --color-white-soft: #F3F6FA;
-    --color-black-soft: #152944;  /* Deep cloud-shadow blue */
-
-    /* Primary color (accent color) and variants */
-    --color-primary: #4B7AB2;     /* Classic cloud blue */
+    --color-black-soft: #152944;  /* Dark blue, resembling the shadow of clouds */
+    
+    /* Primary color (accent color) and its variants */
+    --color-primary: #4B7AB2;     /* Classic blue color associated with clouds */
     --color-primary-soft: rgba(75, 122, 178, 0.6);
     --color-primary-mute: rgba(75, 122, 178, 0.2);
 }
 
 /* Dark mode */
 body[theme-mode="dark"] {
-    --color-background: #152944;       /* Deep night cloud */
-    --color-background-mute: #1D3557;  /* Twilight blue */
-    --color-background-soft: #23496B;  /* Evening cloud */
+    --color-background: #152944;       /* Dark blue, like the night sky */
+    --color-background-mute: #1D3557;  /* Light blue, resembling twilight */
+    --color-background-soft: #23496B;  /* Soft blue, like the evening sky */
 
     --navbar-background-mac: rgba(21, 41, 68, 0.85);
     --navbar-background: #152944;
@@ -354,14 +351,13 @@ body[theme-mode="dark"] {
 
 /* Light mode */
 body[theme-mode="light"] {
-    /* Primary color (accent color) and variants */
-    --color-primary: #4B7AB2;     /* Classic cloud blue */
+    --color-primary: #4B7AB2;     /* Classic blue color associated with clouds */
     --color-primary-soft: rgba(75, 122, 178, 0.6);
     --color-primary-mute: rgba(75, 122, 178, 0.2);
-
-    --color-background: #F3F6FA;       /* Morning cloud white */
-    --color-background-mute: #DCE6F2;  /* Soft cloud blue */
-    --color-background-soft: #E8EEF5;  /* Daylight cloud */
+    
+    --color-background: #F3F6FA;       /* Light blue, like the morning sky */
+    --color-background-mute: #DCE6F2;  /* Soft blue, like the early afternoon */
+    --color-background-soft: #E8EEF5;  /* Bright blue, like daylight */
 
     --navbar-background: #F0F4F9;
     --chat-background: #F7FAFD;
@@ -383,11 +379,11 @@ body[theme-mode="light"] {
 .bubble .message-user .message-action-button:hover {
   background-color: var(--color-background-mute);
 }
-body[theme-mode="dark"]{
+body[theme-mode="dark"] {
     --color-list-item: var(--color-background-soft) !important;
     --color-list-item-hover: var(--color-background-soft) !important;
 }
-body[theme-mode="light"]{
+body[theme-mode="light"] {
     --color-list-item: var(--color-background-soft) !important;
     --color-list-item-hover: var(--color-background-soft) !important;
 }`,
