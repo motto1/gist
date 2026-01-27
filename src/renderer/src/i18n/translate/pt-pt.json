@@ -4639,5 +4639,28 @@
     "quit": "Sair",
     "show_window": "Exibir Janela",
     "visualization": "Visualização"
+  },
+  "workflow": {
+    "character": {
+      "result": {
+        "selectCharacter": "[to be translated]:选择人物"
+      },
+      "secondary": {
+        "bio": "[to be translated]:二次总结：人物志",
+        "monologue": "[to be translated]:二次总结：独白"
+      },
+      "stage3": {
+        "actions": "[to be translated]:操作",
+        "actionsHint": "[to be translated]:在此选择后可继续生成二次总结或语音",
+        "prev": "[to be translated]:上一步"
+      }
+    },
+    "tts": {
+      "generate": "[to be translated]:生成语音",
+      "pitch": "[to be translated]:音调",
+      "rate": "[to be translated]:语速",
+      "volume": "[to be translated]:音量"
+    },
+    "ttsvoice": "[to be translated]:语音"
   }
 }

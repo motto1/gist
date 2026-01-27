@@ -4634,6 +4634,12 @@
   "warning": {
     "missing_provider": "The supplier does not exist; reverted to the default supplier {{provider}}. This may cause issues."
   },
+  "words": {
+    "knowledgeGraph": "Knowledge Graph",
+    "quit": "Quit",
+    "show_window": "Show Window",
+    "visualization": "Visualization"
+  },
   "workflow": {
     "character": {
       "result": {
@@ -4656,11 +4662,5 @@
       "volume": "Volume"
     },
     "ttsvoice": "Voice"
-  },
-  "words": {
-    "knowledgeGraph": "Knowledge Graph",
-    "quit": "Quit",
-    "show_window": "Show Window",
-    "visualization": "Visualization"
   }
 }

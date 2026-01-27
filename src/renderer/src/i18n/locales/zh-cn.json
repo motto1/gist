@@ -4634,6 +4634,12 @@
   "warning": {
     "missing_provider": "供应商不存在，已回退到默认供应商 {{provider}}。这可能导致问题。"
   },
+  "words": {
+    "knowledgeGraph": "知识图谱",
+    "quit": "退出",
+    "show_window": "显示窗口",
+    "visualization": "可视化"
+  },
   "workflow": {
     "character": {
       "result": {
@@ -4656,11 +4662,5 @@
       "volume": "音量"
     },
     "ttsvoice": "语音"
-  },
-  "words": {
-    "knowledgeGraph": "知识图谱",
-    "quit": "退出",
-    "show_window": "显示窗口",
-    "visualization": "可视化"
   }
 }

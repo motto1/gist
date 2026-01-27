@@ -4634,6 +4634,12 @@
   "warning": {
     "missing_provider": "供應商不存在，已回退到預設供應商 {{provider}}。這可能導致問題。"
   },
+  "words": {
+    "knowledgeGraph": "知識圖譜",
+    "quit": "結束",
+    "show_window": "顯示視窗",
+    "visualization": "視覺化"
+  },
   "workflow": {
     "character": {
       "result": {
@@ -4656,11 +4662,5 @@
       "volume": "音量"
     },
     "ttsvoice": "語音"
-  },
-  "words": {
-    "knowledgeGraph": "知識圖譜",
-    "quit": "結束",
-    "show_window": "顯示視窗",
-    "visualization": "視覺化"
   }
 }

@@ -39,6 +39,8 @@ export const getLanguageCode = () => {
   return getLanguage().split('-')[0]
 }
 
+const isDev = import.meta.env?.DEV ?? false
+
 i18n.use(initReactI18next).init({
   resources,
   lng: getLanguage(),
@@ -46,9 +48,14 @@ i18n.use(initReactI18next).init({
   interpolation: {
     escapeValue: false
   },
-  saveMissing: true,
-  missingKeyHandler: (_1, _2, key) => {
-    logger.error(`Missing key: ${key}`)
+  // 避免在运行时把“有默认文案的 key”当成错误刷屏。
+  // 翻译完整性由 `yarn check:i18n`/`yarn sync:i18n` 保证。
+  saveMissing: isDev,
+  missingKeyHandler: (_lngs, _ns, key, fallbackValue) => {
+    if (!isDev) return
+    if (fallbackValue == null || fallbackValue === '') {
+      logger.warn(`Missing key: ${key}`)
+    }
   }
 })
 
