@@ -4634,6 +4634,29 @@
   "warning": {
     "missing_provider": "供應商不存在，已回退到預設供應商 {{provider}}。這可能導致問題。"
   },
+  "workflow": {
+    "character": {
+      "result": {
+        "selectCharacter": "選擇人物"
+      },
+      "secondary": {
+        "bio": "二次總結：人物誌",
+        "monologue": "二次總結：獨白"
+      },
+      "stage3": {
+        "actions": "操作",
+        "actionsHint": "在此選擇後可繼續生成二次總結或語音",
+        "prev": "上一步"
+      }
+    },
+    "tts": {
+      "generate": "生成語音",
+      "pitch": "音調",
+      "rate": "語速",
+      "volume": "音量"
+    },
+    "ttsvoice": "語音"
+  },
   "words": {
     "knowledgeGraph": "知識圖譜",
     "quit": "結束",

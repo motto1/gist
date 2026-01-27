@@ -4634,6 +4634,29 @@
   "warning": {
     "missing_provider": "The supplier does not exist; reverted to the default supplier {{provider}}. This may cause issues."
   },
+  "workflow": {
+    "character": {
+      "result": {
+        "selectCharacter": "Select character"
+      },
+      "secondary": {
+        "bio": "Secondary summary: biography",
+        "monologue": "Secondary summary: monologue"
+      },
+      "stage3": {
+        "actions": "Actions",
+        "actionsHint": "From here you can generate the secondary summary or audio",
+        "prev": "Previous"
+      }
+    },
+    "tts": {
+      "generate": "Generate audio",
+      "pitch": "Pitch",
+      "rate": "Rate",
+      "volume": "Volume"
+    },
+    "ttsvoice": "Voice"
+  },
   "words": {
     "knowledgeGraph": "Knowledge Graph",
     "quit": "Quit",

@@ -4634,6 +4634,29 @@
   "warning": {
     "missing_provider": "供应商不存在，已回退到默认供应商 {{provider}}。这可能导致问题。"
   },
+  "workflow": {
+    "character": {
+      "result": {
+        "selectCharacter": "选择人物"
+      },
+      "secondary": {
+        "bio": "二次总结：人物志",
+        "monologue": "二次总结：独白"
+      },
+      "stage3": {
+        "actions": "操作",
+        "actionsHint": "在此选择后可继续生成二次总结或语音",
+        "prev": "上一步"
+      }
+    },
+    "tts": {
+      "generate": "生成语音",
+      "pitch": "音调",
+      "rate": "语速",
+      "volume": "音量"
+    },
+    "ttsvoice": "语音"
+  },
   "words": {
     "knowledgeGraph": "知识图谱",
     "quit": "退出",
