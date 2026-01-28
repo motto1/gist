@@ -75,6 +75,30 @@ const bookToFileMetadata = (book: TextBook): FileMetadata => ({
   charLength: book.charCount
 })
 
+const resolveBookContentPath = async (book: TextBook): Promise<{ filePath: string; folderPath?: string }> => {
+  const exists = async (targetPath: string) => {
+    try {
+      return Boolean(await window.api.file.get(targetPath))
+    } catch {
+      return false
+    }
+  }
+
+  if (book.filePath && (await exists(book.filePath))) {
+    return { filePath: book.filePath }
+  }
+
+  if (book.folderName) {
+    const folderPath = await getBookFolderPath(book.folderName)
+    const derived = await getBookContentPath(book.folderName)
+    if (await exists(derived)) {
+      return { filePath: derived, folderPath }
+    }
+  }
+
+  return { filePath: book.filePath || '' }
+}
+
 const NovelPicker: FC<NovelPickerProps> = ({ selectedFile, onFileSelect }) => {
   const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState<SourceTab>('file')
@@ -205,10 +229,15 @@ const NovelPicker: FC<NovelPickerProps> = ({ selectedFile, onFileSelect }) => {
 
   // Handle book selection from library
   const handleSelectBook = useCallback(
-    (book: TextBook) => {
-      onFileSelect(bookToFileMetadata(book))
+    async (book: TextBook) => {
+      const resolved = await resolveBookContentPath(book)
+      if (!resolved.filePath) {
+        window.toast?.error?.(t('workflow.config.bookFileMissing', '未找到图书文件，请检查 TextBooks 目录'))
+        return
+      }
+      onFileSelect(bookToFileMetadata({ ...book, filePath: resolved.filePath, folderPath: resolved.folderPath ?? book.folderPath }))
     },
-    [onFileSelect]
+    [onFileSelect, t]
   )
 
   // Handle clear selection

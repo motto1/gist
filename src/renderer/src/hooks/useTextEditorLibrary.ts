@@ -59,28 +59,46 @@ export function useTextEditorLibrary() {
       const parsed = typeof raw === 'string' ? safeJsonParse<unknown>(raw) : null
       const allBooks = normalizeBooks(parsed)
 
-      // 检查文件是否存在，过滤掉已删除的书籍
+      // 检查文件是否存在；若 library.json 的绝对路径失效（例如盘符变化），尝试用 folderName 自动修复
       const validBooks: TextBook[] = []
       const removedBooks: TextBook[] = []
+      let repairedCount = 0
 
-      for (const book of allBooks) {
+      const exists = async (filePath: string) => {
         try {
-          // 检查书籍内容文件是否存在
-          const fileInfo = await window.api.file.get(book.filePath)
-          if (fileInfo) {
-            validBooks.push(book)
-          } else {
-            removedBooks.push(book)
-          }
+          return Boolean(await window.api.file.get(filePath))
         } catch {
-          // 文件不存在或读取失败
-          removedBooks.push(book)
+          return false
         }
       }
 
-      // 如果有书籍被清理，持久化更新后的列表
-      if (removedBooks.length > 0) {
-        console.info(`Auto-cleaned ${removedBooks.length} missing book(s):`, removedBooks.map((b) => b.title))
+      for (const book of allBooks) {
+        if (book.filePath && (await exists(book.filePath))) {
+          validBooks.push(book)
+          continue
+        }
+
+        if (book.folderName) {
+          const folderPath = await getBookFolderPath(book.folderName)
+          const derivedContentPath = await getBookContentPath(book.folderName)
+          if (await exists(derivedContentPath)) {
+            validBooks.push({ ...book, folderPath, filePath: derivedContentPath })
+            repairedCount++
+            continue
+          }
+        }
+
+        removedBooks.push(book)
+      }
+
+      // 如果有书籍被清理或修复，持久化更新后的列表
+      if (removedBooks.length > 0 || repairedCount > 0) {
+        if (removedBooks.length > 0) {
+          console.info(`Auto-cleaned ${removedBooks.length} missing book(s):`, removedBooks.map((b) => b.title))
+        }
+        if (repairedCount > 0) {
+          console.info(`Auto-repaired ${repairedCount} book path(s) from folderName`)
+        }
         const libraryPathForWrite = await getLibraryFilePath()
         await window.api.file.write(libraryPathForWrite, JSON.stringify(validBooks, null, 2))
       }

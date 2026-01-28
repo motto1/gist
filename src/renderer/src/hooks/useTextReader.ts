@@ -42,6 +42,32 @@ const normalizeBooks = (raw: unknown): TextBook[] => {
     .filter((b) => typeof b.id === 'string' && typeof b.title === 'string')
 }
 
+const resolveBookContentPath = async (
+  book: TextBook
+): Promise<{ contentPath: string; folderPath?: string }> => {
+  const exists = async (targetPath: string) => {
+    try {
+      return Boolean(await window.api.file.get(targetPath))
+    } catch {
+      return false
+    }
+  }
+
+  if (book.filePath && (await exists(book.filePath))) {
+    return { contentPath: book.filePath }
+  }
+
+  if (book.folderName) {
+    const folderPath = await getBookFolderPath(book.folderName)
+    const derived = await getBookContentPath(book.folderName)
+    if (await exists(derived)) {
+      return { contentPath: derived, folderPath }
+    }
+  }
+
+  return { contentPath: book.filePath || '' }
+}
+
 export function useTextReader(bookId: string) {
   const navigate = useNavigate()
 
@@ -84,8 +110,8 @@ export function useTextReader(bookId: string) {
           throw new Error('未找到图书')
         }
 
-        // 优先使用书籍元数据中的 filePath；否则根据 folderName 推导 content.txt
-        const contentPath = found.filePath || (found.folderName ? await getBookContentPath(found.folderName) : '')
+        // 优先使用可读的 filePath；若 library.json 里的绝对路径失效（例如盘符变化），回退到 folderName 推导
+        const { contentPath, folderPath } = await resolveBookContentPath(found)
         if (!contentPath) {
           throw new Error('图书路径缺失')
         }
@@ -93,7 +119,7 @@ export function useTextReader(bookId: string) {
         const opened = await window.api.textReader.openBook(contentPath)
         if (!isMounted) return
 
-        setBook({ ...found, filePath: contentPath })
+        setBook({ ...found, filePath: contentPath, folderPath: folderPath ?? found.folderPath })
         setContent(opened.preview || '')
         setIsCacheBuilding(Boolean(opened.isBuilding) || !opened.cache)
 

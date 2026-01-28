@@ -151,30 +151,13 @@ export function getFilesDir() {
 }
 
 /**
- * 获取 TextBooks 目录
- *
- * 约定：
- * - 打包后（setup/portable）：使用用户文档目录，避免把数据写入安装目录（权限/升级/卸载不稳定）
- * - 开发态：保持在项目目录下，便于调试与可见性
+ * 获取 TextBooks 目录（程序目录下）
  */
 export function getTextBooksDir() {
+  // 打包后：与 exe 同目录（setup/portable 都需要读写这里的 TextBooks）
+  // 开发态：electron 的 exe 在 node_modules/electron/dist，不能用它作为“程序目录”
   const baseDir = (() => {
-    if (app.isPackaged) {
-      // 旧版本：与 exe 同目录（例如 E:\\gist\\TextBooks）——会写进安装目录
-      const legacyBaseDir = path.dirname(app.getPath('exe'))
-      const legacyTextBooksDir = path.join(legacyBaseDir, 'TextBooks')
-
-      // 新版本：Documents\\<appName>\\TextBooks（避免写入安装目录）
-      const preferredBaseDir = path.join(app.getPath('documents'), app.getName())
-      const preferredTextBooksDir = path.join(preferredBaseDir, 'TextBooks')
-
-      // 兼容：若旧目录已有数据且新目录未创建，则继续沿用旧目录，避免“书库突然消失”
-      if (fs.existsSync(legacyTextBooksDir) && !fs.existsSync(preferredTextBooksDir)) {
-        return legacyBaseDir
-      }
-
-      return preferredBaseDir
-    }
+    if (app.isPackaged) return path.dirname(app.getPath('exe'))
 
     const hasPackageJson = (dir: string) => fs.existsSync(path.join(dir, 'package.json'))
 
