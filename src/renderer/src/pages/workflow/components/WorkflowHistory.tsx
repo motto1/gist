@@ -1,7 +1,8 @@
 import { Accordion, AccordionItem, Button, Chip } from '@heroui/react'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
-import { completeSession, updateSessionOutputDir, WorkflowSession, WorkflowType } from '@renderer/store/workflow'
-import { BookOpen, ChevronRight, Clock, FileText, FolderOpen, RefreshCw, Users } from 'lucide-react'
+import { modalConfirm } from '@renderer/utils'
+import { clearActiveSession, completeSession, updateSessionOutputDir, WorkflowSession, WorkflowType } from '@renderer/store/workflow'
+import { BookOpen, ChevronRight, Clock, FileText, FolderOpen, RefreshCw, Users, X } from 'lucide-react'
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -122,12 +123,13 @@ interface ActiveSessionRowProps {
   type: WorkflowType
   session: WorkflowSession
   onContinue: () => void
+  onCancel: () => void
 }
 
 /**
  * 进行中的任务行
  */
-const ActiveSessionRow: FC<ActiveSessionRowProps> = ({ type, session, onContinue }) => {
+const ActiveSessionRow: FC<ActiveSessionRowProps> = ({ type, session, onContinue, onCancel }) => {
   const { t } = useTranslation()
   const config = WORKFLOW_CONFIG[type]
   const Icon = config.icon
@@ -162,6 +164,19 @@ const ActiveSessionRow: FC<ActiveSessionRowProps> = ({ type, session, onContinue
         )}
       </div>
 
+      {/* Cancel button */}
+      <Button
+        isIconOnly
+        size="sm"
+        variant="light"
+        color="danger"
+        className="flex-shrink-0"
+        onPress={() => onCancel()}
+        title={t('workflow.processing.cancel', '取消任务')}
+      >
+        <X size={14} />
+      </Button>
+
       {/* Continue button */}
       <Button size="sm" color="warning" variant="flat" className="flex-shrink-0">
         {t('workflow.history.continue', '继续')}
@@ -180,6 +195,40 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
   const navigate = useNavigate()
   const dispatch = useAppDispatch()
   const activeSessions = useAppSelector((state) => state.workflow.activeSessions)
+
+  const handleCancelSession = useCallback(
+    async (type: WorkflowType) => {
+      const ok = await modalConfirm({
+        title: t('workflow.processing.cancel', '取消任务'),
+        content: t(
+          'workflow.processing.cancelConfirm',
+          '取消后将丢弃该任务的所有进度（不会删除已写入磁盘的文件）。确定要取消吗？'
+        ),
+        okType: 'danger',
+        okText: t('common.confirm', '确认'),
+        cancelText: t('common.cancel', '取消')
+      })
+
+      if (!ok) return
+
+      try {
+        if (type === 'speed-read') {
+          window.api.novelCompress.cancel()
+          window.api.novelCompress.resetState()
+        } else if (type === 'outline') {
+          window.api.novelOutline.cancel()
+          window.api.novelOutline.resetState()
+        } else if (type === 'character') {
+          window.api.novelCharacter.cancel()
+          window.api.novelCharacter.resetState()
+        }
+      } finally {
+        dispatch(clearActiveSession(type))
+        window.toast?.success?.(t('workflow.processing.canceled', '已取消任务'))
+      }
+    },
+    [dispatch, t]
+  )
 
   // History is derived from filesystem output, not Redux cache.
   const [fileHistory, setFileHistory] = useState<WorkflowSession[]>([])
@@ -514,6 +563,7 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
                   type={type}
                   session={session}
                   onContinue={() => handleContinueSession(type)}
+                  onCancel={() => void handleCancelSession(type)}
                 />
               ))}
             </div>
