@@ -38,6 +38,7 @@ files:
   - "!stats.html"
   - "!*.md"
   - "!*.txt"
+  - "prompt.txt"
   - "!*_chunks"
   - "!*_character_chunks"
   - "!*_outline"

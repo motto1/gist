@@ -21,9 +21,9 @@
   --color-background-opacity: rgba(34, 34, 34, 0.7);
   --inner-glow-opacity: 0.3; /* For the glassmorphism effect in the dropdown menu */
 
-  --color-primary: #00b96b;
-  --color-primary-soft: #00b96b99;
-  --color-primary-mute: #00b96b33;
+  --color-primary: #ff5470;
+  --color-primary-soft: #ff547099;
+  --color-primary-mute: #ff547033;
 
   --color-text: var(--color-text-1);
   --color-text-secondary: rgba(235, 235, 245, 0.7);
@@ -93,9 +93,9 @@
   --color-background-opacity: rgba(243, 243, 243, 1);
   --inner-glow-opacity: 0.1;
 
-  --color-primary: #00b96b;
-  --color-primary-soft: #00b96b99;
-  --color-primary-mute: #00b96b33;
+  --color-primary: #ff5470;
+  --color-primary-soft: #ff547099;
+  --color-primary-mute: #ff547033;
 
   --color-text: var(--color-text-1);
   --color-text-secondary: rgba(0, 0, 0, 0.75);
