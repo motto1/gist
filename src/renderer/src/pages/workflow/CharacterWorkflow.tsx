@@ -1459,6 +1459,7 @@ const CharacterWorkflow: FC = () => {
               direction="left"
               tooltip={t('workflow.character.stage3.prev', '上一步')}
               onPress={handleBackToSecondaryStep}
+              isDisabled={isTtsGenerating}
             />
             <CircularNavButton
               direction="right"
@@ -1693,7 +1694,7 @@ const CharacterWorkflow: FC = () => {
             />
 
             {/* Controls: Tabs & Character Select */}
-            <div className="flex flex-col items-center gap-4">
+            <div className={`flex flex-col items-center gap-4 ${isTtsGenerating ? 'pointer-events-none opacity-60' : ''}`}>
               {/* Tabs for Source */}
               <div className="p-1.5 bg-content2/30 rounded-2xl border border-white/5 backdrop-blur-sm">
                 <Tabs
@@ -1723,7 +1724,7 @@ const CharacterWorkflow: FC = () => {
                   variant="flat"
                   size="sm"
                   className="w-[200px]"
-                  isDisabled={isCharacterListLoading || characterTxtFiles.length === 0}
+                  isDisabled={isTtsGenerating || isCharacterListLoading || characterTxtFiles.length === 0}
                   popoverProps={{ classNames: { content: 'z-[200]' } }}
                   classNames={{
                     trigger: "bg-transparent shadow-none hover:bg-content2/50 min-h-unit-8 h-8",
@@ -1752,6 +1753,7 @@ const CharacterWorkflow: FC = () => {
                   variant="flat"
                   labelPlacement="outside"
                   placeholder="选择一个语音"
+                  isDisabled={isTtsGenerating}
                   classNames={{
                     trigger: "bg-content2/50 hover:bg-content2/80 transition-colors h-12",
                     value: "text-base"
@@ -1776,6 +1778,7 @@ const CharacterWorkflow: FC = () => {
                     placeholder="+0%"
                     variant="flat"
                     labelPlacement="outside"
+                    isDisabled={isTtsGenerating}
                     classNames={{
                       inputWrapper: "bg-content2/50 hover:bg-content2/80 transition-colors h-12"
                     }}
@@ -1787,6 +1790,7 @@ const CharacterWorkflow: FC = () => {
                     placeholder="+0Hz"
                     variant="flat"
                     labelPlacement="outside"
+                    isDisabled={isTtsGenerating}
                     classNames={{
                       inputWrapper: "bg-content2/50 hover:bg-content2/80 transition-colors h-12"
                     }}
@@ -1800,6 +1804,7 @@ const CharacterWorkflow: FC = () => {
                   placeholder="+0%"
                   variant="flat"
                   labelPlacement="outside"
+                  isDisabled={isTtsGenerating}
                   classNames={{
                     inputWrapper: "bg-content2/50 hover:bg-content2/80 transition-colors h-12"
                   }}
