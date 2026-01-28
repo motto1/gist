@@ -710,7 +710,7 @@ const SpeedReadWorkflow: FC = () => {
         />
 
         {result && (
-          <Card className="w-full max-w-3xl relative group">
+          <Card className="w-full max-w-3xl mx-auto relative group">
             <CardBody className="max-h-96 overflow-y-auto">
               <ChapterFormattedText content={result} />
             </CardBody>

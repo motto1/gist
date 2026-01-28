@@ -728,7 +728,7 @@ const OutlineWorkflow: FC = () => {
           hint={t('workflow.outline.completeHint', '大纲已生成完成')}
         />
 
-        <Card className="w-full max-w-3xl relative group">
+        <Card className="w-full max-w-3xl mx-auto relative group">
           <CardBody className="max-h-96 overflow-y-auto">
             {result ? (
               <TextReaderMarkdown className="markdown">
