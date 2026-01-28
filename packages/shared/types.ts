@@ -484,8 +484,9 @@ export interface TextBook {
   title: string                 // 显示标题
   originalFileName: string      // 原始文件名
   folderName: string           // 文件夹名称（基于书名，处理特殊字符）
-  folderPath: string           // 图书文件夹路径
-  filePath: string             // TXT文件路径
+  folderPath: string           // 图书文件夹路径（可被运行时修复）
+  filePath: string             // TXT文件路径（可被运行时修复）
+  relativeFilePath?: string    // 相对 TextBooks 根目录的路径（推荐使用，支持整体搬迁）
   createdAt: string            // 导入时间 (ISO 8601)
   updatedAt: string            // 最后更新时间
   fileSize: number             // 文件大小 (bytes)

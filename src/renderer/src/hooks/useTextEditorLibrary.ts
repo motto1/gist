@@ -59,10 +59,13 @@ export function useTextEditorLibrary() {
       const parsed = typeof raw === 'string' ? safeJsonParse<unknown>(raw) : null
       const allBooks = normalizeBooks(parsed)
 
-      // 检查文件是否存在；若 library.json 的绝对路径失效（例如盘符变化），尝试用 folderName 自动修复
+      // 检查文件是否存在；同时将 library.json 迁移为“相对路径为主”的格式，支持整体搬迁（如盘符变化）
       const validBooks: TextBook[] = []
       const removedBooks: TextBook[] = []
       let repairedCount = 0
+      let migratedCount = 0
+
+      const normalizeRelative = (p: string) => p.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^\.\//, '')
 
       const exists = async (filePath: string) => {
         try {
@@ -72,18 +75,63 @@ export function useTextEditorLibrary() {
         }
       }
 
+      const resolveAbsoluteFromRelative = async (relativeFilePath: string) => {
+        const textBooksDir = await window.api.textBooks.getTextBooksDir()
+        const normalized = normalizeRelative(relativeFilePath)
+        const parts = normalized.split('/').filter(Boolean)
+        return await window.api.path.join(textBooksDir, ...parts)
+      }
+
       for (const book of allBooks) {
+        // 1) 优先相对路径（可跨设备/跨盘符）
+        if (book.relativeFilePath) {
+          const absolute = await resolveAbsoluteFromRelative(book.relativeFilePath)
+          if (await exists(absolute)) {
+            const folderPath = book.folderName ? await getBookFolderPath(book.folderName) : book.folderPath
+            const next: TextBook = {
+              ...book,
+              folderPath,
+              filePath: absolute,
+              relativeFilePath: normalizeRelative(book.relativeFilePath)
+            }
+            validBooks.push(next)
+            // 相对路径存在但之前绝对路径失效时，视为修复
+            if (book.filePath !== absolute) repairedCount++
+            continue
+          }
+        }
+
+        // 2) 兼容旧数据：如果绝对路径仍可读，保留并补全相对路径
         if (book.filePath && (await exists(book.filePath))) {
-          validBooks.push(book)
+          if (book.folderName) {
+            const relativeFilePath = `${book.folderName}/content.txt`
+            const folderPath = await getBookFolderPath(book.folderName)
+            validBooks.push({
+              ...book,
+              folderPath,
+              relativeFilePath: book.relativeFilePath ? normalizeRelative(book.relativeFilePath) : relativeFilePath
+            })
+            if (!book.relativeFilePath) migratedCount++
+          } else {
+            validBooks.push(book)
+          }
           continue
         }
 
+        // 3) 通过 folderName 推导（当 library.json 中绝对路径失效时）
         if (book.folderName) {
           const folderPath = await getBookFolderPath(book.folderName)
           const derivedContentPath = await getBookContentPath(book.folderName)
           if (await exists(derivedContentPath)) {
-            validBooks.push({ ...book, folderPath, filePath: derivedContentPath })
+            const next: TextBook = {
+              ...book,
+              folderPath,
+              filePath: derivedContentPath,
+              relativeFilePath: book.relativeFilePath ? normalizeRelative(book.relativeFilePath) : `${book.folderName}/content.txt`
+            }
+            validBooks.push(next)
             repairedCount++
+            if (!book.relativeFilePath) migratedCount++
             continue
           }
         }
@@ -91,13 +139,16 @@ export function useTextEditorLibrary() {
         removedBooks.push(book)
       }
 
-      // 如果有书籍被清理或修复，持久化更新后的列表
-      if (removedBooks.length > 0 || repairedCount > 0) {
+      // 如果有书籍被清理/修复/迁移，持久化更新后的列表
+      if (removedBooks.length > 0 || repairedCount > 0 || migratedCount > 0) {
         if (removedBooks.length > 0) {
           console.info(`Auto-cleaned ${removedBooks.length} missing book(s):`, removedBooks.map((b) => b.title))
         }
         if (repairedCount > 0) {
-          console.info(`Auto-repaired ${repairedCount} book path(s) from folderName`)
+          console.info(`Auto-repaired ${repairedCount} book path(s)`)
+        }
+        if (migratedCount > 0) {
+          console.info(`Auto-migrated ${migratedCount} book(s) to relativeFilePath`)
         }
         const libraryPathForWrite = await getLibraryFilePath()
         await window.api.file.write(libraryPathForWrite, JSON.stringify(validBooks, null, 2))
@@ -161,6 +212,7 @@ export function useTextEditorLibrary() {
         folderName,
         folderPath: bookFolder,
         filePath: contentPath,
+        relativeFilePath: `${folderName}/content.txt`,
         createdAt: now,
         updatedAt: now,
         fileSize: bytes,

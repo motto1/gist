@@ -84,6 +84,17 @@ const resolveBookContentPath = async (book: TextBook): Promise<{ filePath: strin
     }
   }
 
+  if (book.relativeFilePath) {
+    const textBooksDir = await window.api.textBooks.getTextBooksDir()
+    const normalized = book.relativeFilePath.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^\.\//, '')
+    const parts = normalized.split('/').filter(Boolean)
+    const absolute = await window.api.path.join(textBooksDir, ...parts)
+    if (await exists(absolute)) {
+      const folderPath = book.folderName ? await getBookFolderPath(book.folderName) : book.folderPath
+      return { filePath: absolute, folderPath }
+    }
+  }
+
   if (book.filePath && (await exists(book.filePath))) {
     return { filePath: book.filePath }
   }
@@ -166,6 +177,7 @@ const NovelPicker: FC<NovelPickerProps> = ({ selectedFile, onFileSelect }) => {
         folderName,
         folderPath: bookFolder,
         filePath: contentPath,
+        relativeFilePath: `${folderName}/content.txt`,
         createdAt: now,
         updatedAt: now,
         fileSize: bytes,
