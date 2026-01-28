@@ -158,6 +158,43 @@ const CharacterWorkflow: FC = () => {
   const [secondaryBioDraft, setSecondaryBioDraft] = useState<string>('')
   const [secondaryMonologueDraft, setSecondaryMonologueDraft] = useState<string>('')
 
+  // 二次总结编辑的“脏状态”：避免切换 Tab/步骤时被磁盘内容覆盖
+  const secondaryDraftKeyRef = useRef<string | null>(null)
+  const secondaryDraftDirtyRef = useRef<{ bio: boolean; monologue: boolean }>({ bio: false, monologue: false })
+
+  const setSecondaryDraft = useCallback((kind: SecondaryKind, value: string) => {
+    if (kind === 'bio') {
+      setSecondaryBioDraft(value)
+      setSecondaryBioText(value.trim() ? value : null)
+      secondaryDraftDirtyRef.current.bio = true
+      return
+    }
+
+    setSecondaryMonologueDraft(value)
+    setSecondaryMonologueText(value.trim() ? value : null)
+    secondaryDraftDirtyRef.current.monologue = true
+  }, [])
+
+  const persistSecondaryDraftToDisk = useCallback(async (kind: SecondaryKind, value: string) => {
+    const filePath = await getSecondaryFilePath(kind)
+    if (!filePath) return
+
+    const dirPath = await window.api.path.dirname(filePath)
+    await window.api.file.mkdir(dirPath)
+    await window.api.file.write(filePath, value)
+
+    const normalized = value.trim() ? value : null
+    if (kind === 'bio') {
+      setSecondaryBioText(normalized)
+      setSecondaryBioDraft(normalized ?? '')
+      secondaryDraftDirtyRef.current.bio = false
+    } else {
+      setSecondaryMonologueText(normalized)
+      setSecondaryMonologueDraft(normalized ?? '')
+      secondaryDraftDirtyRef.current.monologue = false
+    }
+  }, [getSecondaryFilePath])
+
   // 语音生成（第三阶段）
   const [ttsSourceKind, setTtsSourceKind] = useState<'bio' | 'monologue'>('bio')
   const [ttsVoice, setTtsVoice] = useState('zh-CN-XiaoxiaoNeural')
@@ -226,6 +263,10 @@ const CharacterWorkflow: FC = () => {
     setSecondaryKind('bio')
     setSecondaryBioText(null)
     setSecondaryMonologueText(null)
+    setSecondaryBioDraft('')
+    setSecondaryMonologueDraft('')
+    secondaryDraftKeyRef.current = null
+    secondaryDraftDirtyRef.current = { bio: false, monologue: false }
     setIsSecondaryBioLoading(false)
     setIsSecondaryMonologueLoading(false)
     setIsSecondaryBioGenerating(false)
@@ -433,7 +474,7 @@ const CharacterWorkflow: FC = () => {
   // 二次总结/语音阶段：从“人物TXT合集”读取人物列表（文件系统即真相）
   const shouldUseCharacterTxtFolder =
     (step === 'secondary' || step === 'tts' || step === 'done') && !!outputDir
-  const hasSecondaryOutput = !!secondaryBioText || !!secondaryMonologueText
+  const hasSecondaryOutput = Boolean(secondaryBioDraft.trim()) || Boolean(secondaryMonologueDraft.trim())
 
   const secondaryModel = useMemo(() => {
     if (selectedModel) return selectedModel
@@ -500,12 +541,24 @@ const CharacterWorkflow: FC = () => {
   }, [])
 
   const loadSecondaryFromDisk = useCallback(async (kind: SecondaryKind) => {
+    const key = outputDir && selectedCharacterPath ? `${outputDir}::${selectedCharacterPath}` : null
+    if (key && secondaryDraftKeyRef.current !== key) {
+      secondaryDraftKeyRef.current = key
+      secondaryDraftDirtyRef.current = { bio: false, monologue: false }
+    }
+
+    // 若用户正在编辑当前 kind，则不要用磁盘内容覆盖编辑中的草稿
+    if (secondaryDraftDirtyRef.current[kind]) {
+      return
+    }
+
     const filePath = await getSecondaryFilePath(kind)
     if (!filePath) {
       if (kind === 'bio') setSecondaryBioText(null)
       else setSecondaryMonologueText(null)
       if (kind === 'bio') setSecondaryBioDraft('')
       else setSecondaryMonologueDraft('')
+      secondaryDraftDirtyRef.current[kind] = false
       return
     }
 
@@ -519,13 +572,15 @@ const CharacterWorkflow: FC = () => {
       const normalized = content?.trim() ? content : null
       setText(normalized)
       setDraft(normalized ?? '')
+      secondaryDraftDirtyRef.current[kind] = false
     } catch {
       setText(null)
       setDraft('')
+      secondaryDraftDirtyRef.current[kind] = false
     } finally {
       setLoading(false)
     }
-  }, [getSecondaryFilePath])
+  }, [getSecondaryFilePath, outputDir, selectedCharacterPath])
 
   const secondaryAutoLoadKeyRef = useRef<string | null>(null)
 
@@ -535,6 +590,10 @@ const CharacterWorkflow: FC = () => {
     if (!selectedCharacterName || !selectedCharacterPath || !outputDir) {
       setSecondaryBioText(null)
       setSecondaryMonologueText(null)
+      setSecondaryBioDraft('')
+      setSecondaryMonologueDraft('')
+      secondaryDraftKeyRef.current = null
+      secondaryDraftDirtyRef.current = { bio: false, monologue: false }
       setIsSecondaryBioLoading(false)
       setIsSecondaryMonologueLoading(false)
       secondaryAutoLoadKeyRef.current = null
@@ -549,6 +608,9 @@ const CharacterWorkflow: FC = () => {
     if (isCharacterChanged) {
       setSecondaryBioText(null)
       setSecondaryMonologueText(null)
+      setSecondaryBioDraft('')
+      setSecondaryMonologueDraft('')
+      secondaryDraftDirtyRef.current = { bio: false, monologue: false }
     }
 
     // 按需读取：二次总结阶段仅加载当前 Tab；语音阶段需要来源可选，加载两份。
@@ -1083,6 +1145,8 @@ const CharacterWorkflow: FC = () => {
         kind
       })
 
+      // 重新生成属于“覆盖落盘结果”的操作，允许覆盖当前编辑草稿
+      secondaryDraftDirtyRef.current[kind] = false
       await loadSecondaryFromDisk(kind)
       stopStageProgress({ finalPercentage: 100 })
       // 生成完成后留在二次总结阶段；文本展示与编辑由 UI 决定
@@ -1113,11 +1177,19 @@ const CharacterWorkflow: FC = () => {
     t
   ])
 
-  const handleGoToTtsStep = useCallback((opts?: { updateProgress?: boolean }) => {
+  const handleGoToTtsStep = useCallback(async (opts?: { updateProgress?: boolean }) => {
     // 第三阶段不展示内容，只展示参数与来源选择
     ttsGenerationTokenRef.current += 1
     stopStageProgress()
     setIsTtsGenerating(false)
+
+    // 进入第三阶段前，先将用户编辑的草稿写回文件，避免切换步骤/刷新后回退
+    if (secondaryBioDraft.trim()) {
+      await persistSecondaryDraftToDisk('bio', secondaryBioDraft)
+    }
+    if (secondaryMonologueDraft.trim()) {
+      await persistSecondaryDraftToDisk('monologue', secondaryMonologueDraft)
+    }
 
     // 从二次总结页进入第三阶段时，确保 UI 能立即按来源可用性更新
     loadSecondaryFromDisk('bio')
@@ -1133,7 +1205,14 @@ const CharacterWorkflow: FC = () => {
       progress: { percentage: 85, stage: '等待生成语音' },
       status: 'processing'
     }))
-  }, [dispatch, loadSecondaryFromDisk, stopStageProgress])
+  }, [
+    dispatch,
+    loadSecondaryFromDisk,
+    persistSecondaryDraftToDisk,
+    secondaryBioDraft,
+    secondaryMonologueDraft,
+    stopStageProgress
+  ])
 
   const handleBackToSecondaryStep = useCallback(() => {
     ttsGenerationTokenRef.current += 1
@@ -1148,8 +1227,9 @@ const CharacterWorkflow: FC = () => {
     if (isTtsGenerating) return
 
     const kind = ttsSourceKind
-    const sourcePath = await getSecondaryFilePath(kind)
-    if (!sourcePath) {
+    const text = kind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft
+
+    if (!text?.trim()) {
       window.toast?.error?.(t('workflow.character.tts.missingSource', '未找到对应文本，请先生成二次总结'))
       return
     }
@@ -1165,12 +1245,9 @@ const CharacterWorkflow: FC = () => {
     const generationToken = ++ttsGenerationTokenRef.current
 
     try {
-      const text = await window.api.fs.readText(sourcePath)
+      // 生成前先把编辑内容写回落盘文件，确保“音频对应当前编辑内容”且回退不丢失
+      await persistSecondaryDraftToDisk(kind, text)
       if (generationToken !== ttsGenerationTokenRef.current) return
-
-      if (!text?.trim()) {
-        throw new Error('文本为空，无法生成语音')
-      }
 
       const audioDir = await window.api.path.join(outputDir, 'audio')
       if (generationToken !== ttsGenerationTokenRef.current) return
@@ -1372,7 +1449,7 @@ const CharacterWorkflow: FC = () => {
             direction="right"
             tooltip={t('workflow.character.stage2.next', '下一步：生成语音')}
             onPress={() => handleGoToTtsStep({ updateProgress: false })}
-            isDisabled={!secondaryBioText && !secondaryMonologueText}
+            isDisabled={!secondaryBioDraft.trim() && !secondaryMonologueDraft.trim()}
           />
         )}
 
@@ -1390,8 +1467,8 @@ const CharacterWorkflow: FC = () => {
               isDisabled={
                 isTtsGenerating ||
                 (ttsSourceKind === 'bio'
-                  ? (isSecondaryBioLoading || !secondaryBioText)
-                  : (isSecondaryMonologueLoading || !secondaryMonologueText))
+                  ? (isSecondaryBioLoading || !secondaryBioDraft.trim())
+                  : (isSecondaryMonologueLoading || !secondaryMonologueDraft.trim()))
               }
               isLoading={
                 isTtsGenerating ||
@@ -1572,7 +1649,7 @@ const CharacterWorkflow: FC = () => {
                         minRows={6}
                         maxRows={25}
                         value={secondaryKind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft}
-                        onValueChange={secondaryKind === 'bio' ? setSecondaryBioDraft : setSecondaryMonologueDraft}
+                        onValueChange={(v) => setSecondaryDraft(secondaryKind, v)}
                         placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
                         classNames={{
                           base: "w-full h-full",
