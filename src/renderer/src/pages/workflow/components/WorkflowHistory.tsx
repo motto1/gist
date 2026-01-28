@@ -104,8 +104,10 @@ const HistoryRow: FC<HistoryRowProps> = ({ session, onOpenDir, onDelete, onViewR
           size="sm"
           variant="light"
           className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-          onPress={(e) => {
-            e.continuePropagation?.()
+          onClick={(e) => {
+            e.stopPropagation()
+          }}
+          onPress={() => {
             onOpenDir()
           }}
           title={t('workflow.complete.openTaskDir', '打开任务目录')}
@@ -122,8 +124,10 @@ const HistoryRow: FC<HistoryRowProps> = ({ session, onOpenDir, onDelete, onViewR
           variant="light"
           color="danger"
           className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-          onPress={(e) => {
-            e.continuePropagation?.()
+          onClick={(e) => {
+            e.stopPropagation()
+          }}
+          onPress={() => {
             onDelete()
           }}
           title={t('workflow.history.delete', '删除')}
@@ -190,6 +194,9 @@ const ActiveSessionRow: FC<ActiveSessionRowProps> = ({ type, session, onContinue
         variant="light"
         color="danger"
         className="flex-shrink-0"
+        onClick={(e) => {
+          e.stopPropagation()
+        }}
         onPress={() => onCancel()}
         title={t('workflow.processing.cancel', '取消任务')}
       >
@@ -637,8 +644,10 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
                 variant="light"
                 className="ml-auto"
                 isLoading={isReloading || isLoadingHistory}
-                onPress={(e) => {
-                  e.continuePropagation?.()
+                onClick={(e) => {
+                  e.stopPropagation()
+                }}
+                onPress={() => {
                   handleReload()
                 }}
                 title={t('workflow.history.reload', '刷新历史记录')}
