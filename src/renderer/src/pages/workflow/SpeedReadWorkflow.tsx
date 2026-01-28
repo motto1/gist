@@ -9,7 +9,7 @@ import type { Model } from '@shared/types'
 import { ArrowLeft, ArrowRight, FolderOpen, Loader2 } from 'lucide-react'
 import { FC, ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import ChapterFormattedText from './components/ChapterFormattedText'
 import DragBar from './components/DragBar'
@@ -93,6 +93,7 @@ const CircularNavButton: FC<{
 const SpeedReadWorkflow: FC = () => {
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
   // Redux state
@@ -601,10 +602,11 @@ const SpeedReadWorkflow: FC = () => {
       const baseName = selectedFile?.origin_name?.replace(/\.[^.]+$/, '') || historyBookTitle?.replace(/\.[^.]+$/, '') || 'novel'
       const suggested = `${baseName}.speedread.txt`
       await window.api.file.save(suggested, result)
+      navigate('/')
     } catch (error) {
       console.error('Failed to save result:', error)
     }
-  }, [result, selectedFile, historyBookTitle])
+  }, [result, selectedFile, historyBookTitle, navigate])
 
   // Handle cancel processing
   const handleCancel = useCallback(() => {
