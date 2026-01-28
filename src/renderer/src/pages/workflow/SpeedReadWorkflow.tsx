@@ -62,7 +62,7 @@ const GlassContainer: FC<{ children: ReactNode; className?: string }> = ({ child
 
 const CircularNavButton: FC<{
   direction: 'left' | 'right'
-  onPress: () => void
+  onPress: () => void | Promise<void>
   isDisabled?: boolean
   isLoading?: boolean
   tooltip: string

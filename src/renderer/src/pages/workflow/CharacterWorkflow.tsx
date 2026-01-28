@@ -70,7 +70,7 @@ const GlassContainer: FC<{ children: ReactNode; className?: string }> = ({ child
 
 const CircularNavButton: FC<{
   direction: 'left' | 'right'
-  onPress: () => void
+  onPress: () => void | Promise<void>
   isDisabled?: boolean
   isLoading?: boolean
   tooltip: string
@@ -174,26 +174,6 @@ const CharacterWorkflow: FC = () => {
     setSecondaryMonologueText(value.trim() ? value : null)
     secondaryDraftDirtyRef.current.monologue = true
   }, [])
-
-  const persistSecondaryDraftToDisk = useCallback(async (kind: SecondaryKind, value: string) => {
-    const filePath = await getSecondaryFilePath(kind)
-    if (!filePath) return
-
-    const dirPath = await window.api.path.dirname(filePath)
-    await window.api.file.mkdir(dirPath)
-    await window.api.file.write(filePath, value)
-
-    const normalized = value.trim() ? value : null
-    if (kind === 'bio') {
-      setSecondaryBioText(normalized)
-      setSecondaryBioDraft(normalized ?? '')
-      secondaryDraftDirtyRef.current.bio = false
-    } else {
-      setSecondaryMonologueText(normalized)
-      setSecondaryMonologueDraft(normalized ?? '')
-      secondaryDraftDirtyRef.current.monologue = false
-    }
-  }, [getSecondaryFilePath])
 
   // 语音生成（第三阶段）
   const [ttsSourceKind, setTtsSourceKind] = useState<'bio' | 'monologue'>('bio')
@@ -494,6 +474,26 @@ const CharacterWorkflow: FC = () => {
     const safeStem = sanitizeSecondaryFileStem(selectedCharacterName)
     return await window.api.path.join(outputDir, '二次总结', kindDirName, `${safeStem}.txt`)
   }, [outputDir, sanitizeSecondaryFileStem, selectedCharacterName])
+
+  const persistSecondaryDraftToDisk = useCallback(async (kind: SecondaryKind, value: string) => {
+    const filePath = await getSecondaryFilePath(kind)
+    if (!filePath) return
+
+    const dirPath = await window.api.path.dirname(filePath)
+    await window.api.file.mkdir(dirPath)
+    await window.api.file.write(filePath, value)
+
+    const normalized = value.trim() ? value : null
+    if (kind === 'bio') {
+      setSecondaryBioText(normalized)
+      setSecondaryBioDraft(normalized ?? '')
+      secondaryDraftDirtyRef.current.bio = false
+    } else {
+      setSecondaryMonologueText(normalized)
+      setSecondaryMonologueDraft(normalized ?? '')
+      secondaryDraftDirtyRef.current.monologue = false
+    }
+  }, [getSecondaryFilePath])
 
   const findAnyAudioFile = useCallback(async (): Promise<string | null> => {
     if (!outputDir) return null
