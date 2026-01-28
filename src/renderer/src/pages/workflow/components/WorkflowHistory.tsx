@@ -2,7 +2,7 @@ import { Accordion, AccordionItem, Button, Chip } from '@heroui/react'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { modalConfirm } from '@renderer/utils'
 import { clearActiveSession, completeSession, updateSessionOutputDir, WorkflowSession, WorkflowType } from '@renderer/store/workflow'
-import { BookOpen, ChevronRight, Clock, FileText, FolderOpen, RefreshCw, Users, X } from 'lucide-react'
+import { BookOpen, ChevronRight, Clock, FileText, FolderOpen, RefreshCw, Trash2, Users, X } from 'lucide-react'
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -31,13 +31,14 @@ const formatDate = (iso: string) => {
 interface HistoryRowProps {
   session: WorkflowSession
   onOpenDir?: () => void
+  onDelete?: () => void
   onViewResult?: () => void
 }
 
 /**
  * 单行历史记录项 - 紧凑的一行布局
  */
-const HistoryRow: FC<HistoryRowProps> = ({ session, onOpenDir, onViewResult }) => {
+const HistoryRow: FC<HistoryRowProps> = ({ session, onOpenDir, onDelete, onViewResult }) => {
   const { t } = useTranslation()
   const config = WORKFLOW_CONFIG[session.type]
   const Icon = config.icon
@@ -110,6 +111,24 @@ const HistoryRow: FC<HistoryRowProps> = ({ session, onOpenDir, onViewResult }) =
           title={t('workflow.complete.openTaskDir', '打开任务目录')}
         >
           <FolderOpen size={14} />
+        </Button>
+      )}
+
+      {/* Delete button */}
+      {session.outputDir && onDelete && (
+        <Button
+          isIconOnly
+          size="sm"
+          variant="light"
+          color="danger"
+          className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+          onPress={(e) => {
+            e.continuePropagation?.()
+            onDelete()
+          }}
+          title={t('workflow.history.delete', '删除')}
+        >
+          <Trash2 size={14} />
         </Button>
       )}
 
@@ -497,6 +516,35 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
     window.api.file.openPath(outputDir)
   }, [])
 
+  const handleDeleteHistoryDir = useCallback(
+    async (outputDir: string) => {
+      const ok = await modalConfirm({
+        title: t('workflow.history.delete', '删除'),
+        content: t(
+          'workflow.history.deleteConfirm',
+          '将永久删除该任务的目录及其全部文件，且无法恢复。确定要删除吗？'
+        ),
+        okType: 'danger',
+        okText: t('common.delete', '删除'),
+        cancelText: t('common.cancel', '取消')
+      })
+
+      if (!ok) return
+
+      try {
+        setIsReloading(true)
+        await window.api.file.deleteExternalDir(outputDir)
+        window.toast?.success?.(t('workflow.history.deleted', '已删除'))
+      } catch (error) {
+        console.error('Failed to delete workflow dir:', error)
+        window.toast?.error?.(t('workflow.history.deleteFailed', '删除失败'))
+      } finally {
+        setReloadSeq((v) => v + 1)
+      }
+    },
+    [t]
+  )
+
   // Reload history from filesystem
   const handleReload = useCallback(() => {
     setIsReloading(true)
@@ -616,6 +664,7 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
                   key={session.id}
                   session={session}
                   onOpenDir={session.outputDir ? () => handleOpenDir(session.outputDir!) : undefined}
+                  onDelete={session.outputDir ? () => void handleDeleteHistoryDir(session.outputDir!) : undefined}
                   onViewResult={() => handleViewResult(session)}
                 />
               ))}
