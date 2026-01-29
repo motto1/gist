@@ -832,6 +832,16 @@ const CharacterWorkflow: FC = () => {
       return
     }
 
+    // 已进入“收尾→切页”的过渡窗口时，不要重新启动伪进度
+    if (extractCompleteTimeoutRef.current) {
+      return
+    }
+
+    // 已启动过计时/进度动画时，不要因主进程频繁推送进度而重置
+    if (extractPseudoTimerRef.current || extractElapsedTimerRef.current || extractDotsTimerRef.current) {
+      return
+    }
+
     // 初始化计时
     extractStartMsRef.current = Date.now()
     setExtractElapsedSeconds(0)
@@ -839,32 +849,26 @@ const CharacterWorkflow: FC = () => {
     // 伪进度：从 0 平滑爬升到 92%，完成时再跳到 100%
     let pct = 0
     setExtractPseudoPercentage(pct)
-    if (!extractPseudoTimerRef.current) {
-      extractPseudoTimerRef.current = window.setInterval(() => {
-        pct = Math.min(92, pct + Math.max(1, Math.round(Math.random() * 6)))
-        setExtractPseudoPercentage(pct)
-      }, 450)
-    }
+    extractPseudoTimerRef.current = window.setInterval(() => {
+      pct = Math.min(92, pct + Math.max(1, Math.round(Math.random() * 6)))
+      setExtractPseudoPercentage(pct)
+    }, 450)
 
     // 计时器
-    if (!extractElapsedTimerRef.current) {
-      extractElapsedTimerRef.current = window.setInterval(() => {
-        const start = extractStartMsRef.current
-        if (!start) return
-        setExtractElapsedSeconds(Math.floor((Date.now() - start) / 1000))
-      }, 1000)
-    }
+    extractElapsedTimerRef.current = window.setInterval(() => {
+      const start = extractStartMsRef.current
+      if (!start) return
+      setExtractElapsedSeconds(Math.floor((Date.now() - start) / 1000))
+    }, 1000)
 
     // dots: 1,2,3,2,1,2 循环
     const pattern = [1, 2, 3, 2, 1, 2]
     let idx = 0
     setExtractDotCount(pattern[idx])
-    if (!extractDotsTimerRef.current) {
-      extractDotsTimerRef.current = window.setInterval(() => {
-        idx = (idx + 1) % pattern.length
-        setExtractDotCount(pattern[idx])
-      }, 360)
-    }
+    extractDotsTimerRef.current = window.setInterval(() => {
+      idx = (idx + 1) % pattern.length
+      setExtractDotCount(pattern[idx])
+    }, 360)
 
     return () => {
       stopAll()

@@ -1,4 +1,4 @@
-import { Button, Card, CardBody, Tooltip } from '@heroui/react'
+import { Button, Card, CardBody, Progress, Tooltip } from '@heroui/react'
 import {
   getActualProvider,
   providerToAiSdkConfig
@@ -18,7 +18,6 @@ import DragBar from './components/DragBar'
 import FullscreenResultViewer from './components/FullscreenResultViewer'
 import ModelSelector from './components/ModelSelector'
 import NovelPicker, { SelectedFile } from './components/NovelPicker'
-import ProgressDisplay from './components/ProgressDisplay'
 import WorkflowStepMotion from './components/WorkflowStepMotion'
 
 type WorkflowStep = 'config' | 'processing' | 'complete'
@@ -116,6 +115,16 @@ const OutlineWorkflow: FC = () => {
   const [isRestoring, setIsRestoring] = useState(true)
   const [historyBookTitle, setHistoryBookTitle] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)  // 防重复提交
+
+  // processing 阶段：伪进度 + 计时 + dots 动画
+  const [processPseudoPercentage, setProcessPseudoPercentage] = useState(0)
+  const [processElapsedSeconds, setProcessElapsedSeconds] = useState(0)
+  const [processDotCount, setProcessDotCount] = useState(1)
+  const processStartMsRef = useRef(0)
+  const processPseudoTimerRef = useRef<number | null>(null)
+  const processElapsedTimerRef = useRef<number | null>(null)
+  const processDotsTimerRef = useRef<number | null>(null)
+  const processCompleteTimeoutRef = useRef<number | null>(null)
 
   const [stepDirection, setStepDirection] = useState<-1 | 0 | 1>(0)
   const prevStepRef = useRef<WorkflowStep>('config')
@@ -574,11 +583,32 @@ const OutlineWorkflow: FC = () => {
 
         // 转换步骤 - 使用主进程返回的实际 outputPath
         if (currentStep === 'processing') {
-          console.log('[OutlineWorkflow] Transitioning to complete step')
-          setStep('complete')
-          // 优先使用主进程返回的实际任务目录路径（带时间戳/哈希）
-          const actualOutputDir = mainProcessState.outputPath || currentOutputDir
-          dispatch(completeSession({ type: 'outline', outputDir: actualOutputDir || undefined }))
+          // 让 processing 阶段的伪进度条自然收尾：先跳到 100%，短暂停留后再切换页面。
+          if (!processCompleteTimeoutRef.current) {
+            if (processPseudoTimerRef.current) {
+              window.clearInterval(processPseudoTimerRef.current)
+              processPseudoTimerRef.current = null
+            }
+            if (processElapsedTimerRef.current) {
+              window.clearInterval(processElapsedTimerRef.current)
+              processElapsedTimerRef.current = null
+            }
+            if (processDotsTimerRef.current) {
+              window.clearInterval(processDotsTimerRef.current)
+              processDotsTimerRef.current = null
+            }
+
+            setProcessPseudoPercentage(100)
+
+            console.log('[OutlineWorkflow] Transitioning to complete step')
+            processCompleteTimeoutRef.current = window.setTimeout(() => {
+              processCompleteTimeoutRef.current = null
+              setStep('complete')
+              // 优先使用主进程返回的实际任务目录路径（带时间戳/哈希）
+              const actualOutputDir = mainProcessState.outputPath || currentOutputDir
+              dispatch(completeSession({ type: 'outline', outputDir: actualOutputDir || undefined }))
+            }, 260)
+          }
         }
       }
     }
@@ -614,7 +644,90 @@ const OutlineWorkflow: FC = () => {
     }
   }, [handleStart])
 
-  // Return to home (no longer saves)
+  const formatElapsed = (totalSeconds: number) => {
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  }
+
+  useEffect(() => {
+    const stopAll = (opts?: { reset?: boolean }) => {
+      if (processPseudoTimerRef.current) {
+        window.clearInterval(processPseudoTimerRef.current)
+        processPseudoTimerRef.current = null
+      }
+      if (processElapsedTimerRef.current) {
+        window.clearInterval(processElapsedTimerRef.current)
+        processElapsedTimerRef.current = null
+      }
+      if (processDotsTimerRef.current) {
+        window.clearInterval(processDotsTimerRef.current)
+        processDotsTimerRef.current = null
+      }
+      if (processCompleteTimeoutRef.current) {
+        window.clearTimeout(processCompleteTimeoutRef.current)
+        processCompleteTimeoutRef.current = null
+      }
+
+      if (opts?.reset) {
+        setProcessPseudoPercentage(0)
+        setProcessElapsedSeconds(0)
+        setProcessDotCount(1)
+        processStartMsRef.current = 0
+      }
+    }
+
+    if (step !== 'processing') {
+      stopAll({ reset: true })
+      return
+    }
+
+    // 失败时保持当前 UI（不再继续增长），等待自动重试或用户取消
+    if (progress.stage === 'failed') {
+      stopAll()
+      return
+    }
+
+    // 已进入“收尾→切页”的过渡窗口时，不要重新启动伪进度
+    if (processCompleteTimeoutRef.current) {
+      return
+    }
+
+    // 已启动过计时/进度动画时，不要因主进程频繁推送进度而重置
+    if (processPseudoTimerRef.current || processElapsedTimerRef.current || processDotsTimerRef.current) {
+      return
+    }
+
+    processStartMsRef.current = Date.now()
+    setProcessElapsedSeconds(0)
+
+    let pct = 0
+    setProcessPseudoPercentage(pct)
+    processPseudoTimerRef.current = window.setInterval(() => {
+      pct = Math.min(92, pct + Math.max(1, Math.round(Math.random() * 6)))
+      setProcessPseudoPercentage(pct)
+    }, 450)
+
+    processElapsedTimerRef.current = window.setInterval(() => {
+      const start = processStartMsRef.current
+      if (!start) return
+      setProcessElapsedSeconds(Math.floor((Date.now() - start) / 1000))
+    }, 1000)
+
+    const pattern = [1, 2, 3, 2, 1, 2]
+    let idx = 0
+    setProcessDotCount(pattern[idx])
+    processDotsTimerRef.current = window.setInterval(() => {
+      idx = (idx + 1) % pattern.length
+      setProcessDotCount(pattern[idx])
+    }, 360)
+
+    return () => {
+      stopAll()
+    }
+  }, [progress.stage, step])
+
+  // Return to home
   const handleReturnHome = useCallback(() => {
     navigate('/')
   }, [navigate])
@@ -690,12 +803,27 @@ const OutlineWorkflow: FC = () => {
         )}
 
         <div className="w-full max-w-2xl mx-auto bg-content1/50 rounded-3xl p-8 border border-white/5 backdrop-blur-sm">
-          <ProgressDisplay
-            percentage={progress.percentage}
-            stage={progress.stage}
-            current={progress.current}
-            total={progress.total}
-          />
+          <div className="w-full max-w-lg mx-auto">
+            <div className="mb-6">
+              <Progress
+                aria-label="Processing progress"
+                value={processPseudoPercentage}
+                color="primary"
+                size="lg"
+                className="w-full"
+                showValueLabel
+              />
+            </div>
+
+            <div className="text-center space-y-1">
+              <p className="text-lg font-medium text-foreground">
+                {`The girl is praying${'.'.repeat(processDotCount)}`}
+              </p>
+              <p className="text-sm text-foreground/50">
+                {t('workflow.elapsed', '已用时 {{time}}', { time: formatElapsed(processElapsedSeconds) })}
+              </p>
+            </div>
+          </div>
 
           {progress.stage !== 'failed' && (
             <div className="mt-8 flex items-center justify-center gap-4">
