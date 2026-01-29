@@ -1,4 +1,4 @@
-import { Button, Card, CardBody, Chip, Input, Select, SelectItem, Switch, Tab, Tabs, Textarea, Tooltip } from '@heroui/react'
+import { Button, Card, CardBody, Chip, Input, Progress, Select, SelectItem, Switch, Tab, Tabs, Textarea, Tooltip } from '@heroui/react'
 import {
   getActualProvider,
   providerToAiSdkConfig
@@ -151,8 +151,18 @@ const CharacterWorkflow: FC = () => {
   const [isSecondaryBioGenerating, setIsSecondaryBioGenerating] = useState(false)
   const [isSecondaryMonologueGenerating, setIsSecondaryMonologueGenerating] = useState(false)
 
-  // 阶段内进度条（用于二次总结/语音生成，提取阶段仍使用 progress）
+  // 阶段内进度条（用于二次总结/语音生成）
   const [stageProgress, setStageProgress] = useState<ProcessingState | null>(null)
+
+  // 提取阶段：伪进度 + 计时 + dots 动画
+  const [extractPseudoPercentage, setExtractPseudoPercentage] = useState(0)
+  const [extractElapsedSeconds, setExtractElapsedSeconds] = useState(0)
+  const [extractDotCount, setExtractDotCount] = useState(1)
+  const extractStartMsRef = useRef(0)
+  const extractPseudoTimerRef = useRef<number | null>(null)
+  const extractElapsedTimerRef = useRef<number | null>(null)
+  const extractDotsTimerRef = useRef<number | null>(null)
+  const extractCompleteTimeoutRef = useRef<number | null>(null)
 
   // 二次总结可编辑草稿（来自落盘文件；保存时写回文件）
   const [secondaryBioDraft, setSecondaryBioDraft] = useState<string>('')
@@ -778,6 +788,89 @@ const CharacterWorkflow: FC = () => {
     }
   }, [])
 
+  const formatElapsed = (totalSeconds: number) => {
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  }
+
+  useEffect(() => {
+    const stopAll = (opts?: { reset?: boolean }) => {
+      if (extractPseudoTimerRef.current) {
+        window.clearInterval(extractPseudoTimerRef.current)
+        extractPseudoTimerRef.current = null
+      }
+      if (extractElapsedTimerRef.current) {
+        window.clearInterval(extractElapsedTimerRef.current)
+        extractElapsedTimerRef.current = null
+      }
+      if (extractDotsTimerRef.current) {
+        window.clearInterval(extractDotsTimerRef.current)
+        extractDotsTimerRef.current = null
+      }
+      if (extractCompleteTimeoutRef.current) {
+        window.clearTimeout(extractCompleteTimeoutRef.current)
+        extractCompleteTimeoutRef.current = null
+      }
+
+      if (opts?.reset) {
+        setExtractPseudoPercentage(0)
+        setExtractElapsedSeconds(0)
+        setExtractDotCount(1)
+        extractStartMsRef.current = 0
+      }
+    }
+
+    if (step !== 'extracting') {
+      stopAll({ reset: true })
+      return
+    }
+
+    // 失败时保持当前 UI（不再继续增长），等待自动重试或用户取消
+    if (progress.stage === 'failed') {
+      stopAll()
+      return
+    }
+
+    // 初始化计时
+    extractStartMsRef.current = Date.now()
+    setExtractElapsedSeconds(0)
+
+    // 伪进度：从 0 平滑爬升到 92%，完成时再跳到 100%
+    let pct = 0
+    setExtractPseudoPercentage(pct)
+    if (!extractPseudoTimerRef.current) {
+      extractPseudoTimerRef.current = window.setInterval(() => {
+        pct = Math.min(92, pct + Math.max(1, Math.round(Math.random() * 6)))
+        setExtractPseudoPercentage(pct)
+      }, 450)
+    }
+
+    // 计时器
+    if (!extractElapsedTimerRef.current) {
+      extractElapsedTimerRef.current = window.setInterval(() => {
+        const start = extractStartMsRef.current
+        if (!start) return
+        setExtractElapsedSeconds(Math.floor((Date.now() - start) / 1000))
+      }, 1000)
+    }
+
+    // dots: 1,2,3,2,1,2 循环
+    const pattern = [1, 2, 3, 2, 1, 2]
+    let idx = 0
+    setExtractDotCount(pattern[idx])
+    if (!extractDotsTimerRef.current) {
+      extractDotsTimerRef.current = window.setInterval(() => {
+        idx = (idx + 1) % pattern.length
+        setExtractDotCount(pattern[idx])
+      }, 360)
+    }
+
+    return () => {
+      stopAll()
+    }
+  }, [progress.stage, step])
+
   // Handle start processing
   const handleStart = useCallback(async () => {
     if (!canStart || !selectedModel || !selectedFile || isStarting) return
@@ -1063,14 +1156,35 @@ const CharacterWorkflow: FC = () => {
 
         // 转换步骤：人物提取完成后直接进入二次总结阶段（不显示“提取完成”）
         if (currentStep === 'extracting') {
-          console.log('[CharacterWorkflow] Transitioning to secondary step')
-          setStepDirection(1)
-          setStep('secondary')
-          dispatch(updateSessionProgress({
-            type: 'character',
-            progress: { percentage: 60, stage: '等待二次总结' },
-            status: 'processing'
-          }))
+          // 让提取阶段的伪进度条自然收尾：先跳到 100%，短暂停留后再切换页面。
+          if (!extractCompleteTimeoutRef.current) {
+            if (extractPseudoTimerRef.current) {
+              window.clearInterval(extractPseudoTimerRef.current)
+              extractPseudoTimerRef.current = null
+            }
+            if (extractElapsedTimerRef.current) {
+              window.clearInterval(extractElapsedTimerRef.current)
+              extractElapsedTimerRef.current = null
+            }
+            if (extractDotsTimerRef.current) {
+              window.clearInterval(extractDotsTimerRef.current)
+              extractDotsTimerRef.current = null
+            }
+
+            setExtractPseudoPercentage(100)
+
+            console.log('[CharacterWorkflow] Transitioning to secondary step')
+            extractCompleteTimeoutRef.current = window.setTimeout(() => {
+              extractCompleteTimeoutRef.current = null
+              setStepDirection(1)
+              setStep('secondary')
+              dispatch(updateSessionProgress({
+                type: 'character',
+                progress: { percentage: 60, stage: '等待二次总结' },
+                status: 'processing'
+              }))
+            }, 260)
+          }
         }
       }
     }
@@ -1399,12 +1513,27 @@ const CharacterWorkflow: FC = () => {
           )}
 
           <div className="w-full bg-content1/50 rounded-3xl p-8 border border-white/5 backdrop-blur-sm">
-            <ProgressDisplay
-              percentage={progress.percentage}
-              stage={progress.stage}
-              current={progress.current}
-              total={progress.total}
-            />
+            <div className="w-full max-w-lg mx-auto">
+              <div className="mb-6">
+                <Progress
+                  aria-label="Extracting progress"
+                  value={extractPseudoPercentage}
+                  color="primary"
+                  size="lg"
+                  className="w-full"
+                  showValueLabel
+                />
+              </div>
+
+              <div className="text-center space-y-1">
+                <p className="text-lg font-medium text-foreground">
+                  {`The girl is praying${'.'.repeat(extractDotCount)}`}
+                </p>
+                <p className="text-sm text-foreground/50">
+                  {t('workflow.elapsed', '已用时 {{time}}', { time: formatElapsed(extractElapsedSeconds) })}
+                </p>
+              </div>
+            </div>
 
             {progress.stage !== 'failed' && (
               <div className="mt-8 flex items-center justify-center gap-4">
