@@ -80,7 +80,7 @@ const CircularNavButton: FC<{
       className={`absolute ${direction === 'left' ? 'left-10' : 'right-10'} top-1/2 -translate-y-1/2 h-16 w-16 z-50 ${
         color === 'light'
           ? 'text-foreground/50 hover:text-foreground hover:bg-content2/50'
-          : 'shadow-xl bg-foreground text-background hover:bg-foreground/90'
+          : 'shadow-xl'
       } transition-all hover:scale-105`}
       onPress={onPress}
       isDisabled={isDisabled}
