@@ -694,7 +694,7 @@ const SpeedReadWorkflow: FC = () => {
       setProcessElapsedSeconds(Math.floor((Date.now() - start) / 1000))
     }, 1000)
 
-    const pattern = [1, 2, 3, 2, 1, 2]
+    const pattern = [1, 2, 3, 2, 1]
     let idx = 0
     setProcessDotCount(pattern[idx])
     processDotsTimerRef.current = window.setInterval(() => {
@@ -798,7 +798,7 @@ const SpeedReadWorkflow: FC = () => {
 
             <div className="text-center space-y-1">
               <p className="text-lg font-medium text-foreground">
-                {`The girl is praying${'.'.repeat(processDotCount)}`}
+                {`少女祈祷中${'.'.repeat(processDotCount)}`}
               </p>
               <p className="text-sm text-foreground/50">
                 {t('workflow.elapsed', '已用时 {{time}}', { time: formatElapsed(processElapsedSeconds) })}
