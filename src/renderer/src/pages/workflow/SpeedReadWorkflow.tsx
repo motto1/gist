@@ -594,19 +594,10 @@ const SpeedReadWorkflow: FC = () => {
     }
   }, [handleStart])
 
-  // Handle save result
-  const handleSaveResult = useCallback(async () => {
-    if (!result) return
-
-    try {
-      const baseName = selectedFile?.origin_name?.replace(/\.[^.]+$/, '') || historyBookTitle?.replace(/\.[^.]+$/, '') || 'novel'
-      const suggested = `${baseName}.speedread.txt`
-      await window.api.file.save(suggested, result)
-      navigate('/')
-    } catch (error) {
-      console.error('Failed to save result:', error)
-    }
-  }, [result, selectedFile, historyBookTitle, navigate])
+  // Return to home (no longer saves)
+  const handleReturnHome = useCallback(() => {
+    navigate('/')
+  }, [navigate])
 
   // Handle cancel processing
   const handleCancel = useCallback(() => {
@@ -734,8 +725,8 @@ const SpeedReadWorkflow: FC = () => {
           >
             {t('workflow.complete.openTaskDir', '打开任务目录')}
           </Button>
-          <Button color="primary" onPress={handleSaveResult} className="h-12 px-6">
-            {t('workflow.complete.saveResult', '保存结果')}
+          <Button color="primary" onPress={handleReturnHome} className="h-12 px-6">
+            {t('workflow.complete.backHome', '返回主页')}
           </Button>
         </div>
       </WorkflowLayout>
