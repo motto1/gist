@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "updatedAt": "2026-01-31T17:41:27.706Z",
+  "conversations": [
+    {
+      "id": "6f003f9b-6ee8-4827-a651-fbdce5f93c48",
+      "spaceId": "3ab4af29-5989-4d39-8e42-4139ded4afe3",
+      "title": "已完成。现在通过 APP_EDITION=basic|pro 打包时写入版本，运行期读配置并隐藏入口...",
+      "createdAt": "2026-01-31T17:38:23.455Z",
+      "updatedAt": "2026-01-31T17:41:27.704Z",
+      "messageCount": 6,
+      "preview": "API Error: 400 {\"type\":\"error\",\"error\":{\"type\":\"in..."
+    }
+  ]
+}

@@ -769,6 +769,37 @@ class FileStorage {
   }
 
   /**
+   * 在文件夹中显示目标文件（Windows/macOS 会高亮该文件）。
+   * 若传入的是目录，则直接打开目录。
+   */
+  public showItemInFolder = async (_: Electron.IpcMainInvokeEvent, targetPath: string): Promise<void> => {
+    try {
+      if (!targetPath || typeof targetPath !== 'string') return
+
+      const resolved = path.resolve(targetPath)
+      if (fs.existsSync(resolved)) {
+        const stats = fs.statSync(resolved)
+        if (stats.isDirectory()) {
+          await shell.openPath(resolved)
+          return
+        }
+        shell.showItemInFolder(resolved)
+        return
+      }
+
+      // 文件不存在时，尽量打开其所在目录，避免“打开文件失败”。
+      const dir = path.dirname(resolved)
+      if (fs.existsSync(dir)) {
+        await shell.openPath(dir)
+        return
+      }
+      await shell.openPath(resolved)
+    } catch (err) {
+      logger.error('[IPC - Error] Failed to show item in folder:', err as Error)
+    }
+  }
+
+  /**
    * 通过相对路径打开文件，跨设备时使用
    * @param _
    * @param file

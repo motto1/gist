@@ -11,10 +11,17 @@ export interface WorkflowSession {
   bookId: string
   bookTitle: string
   bookPath: string
+  /** 原始输入文本字数（以 JS string.length 计）。用于前端估算“首次总结”耗时与进度。 */
+  inputCharCount?: number
   modelId?: string
   modelName?: string
   outputDir?: string
   resultFilePath?: string  // 精确的结果文件路径，用于历史记录读取
+  /**
+   * 人物志语音相关：用于历史记录显示“生成音频的人物”（单人：姓名；多人：xxx等）。
+   * 该字段由磁盘 audio 文件名推导，避免引入额外耦合/存储。
+   */
+  ttsCharacterLabel?: string
   startedAt: string
   completedAt?: string
   progress?: {
@@ -51,6 +58,17 @@ const workflowSlice = createSlice({
     // Start or update a workflow session
     setActiveSession: (state, action: PayloadAction<{ type: WorkflowType; session: WorkflowSession }>) => {
       state.activeSessions[action.payload.type] = action.payload.session
+    },
+
+    // Patch meta fields on active session (keep id/type stable)
+    updateSessionMeta: (state, action: PayloadAction<{ type: WorkflowType; patch: Partial<WorkflowSession> }>) => {
+      const session = state.activeSessions[action.payload.type]
+      if (!session) return
+
+      const sessionId = session.id
+      Object.assign(session, action.payload.patch)
+      session.id = sessionId
+      session.type = action.payload.type
     },
 
     // Update session progress
@@ -134,6 +152,7 @@ const workflowSlice = createSlice({
 
 export const {
   setActiveSession,
+  updateSessionMeta,
   updateSessionProgress,
   updateSessionOutputDir,
   completeSession,

@@ -4640,6 +4640,9 @@
     "show_window": "显示窗口",
     "visualization": "可视化"
   },
+  "tts": {
+    "title": "语音生成"
+  },
   "workflow": {
     "character": {
       "result": {
@@ -4650,8 +4653,8 @@
         "monologue": "二次总结：独白"
       },
       "stage3": {
-        "actions": "操作",
-        "actionsHint": "在此选择后可继续生成二次总结或语音",
+        "actions": "声音设置",
+        "actionsHint": "",
         "prev": "上一步"
       }
     },

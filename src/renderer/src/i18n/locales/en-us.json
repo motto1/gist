@@ -4640,6 +4640,9 @@
     "show_window": "Show Window",
     "visualization": "Visualization"
   },
+  "tts": {
+    "title": "Speech"
+  },
   "workflow": {
     "character": {
       "result": {

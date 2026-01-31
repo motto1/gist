@@ -39,6 +39,7 @@ files:
   - "!*.md"
   - "!*.txt"
   - "prompt.txt"
+  - "tts/**"
   - "!*_chunks"
   - "!*_character_chunks"
   - "!*_outline"
@@ -98,6 +99,7 @@ files:
   - "!**/*.{h,iobj,ipdb,tlog,recipe,vcxproj,vcxproj.filters,Makefile,*.Makefile}" # filter .node build files
 asarUnpack:
   - resources/**
+  - tts/**
   - "**/*.{metal,exp,lib}"
   - "node_modules/@img/sharp-libvips-*/**"
 win:

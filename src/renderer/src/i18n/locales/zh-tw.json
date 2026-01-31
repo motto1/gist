@@ -4640,6 +4640,9 @@
     "show_window": "顯示視窗",
     "visualization": "視覺化"
   },
+  "tts": {
+    "title": "語音生成"
+  },
   "workflow": {
     "character": {
       "result": {

@@ -1,3 +1,6 @@
+const fs = require('fs')
+const path = require('path')
+
 const { Arch } = require('electron-builder')
 const { downloadNpmPackage } = require('./utils')
 
@@ -42,6 +45,15 @@ const platformToArch = {
 }
 
 exports.default = async function (context) {
+  const rawEdition = process.env.APP_EDITION || 'pro'
+  const normalizedEdition = rawEdition.toLowerCase()
+  const edition = normalizedEdition === 'basic' ? 'basic' : 'pro'
+  const editionFilePath = path.join(__dirname, '..', 'resources', 'data', 'edition.json')
+
+  fs.mkdirSync(path.dirname(editionFilePath), { recursive: true })
+  fs.writeFileSync(editionFilePath, JSON.stringify({ edition }, null, 2), 'utf-8')
+  console.log(`[before-pack] edition=${edition}`)
+
   const arch = context.arch
   const archType = arch === Arch.arm64 ? 'arm64' : 'x64'
   const platform = context.packager.platform.name

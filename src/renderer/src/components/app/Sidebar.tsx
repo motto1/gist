@@ -1,6 +1,7 @@
 ﻿import EmojiAvatar from '@renderer/components/Avatar/EmojiAvatar'
 import CustomCollapse from '@renderer/components/CustomCollapse'
 import { isMac } from '@renderer/config/constant'
+import { isBasicEdition } from '@renderer/config/edition'
 import { UserAvatar } from '@renderer/config/env'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import useAvatar from '@renderer/hooks/useAvatar'
@@ -23,6 +24,7 @@ import {
   Languages,
   LayoutGrid,
   MessageSquare,
+  Mic,
   Monitor,
   Moon,
   NotepadText,
@@ -32,7 +34,8 @@ import {
   Settings,
   Sparkle,
   Sun,
-  Users} from 'lucide-react'
+  Users
+} from 'lucide-react'
 import { FC } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -147,13 +150,14 @@ const MainMenus: FC = () => {
   const { hideMinappPopup } = useMinappPopup()
   const { pathname } = useLocation()
   const { defaultPaintingProvider } = useSettings()
-  const { minappShow } = useRuntime()
+  const { minappShow, edition } = useRuntime()
   const navigate = useNavigate()
   const { theme } = useTheme()
+  const isBasic = isBasicEdition(edition)
 
   const isRoute = (path: string): string => (pathname === path && !minappShow ? 'active' : '')
   const isRoutes = (path: string): string => (pathname.startsWith(path) && !minappShow ? 'active' : '')
-  
+
   const isTextEditorActive = (): string => {
     if (minappShow) return ''
     if (
@@ -191,6 +195,7 @@ const MainMenus: FC = () => {
     novel_compress: <Scissors size={18} className="icon" />,
     novel_character: <Users size={18} className="icon" />,
     novel_outline: <BookOpen size={18} className="icon" />,
+    tts: <Mic size={18} className="icon" />,
     notes: <NotepadText size={18} className="icon" />,
     text_editor: <PenTool size={18} className="icon" />
   }
@@ -208,6 +213,7 @@ const MainMenus: FC = () => {
     novel_compress: '/compress',
     novel_character: '/novel-character',
     novel_outline: '/novel-outline',
+    tts: '/workflow/tts',
     notes: '/notes',
     text_editor: '/text-editor'
   }
@@ -220,76 +226,78 @@ const MainMenus: FC = () => {
 
   const textEditorFlyout = <TextEditorFlyout onNavigate={navigateTo} />
 
-  return ['launcher', 'text_editor'].map((icon) => {
-    const path = pathMap[icon]
-    let isActive: string
-    if (icon === 'text_editor') {
-      isActive = isTextEditorActive()
-    } else {
-      isActive = path === '/' ? isRoute(path) : isRoutes(path)
-    }
+  return ['launcher', 'tts', 'text_editor']
+    .filter((icon) => !(isBasic && icon === 'tts'))
+    .map((icon) => {
+      const path = pathMap[icon]
+      let isActive: string
+      if (icon === 'text_editor') {
+        isActive = isTextEditorActive()
+      } else {
+        isActive = path === '/' ? isRoute(path) : isRoutes(path)
+      }
 
-    const link = (
-      <StyledLink
-        onClick={async () => {
-          if (icon === 'text_editor') {
-            // 如果当前已在阅读页面，不做任何操作
-            if (pathname.startsWith('/text-reader')) {
-              return
-            }
+      const link = (
+        <StyledLink
+          onClick={async () => {
+            if (icon === 'text_editor') {
+              // 如果当前已在阅读页面，不做任何操作
+              if (pathname.startsWith('/text-reader')) {
+                return
+              }
 
-            const lastView = localStorage.getItem(LAST_TEXT_EDITOR_VIEW_KEY)
-            if (lastView === TEXT_EDITOR_VIEWS.library) {
-              await navigateTo('/text-editor')
-              return
-            }
+              const lastView = localStorage.getItem(LAST_TEXT_EDITOR_VIEW_KEY)
+              if (lastView === TEXT_EDITOR_VIEWS.library) {
+                await navigateTo('/text-editor')
+                return
+              }
 
-            if (lastView === TEXT_EDITOR_VIEWS.reader) {
+              if (lastView === TEXT_EDITOR_VIEWS.reader) {
+                const lastBookId = localStorage.getItem(LAST_READER_BOOK_KEY)
+                if (lastBookId) {
+                  await navigateTo(`/text-reader/${lastBookId}`)
+                  return
+                }
+                await navigateTo('/text-editor')
+                return
+              }
+
+              // 兼容旧逻辑：没有记录时，优先继续阅读
               const lastBookId = localStorage.getItem(LAST_READER_BOOK_KEY)
               if (lastBookId) {
                 await navigateTo(`/text-reader/${lastBookId}`)
                 return
               }
-              await navigateTo('/text-editor')
-              return
             }
-
-            // 兼容旧逻辑：没有记录时，优先继续阅读
-            const lastBookId = localStorage.getItem(LAST_READER_BOOK_KEY)
-            if (lastBookId) {
-              await navigateTo(`/text-reader/${lastBookId}`)
-              return
-            }
-          }
-          await navigateTo(path)
-        }}>
-        <Icon theme={theme} className={isActive}>
-          {iconMap[icon]}
-        </Icon>
-      </StyledLink>
-    )
-
-    if (icon === 'text_editor') {
-      return (
-        <Popover
-          key={icon}
-          placement="rightTop"
-          trigger="hover"
-          mouseEnterDelay={0.8}
-          mouseLeaveDelay={0.15}
-          content={textEditorFlyout}
-          overlayInnerStyle={{ padding: 0, background: 'transparent', boxShadow: 'none' }}>
-          {link}
-        </Popover>
+            await navigateTo(path)
+          }}>
+          <Icon theme={theme} className={isActive}>
+            {iconMap[icon]}
+          </Icon>
+        </StyledLink>
       )
-    }
 
-    return (
-      <Tooltip key={icon} title={getSidebarIconLabel(icon)} mouseEnterDelay={0.8} placement="right">
-        {link}
-      </Tooltip>
-    )
-  })
+      if (icon === 'text_editor') {
+        return (
+          <Popover
+            key={icon}
+            placement="rightTop"
+            trigger="hover"
+            mouseEnterDelay={0.8}
+            mouseLeaveDelay={0.15}
+            content={textEditorFlyout}
+            overlayInnerStyle={{ padding: 0, background: 'transparent', boxShadow: 'none' }}>
+            {link}
+          </Popover>
+        )
+      }
+
+      return (
+        <Tooltip key={icon} title={getSidebarIconLabel(icon)} mouseEnterDelay={0.8} placement="right">
+          {link}
+        </Tooltip>
+      )
+    })
 }
 
 type TextEditorFlyoutProps = {
@@ -298,6 +306,8 @@ type TextEditorFlyoutProps = {
 
 const TextEditorFlyout: FC<TextEditorFlyoutProps> = ({ onNavigate }) => {
   const { t } = useTranslation()
+  const { edition } = useRuntime()
+  const showAdvanced = !isBasicEdition(edition)
   return (
     <FlyoutContainer onClick={(e) => e.stopPropagation()}>
       <FlyoutSection>
@@ -308,30 +318,32 @@ const TextEditorFlyout: FC<TextEditorFlyoutProps> = ({ onNavigate }) => {
         </FlyoutItem>
       </FlyoutSection>
 
-      <CustomCollapse
-        label={<span>{t('textEditor.advanced', '高级入口')}</span>}
-        extra={<span />}
-        defaultActiveKey={[]}
-        style={{ borderRadius: 10, border: '0.5px solid var(--color-border)', overflow: 'hidden' }}
-        styles={{
-          header: { padding: '6px 12px', background: 'var(--color-background-soft)' },
-          body: { padding: 8, background: 'var(--color-background)' }
-        }}>
-        <FlyoutList>
-          <FlyoutItem onClick={() => void onNavigate('/compress')}>
-            <Scissors size={16} />
-            <span>{getSidebarIconLabel('novel_compress')}</span>
-          </FlyoutItem>
-          <FlyoutItem onClick={() => void onNavigate('/novel-character')}>
-            <Users size={16} />
-            <span>{getSidebarIconLabel('novel_character')}</span>
-          </FlyoutItem>
-          <FlyoutItem onClick={() => void onNavigate('/novel-outline')}>
-            <BookOpen size={16} />
-            <span>{getSidebarIconLabel('novel_outline')}</span>
-          </FlyoutItem>
-        </FlyoutList>
-      </CustomCollapse>
+      {showAdvanced && (
+        <CustomCollapse
+          label={<span>{t('textEditor.advanced', '高级入口')}</span>}
+          extra={<span />}
+          defaultActiveKey={[]}
+          style={{ borderRadius: 10, border: '0.5px solid var(--color-border)', overflow: 'hidden' }}
+          styles={{
+            header: { padding: '6px 12px', background: 'var(--color-background-soft)' },
+            body: { padding: 8, background: 'var(--color-background)' }
+          }}>
+          <FlyoutList>
+            <FlyoutItem onClick={() => void onNavigate('/compress')}>
+              <Scissors size={16} />
+              <span>{getSidebarIconLabel('novel_compress')}</span>
+            </FlyoutItem>
+            <FlyoutItem onClick={() => void onNavigate('/novel-character')}>
+              <Users size={16} />
+              <span>{getSidebarIconLabel('novel_character')}</span>
+            </FlyoutItem>
+            <FlyoutItem onClick={() => void onNavigate('/novel-outline')}>
+              <BookOpen size={16} />
+              <span>{getSidebarIconLabel('novel_outline')}</span>
+            </FlyoutItem>
+          </FlyoutList>
+        </CustomCollapse>
+      )}
     </FlyoutContainer>
   )
 }

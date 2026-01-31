@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
+import { DEFAULT_EDITION, type AppEdition } from '@renderer/config/edition'
 import { AppLogo, UserAvatar } from '@renderer/config/env'
 import type { MinAppType, Topic, WebSearchStatus } from '@renderer/types'
 import type { UpdateInfo } from 'builder-util-runtime'
@@ -28,6 +29,7 @@ export interface UpdateState {
 
 export interface RuntimeState {
   avatar: string
+  edition: AppEdition
   generating: boolean
   translating: boolean
   translateAbortKey?: string
@@ -54,6 +56,7 @@ export interface ExportState {
 
 const initialState: RuntimeState = {
   avatar: UserAvatar,
+  edition: DEFAULT_EDITION,
   generating: false,
   translating: false,
   minappShow: false,
@@ -92,6 +95,9 @@ const runtimeSlice = createSlice({
   reducers: {
     setAvatar: (state, action: PayloadAction<string | null>) => {
       state.avatar = action.payload || AppLogo
+    },
+    setEdition: (state, action: PayloadAction<AppEdition>) => {
+      state.edition = action.payload
     },
     setGenerating: (state, action: PayloadAction<boolean>) => {
       state.generating = action.payload
@@ -164,6 +170,7 @@ const runtimeSlice = createSlice({
 
 export const {
   setAvatar,
+  setEdition,
   setGenerating,
   setTranslating,
   setTranslateAbortKey,

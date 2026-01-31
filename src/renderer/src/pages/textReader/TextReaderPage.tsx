@@ -6,9 +6,20 @@
 
 import { Button, Spinner, Tooltip } from '@heroui/react'
 import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
+import { isBasicEdition } from '@renderer/config/edition'
 import { useTextReader } from '@renderer/hooks/useTextReader'
+import { useRuntime } from '@renderer/hooks/useRuntime'
 import { ArrowLeft } from 'lucide-react'
-import { FC, type KeyboardEventHandler, type PointerEventHandler, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  FC,
+  type KeyboardEventHandler,
+  type PointerEventHandler,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router-dom'
 
@@ -19,6 +30,8 @@ import ReaderContent, { type ReaderContentRef } from './components/ReaderContent
 const TextReaderPage: FC = () => {
   const { bookId } = useParams<{ bookId: string }>()
   const { t } = useTranslation()
+  const { edition } = useRuntime()
+  const showToolsPanel = !isBasicEdition(edition)
 
   // 工具面板折叠状态
   const [toolsPanelCollapsed, setToolsPanelCollapsed] = useState(true)
@@ -174,13 +187,10 @@ const TextReaderPage: FC = () => {
     [finishResize]
   )
 
-  const handleResizePointerCancel = useCallback<PointerEventHandler<HTMLDivElement>>(
-    () => {
-      if (!resizeStateRef.current) return
-      finishResize()
-    },
-    [finishResize]
-  )
+  const handleResizePointerCancel = useCallback<PointerEventHandler<HTMLDivElement>>(() => {
+    if (!resizeStateRef.current) return
+    finishResize()
+  }, [finishResize])
 
   const handleResizeDoubleClick = useCallback(() => {
     if (toolsPanelCollapsed) return
@@ -219,8 +229,8 @@ const TextReaderPage: FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col h-screen w-full max-w-screen overflow-hidden bg-[var(--color-background)]">
-        <div className="flex justify-center items-center h-full">
+      <div className="flex h-screen w-full max-w-screen flex-col overflow-hidden bg-[var(--color-background)]">
+        <div className="flex h-full items-center justify-center">
           <Spinner size="lg" />
         </div>
       </div>
@@ -229,8 +239,8 @@ const TextReaderPage: FC = () => {
 
   if (error) {
     return (
-      <div className="flex flex-col h-screen w-full max-w-screen overflow-hidden bg-[var(--color-background)]">
-        <div className="flex flex-col justify-center items-center h-full">
+      <div className="flex h-screen w-full max-w-screen flex-col overflow-hidden bg-[var(--color-background)]">
+        <div className="flex h-full flex-col items-center justify-center">
           <span className="text-danger">{error}</span>
           <Button color="primary" onPress={goBack} className="mt-4">
             {t('textReader.backToList', '返回列表')}
@@ -241,34 +251,25 @@ const TextReaderPage: FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen w-full max-w-screen overflow-hidden bg-[var(--color-background)]">
+    <div className="flex h-screen w-full max-w-screen flex-col overflow-hidden bg-[var(--color-background)]">
       <Navbar>
         <NavbarCenter style={{ borderRight: 'none', padding: '0 16px' }}>
-          <div className="flex items-center w-full [&_button]:[-webkit-app-region:no-drag]">
-            <Button
-              variant="light"
-              isIconOnly
-              onPress={goBack}
-              className="mr-2"
-            >
+          <div className="flex w-full items-center [&_button]:[-webkit-app-region:no-drag]">
+            <Button variant="light" isIconOnly onPress={goBack} className="mr-2">
               <ArrowLeft size={18} />
             </Button>
             <Tooltip content={book?.title}>
-              <span className="text-base font-medium overflow-hidden text-ellipsis whitespace-nowrap max-w-[400px]">
+              <span className="max-w-[400px] overflow-hidden text-ellipsis whitespace-nowrap font-medium text-base">
                 {book?.title || t('textReader.untitled', '未命名')}
               </span>
             </Tooltip>
-            {isCacheBuilding && (
-              <span className="text-xs text-[var(--color-text-3)] ml-2">
-                正在构建目录…
-              </span>
-            )}
+            {isCacheBuilding && <span className="ml-2 text-[var(--color-text-3)] text-xs">正在构建目录…</span>}
             <div className="flex-1" />
           </div>
         </NavbarCenter>
       </Navbar>
 
-      <div ref={mainContentRef} data-main-content className="flex flex-1 overflow-hidden min-w-0 relative">
+      <div ref={mainContentRef} data-main-content className="relative flex min-w-0 flex-1 overflow-hidden">
         <ChapterSidebar
           chapters={chapters}
           currentChapterId={currentChapter?.id || null}
@@ -282,9 +283,9 @@ const TextReaderPage: FC = () => {
           chapters={chapters}
           onChapterVisible={(chapter) => setCurrentChapter(chapter as any)}
         />
-        {!toolsPanelCollapsed && (
+        {showToolsPanel && !toolsPanelCollapsed && (
           <div
-            className="group w-[14px] flex-shrink-0 cursor-col-resize relative bg-transparent touch-none z-10 pointer-events-auto select-none [-webkit-app-region:no-drag] hover:bg-[color-mix(in_srgb,var(--color-primary)_6%,transparent)] focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--color-primary)_55%,transparent)] focus-visible:outline-offset-[-2px]"
+            className="group pointer-events-auto relative z-10 w-[14px] flex-shrink-0 cursor-col-resize touch-none select-none bg-transparent [-webkit-app-region:no-drag] hover:bg-[color-mix(in_srgb,var(--color-primary)_6%,transparent)] focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--color-primary)_55%,transparent)] focus-visible:outline-offset-[-2px]"
             title="拖拽调整比例"
             role="separator"
             aria-orientation="vertical"
@@ -295,26 +296,27 @@ const TextReaderPage: FC = () => {
             onPointerUp={handleResizePointerUp}
             onPointerCancel={handleResizePointerCancel}
             onDoubleClick={handleResizeDoubleClick}
-            onKeyDown={handleResizeKeyDown}
-          >
-            <div className="absolute left-1/2 top-0 bottom-0 w-[2px] -translate-x-1/2 bg-[var(--color-border)] opacity-60 group-hover:opacity-100 group-hover:bg-[var(--color-primary)]" />
+            onKeyDown={handleResizeKeyDown}>
+            <div className="-translate-x-1/2 absolute top-0 bottom-0 left-1/2 w-[2px] bg-[var(--color-border)] opacity-60 group-hover:bg-[var(--color-primary)] group-hover:opacity-100" />
             <div
-              className="absolute left-1/2 top-1/2 w-[6px] h-[24px] -translate-x-1/2 -translate-y-1/2 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100"
+              className="-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute top-1/2 left-1/2 h-[24px] w-[6px] rounded-lg opacity-0 group-hover:opacity-100"
               style={{
                 background: 'radial-gradient(circle, rgba(0, 0, 0, 0.28) 1.1px, transparent 1.2px) center/6px 6px'
               }}
             />
           </div>
         )}
-        <NovelToolsPanel
-          book={book}
-          content={content}
-          chapters={chapters}
-          onChapterClick={focusChapterById}
-          collapsed={toolsPanelCollapsed}
-          onCollapsedChange={setToolsPanelCollapsed}
-          width={toolsPanelWidth}
-        />
+        {showToolsPanel && (
+          <NovelToolsPanel
+            book={book}
+            content={content}
+            chapters={chapters}
+            onChapterClick={focusChapterById}
+            collapsed={toolsPanelCollapsed}
+            onCollapsedChange={setToolsPanelCollapsed}
+            width={toolsPanelWidth}
+          />
+        )}
       </div>
     </div>
   )

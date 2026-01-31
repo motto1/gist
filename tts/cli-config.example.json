@@ -1,0 +1,8 @@
+{
+  "region": "eastasia",
+  "voice": "zh-CN-XiaoxiaoNeural",
+  "style": "cheerful",
+  "rate": "+0",
+  "pitch": "0",
+  "align_model_dir": "sherpa-onnx-streaming-zipformer-small-ctc-zh-2025-04-01"
+}

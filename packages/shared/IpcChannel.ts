@@ -146,6 +146,7 @@ export enum IpcChannel {
   //file
   File_Open = 'file:open',
   File_OpenPath = 'file:openPath',
+  File_ShowItemInFolder = 'file:showItemInFolder',
   File_Save = 'file:save',
   File_Select = 'file:select',
   File_Upload = 'file:upload',
@@ -407,4 +408,9 @@ export enum IpcChannel {
 
   // Edge TTS
   EdgeTTS_Generate = 'edge-tts:generate',
+  EdgeTTS_ListVoices = 'edge-tts:list-voices',
+  // Advanced TTS (tts.exe)
+  AdvancedTTS_Generate = 'advanced-tts:generate',
+  AdvancedTTS_ListVoices = 'advanced-tts:list-voices',
+  AdvancedTTS_GetVoiceStyles = 'advanced-tts:voice-styles',
 }

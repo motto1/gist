@@ -173,6 +173,7 @@ const api = {
     writeWithId: (id: string, content: string) => ipcRenderer.invoke(IpcChannel.File_WriteWithId, id, content),
     open: (options?: OpenDialogOptions) => ipcRenderer.invoke(IpcChannel.File_Open, options),
     openPath: (path: string) => ipcRenderer.invoke(IpcChannel.File_OpenPath, path),
+    showItemInFolder: (filePath: string) => ipcRenderer.invoke(IpcChannel.File_ShowItemInFolder, filePath),
     save: (path: string, content: string | NodeJS.ArrayBufferView, options?: any) =>
       ipcRenderer.invoke(IpcChannel.File_Save, path, content, options),
     selectFolder: (options?: OpenDialogOptions) => ipcRenderer.invoke(IpcChannel.File_SelectFolder, options),
@@ -615,6 +616,7 @@ const api = {
     }
   },
   edgeTTS: {
+    listVoices: () => ipcRenderer.invoke(IpcChannel.EdgeTTS_ListVoices),
     generate: (options: {
       text: string
       voice: string
@@ -624,6 +626,21 @@ const api = {
       outputDir?: string
       filename?: string
     }) => ipcRenderer.invoke(IpcChannel.EdgeTTS_Generate, options)
+  },
+  advancedTTS: {
+    generate: (options: {
+      text?: string
+      textFilePath?: string
+      voice: string
+      style?: string
+      rate?: string
+      pitch?: string
+      region?: string
+      outputDir?: string
+      filename?: string
+    }) => ipcRenderer.invoke(IpcChannel.AdvancedTTS_Generate, options),
+    listVoices: () => ipcRenderer.invoke(IpcChannel.AdvancedTTS_ListVoices),
+    getVoiceStyles: (voice: string) => ipcRenderer.invoke(IpcChannel.AdvancedTTS_GetVoiceStyles, voice)
   }
 }
 

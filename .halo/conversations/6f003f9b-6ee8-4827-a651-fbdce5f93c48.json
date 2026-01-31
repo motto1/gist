@@ -1,0 +1,137 @@
+{
+  "id": "6f003f9b-6ee8-4827-a651-fbdce5f93c48",
+  "spaceId": "3ab4af29-5989-4d39-8e42-4139ded4afe3",
+  "title": "已完成。现在通过 APP_EDITION=basic|pro 打包时写入版本，运行期读配置并隐藏入口...",
+  "createdAt": "2026-01-31T17:38:23.455Z",
+  "updatedAt": "2026-01-31T17:41:27.704Z",
+  "messageCount": 6,
+  "messages": [
+    {
+      "role": "user",
+      "content": "已完成。现在通过 APP_EDITION=basic|pro 打包时写入版本，运行期读配置并隐藏入口/禁用高级 TTS，满足“基础版不显示受限入口、仍保留路由”的要求。\n改动要点（具体代码位置）  \n- 打包期写入 edition：scripts/before-pack.js  \n  - 写 resources/data/edition.json，默认 pro  \n- 默认配置文件：resources/data/edition.json  \n- 运行期读取并注入：src/renderer/src/hooks/useAppInit.ts  \n- 运行期状态：src/renderer/src/store/runtime.ts + src/renderer/src/config/edition.ts  \n- 入口隐藏：  \n  - 侧边栏隐藏 TTS + 高级入口：src/renderer/src/components/app/Sidebar.tsx  \n  - 书籍右侧工具栏隐藏：src/renderer/src/pages/textReader/TextReaderPage.tsx  \n- 高级 TTS 禁用/隐藏：  \n  - 独立语音页：src/renderer/src/pages/workflow/TTSGenerator.tsx  \n  - 人物志语音页：src/renderer/src/pages/workflow/CharacterWorkflow.tsx  \n打包时指定版本  \n- 基础版：APP_EDITION=basic  \n- 高级版：APP_EDITION=pro  \n你下一步可以做  \n1. 我补充：基础版在进入受限路由时给出轻提示并跳回首页（仍保留路由但更安全）  \n2. 我补充：把 edition 同时注入主进程，用于后续服务侧限制（如果你后面要加）\n\n\n审阅修改是否完成。",
+      "id": "cb557091-a935-4266-ae74-b1275503a041",
+      "timestamp": "2026-01-31T17:39:06.887Z"
+    },
+    {
+      "role": "assistant",
+      "content": "API Error: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid endpoint URL: https://motto.2116666.xyz/2api\\n\\nPlease provide a complete endpoint URL ending with:\\n  - /chat/completions  (e.g., https://api.openai.com/v1/chat/completions)\\n  - /responses         (e.g., https://api.openai.com/v1/responses)\"}}",
+      "toolCalls": [],
+      "id": "baeef4d1-cc92-40ae-8d35-0e60a656b35b",
+      "timestamp": "2026-01-31T17:39:06.904Z",
+      "thoughts": [
+        {
+          "id": "thought-1769881154391-1t1al5fg4",
+          "type": "system",
+          "content": "Connected | Model: gpt-5.2-codex",
+          "timestamp": "2026-01-31T17:39:14.391Z"
+        },
+        {
+          "id": "thought-1769881154513-btf83d7lq",
+          "type": "text",
+          "content": "API Error: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid endpoint URL: https://motto.2116666.xyz/2api\\n\\nPlease provide a complete endpoint URL ending with:\\n  - /chat/completions  (e.g., https://api.openai.com/v1/chat/completions)\\n  - /responses         (e.g., https://api.openai.com/v1/responses)\"}}",
+          "timestamp": "2026-01-31T17:39:14.513Z"
+        },
+        {
+          "id": "thought-1769881154513-3u4hjxdz0",
+          "type": "result",
+          "content": "API Error: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid endpoint URL: https://motto.2116666.xyz/2api\\n\\nPlease provide a complete endpoint URL ending with:\\n  - /chat/completions  (e.g., https://api.openai.com/v1/chat/completions)\\n  - /responses         (e.g., https://api.openai.com/v1/responses)\"}}",
+          "timestamp": "2026-01-31T17:39:14.513Z",
+          "duration": 237
+        }
+      ],
+      "tokenUsage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "totalCostUsd": 0,
+        "contextWindow": 200000
+      }
+    },
+    {
+      "role": "user",
+      "content": "继续",
+      "id": "94b5fb66-4738-4417-934a-79c560e51d03",
+      "timestamp": "2026-01-31T17:40:37.020Z"
+    },
+    {
+      "role": "assistant",
+      "content": "API Error: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid endpoint URL: http://192.168.101.113:8317\\n\\nPlease provide a complete endpoint URL ending with:\\n  - /chat/completions  (e.g., https://api.openai.com/v1/chat/completions)\\n  - /responses         (e.g., https://api.openai.com/v1/responses)\"}}",
+      "toolCalls": [],
+      "id": "ec1f5397-9d5d-43a8-b108-d535ca1342b2",
+      "timestamp": "2026-01-31T17:40:37.036Z",
+      "thoughts": [
+        {
+          "id": "thought-1769881246635-5xz5gq4j5",
+          "type": "system",
+          "content": "Connected | Model: gpt-5.2-codex",
+          "timestamp": "2026-01-31T17:40:46.635Z"
+        },
+        {
+          "id": "thought-1769881246796-iijhnb3py",
+          "type": "text",
+          "content": "API Error: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid endpoint URL: http://192.168.101.113:8317\\n\\nPlease provide a complete endpoint URL ending with:\\n  - /chat/completions  (e.g., https://api.openai.com/v1/chat/completions)\\n  - /responses         (e.g., https://api.openai.com/v1/responses)\"}}",
+          "timestamp": "2026-01-31T17:40:46.796Z"
+        },
+        {
+          "id": "thought-1769881246797-2scbm9tqs",
+          "type": "result",
+          "content": "API Error: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid endpoint URL: http://192.168.101.113:8317\\n\\nPlease provide a complete endpoint URL ending with:\\n  - /chat/completions  (e.g., https://api.openai.com/v1/chat/completions)\\n  - /responses         (e.g., https://api.openai.com/v1/responses)\"}}",
+          "timestamp": "2026-01-31T17:40:46.797Z",
+          "duration": 296
+        }
+      ],
+      "tokenUsage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "totalCostUsd": 0,
+        "contextWindow": 200000
+      }
+    },
+    {
+      "role": "user",
+      "content": "继续",
+      "id": "96f1f703-32a0-4a66-90ae-eee81e22ad84",
+      "timestamp": "2026-01-31T17:41:15.396Z"
+    },
+    {
+      "role": "assistant",
+      "content": "API Error: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid endpoint URL: http://192.168.101.113:8317/v1\\n\\nPlease provide a complete endpoint URL ending with:\\n  - /chat/completions  (e.g., https://api.openai.com/v1/chat/completions)\\n  - /responses         (e.g., https://api.openai.com/v1/responses)\"}}",
+      "toolCalls": [],
+      "id": "cf74c9be-4c62-4378-9475-fe8802eda921",
+      "timestamp": "2026-01-31T17:41:15.412Z",
+      "thoughts": [
+        {
+          "id": "thought-1769881287508-p6nfqkrqc",
+          "type": "system",
+          "content": "Connected | Model: gpt-5.2-codex",
+          "timestamp": "2026-01-31T17:41:27.508Z"
+        },
+        {
+          "id": "thought-1769881287697-3764v75se",
+          "type": "text",
+          "content": "API Error: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid endpoint URL: http://192.168.101.113:8317/v1\\n\\nPlease provide a complete endpoint URL ending with:\\n  - /chat/completions  (e.g., https://api.openai.com/v1/chat/completions)\\n  - /responses         (e.g., https://api.openai.com/v1/responses)\"}}",
+          "timestamp": "2026-01-31T17:41:27.697Z"
+        },
+        {
+          "id": "thought-1769881287698-16s0nz87y",
+          "type": "result",
+          "content": "API Error: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid endpoint URL: http://192.168.101.113:8317/v1\\n\\nPlease provide a complete endpoint URL ending with:\\n  - /chat/completions  (e.g., https://api.openai.com/v1/chat/completions)\\n  - /responses         (e.g., https://api.openai.com/v1/responses)\"}}",
+          "timestamp": "2026-01-31T17:41:27.698Z",
+          "duration": 352
+        }
+      ],
+      "tokenUsage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cacheReadTokens": 0,
+        "cacheCreationTokens": 0,
+        "totalCostUsd": 0,
+        "contextWindow": 200000
+      }
+    }
+  ],
+  "sessionId": "4bd24492-eed4-42aa-8c0e-6e409627a8de"
+}

@@ -79,10 +79,20 @@ const HistoryRow: FC<HistoryRowProps> = ({ session, onOpenDir, onDelete, onViewR
         {workflowLabel}
       </Chip>
 
-      {/* Book title */}
-      <span className="flex-1 text-sm truncate text-foreground/80" title={session.bookTitle}>
-        {session.bookTitle}
-      </span>
+      {/* Book title + character label (character workflow only) */}
+      <div className="flex-1 min-w-0 flex items-center gap-2" title={session.bookTitle}>
+        <span className="text-sm truncate text-foreground/80">{session.bookTitle}</span>
+        {session.type === 'character' && session.ttsCharacterLabel ? (
+          <Chip
+            size="sm"
+            variant="flat"
+            className="flex-shrink-0 max-w-[120px] truncate"
+            title={session.ttsCharacterLabel}
+          >
+            {session.ttsCharacterLabel}
+          </Chip>
+        ) : null}
+      </div>
 
       {/* Time */}
       <span className="flex items-center gap-1 text-xs text-foreground/40 flex-shrink-0">
@@ -204,7 +214,16 @@ const ActiveSessionRow: FC<ActiveSessionRowProps> = ({ type, session, onContinue
       </Button>
 
       {/* Continue button */}
-      <Button size="sm" color="warning" variant="flat" className="flex-shrink-0">
+      <Button
+        size="sm"
+        color="warning"
+        variant="flat"
+        className="flex-shrink-0"
+        onClick={(e) => {
+          e.stopPropagation()
+        }}
+        onPress={onContinue}
+      >
         {t('workflow.history.continue', '继续')}
       </Button>
     </div>
@@ -291,6 +310,33 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
           }
         }
 
+        const getCharacterTtsLabelFromAudioEntries = (audioEntries: FsEntry[] | null): string | undefined => {
+          if (!audioEntries || audioEntries.length === 0) return undefined
+
+          const files = audioEntries
+            .filter((e) => {
+              const name = e.name?.toLowerCase()
+              return e.isFile && (name?.endsWith('.mp3') || name?.endsWith('.wav'))
+            })
+            .sort((a, b) => b.mtimeMs - a.mtimeMs)
+
+          const stems: string[] = []
+          const seen = new Set<string>()
+
+          for (const f of files) {
+            const raw = (f.name || '').replace(/\.(mp3|wav)$/i, '')
+            const stem = raw.replace(/_(bio|monologue)$/i, '').trim()
+            if (!stem) continue
+            if (seen.has(stem)) continue
+            seen.add(stem)
+            stems.push(stem)
+          }
+
+          if (stems.length === 0) return undefined
+          if (stems.length === 1) return stems[0]
+          return `${stems[0]}等`
+        }
+
         const pickLatestResultsFile = async (dirPath: string, priorities: string[]): Promise<string | null> => {
           const entries = await tryReadDir(dirPath)
           if (!entries) return null
@@ -352,15 +398,19 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
               .sort((a, b) => b.mtimeMs - a.mtimeMs)
 
             for (const dir of candidates) {
-              // 新流程以 mp3 落盘为完成标志：没有 audio/*.mp3 的任务不进入“已完成”历史列表
+              // 新流程以音频落盘为完成标志：没有 audio/*.mp3|*.wav 的任务不进入“已完成”历史列表
               const audioDir = await window.api.path.join(dir.path, 'audio')
               const audioEntries = await tryReadDir(audioDir)
-              const hasMp3 = !!audioEntries?.some((e) => e.isFile && e.name?.toLowerCase().endsWith('.mp3'))
-              if (!hasMp3) continue
+              const hasAudio = !!audioEntries?.some((e) => {
+                const name = e.name?.toLowerCase()
+                return e.isFile && (name?.endsWith('.mp3') || name?.endsWith('.wav'))
+              })
+              if (!hasAudio) continue
 
               const finalResultsDir = await window.api.path.join(dir.path, '最终结果')
               const resultFile = await pickLatestResultsFile(finalResultsDir, ['latest.md', 'latest.txt', 'latest.json'])
               if (!resultFile) continue
+              const ttsCharacterLabel = getCharacterTtsLabelFromAudioEntries(audioEntries)
               results.push({
                 id: dir.path,
                 type: 'character',
@@ -370,6 +420,7 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
                 bookPath,
                 outputDir: dir.path,
                 resultFilePath: resultFile,
+                ttsCharacterLabel,
                 startedAt: new Date(dir.mtimeMs).toISOString(),
                 completedAt: new Date(dir.mtimeMs).toISOString(),
                 _mtimeMs: dir.mtimeMs
@@ -445,11 +496,14 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
         return looksLikeFile ? await window.api.path.dirname(maybePath) : maybePath
       }
 
-      const hasAnyMp3 = async (taskDir: string): Promise<boolean> => {
+      const hasAnyAudio = async (taskDir: string): Promise<boolean> => {
         try {
           const audioDir = await window.api.path.join(taskDir, 'audio')
           const entries = (await window.api.fs.readdir(audioDir)) as Array<{ name?: string; isFile?: boolean }>
-          return entries.some((e) => e.isFile && e.name?.toLowerCase().endsWith('.mp3'))
+          return entries.some((e) => {
+            const name = e.name?.toLowerCase()
+            return e.isFile && (name?.endsWith('.mp3') || name?.endsWith('.wav'))
+          })
         } catch {
           return false
         }
@@ -481,13 +535,13 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
             dispatch(updateSessionOutputDir({ type, outputDir: actualOutputDir }))
           }
 
-          // Character workflow: mp3 落盘才算完成（主进程 completed 仅代表提取完成）
+          // Character workflow: 音频落盘才算完成（主进程 completed 仅代表提取完成）
           if (type === 'character') {
             if (!actualOutputDir) continue
-            const completedByMp3 = await hasAnyMp3(actualOutputDir)
-            if (!completedByMp3) continue
+            const completedByAudio = await hasAnyAudio(actualOutputDir)
+            if (!completedByAudio) continue
 
-            console.log('[WorkflowHistory] Detected character workflow mp3, completing session:', session.id, type)
+            console.log('[WorkflowHistory] Detected character workflow audio, completing session:', session.id, type)
             completedSessionsRef.current.add(session.id)
             dispatch(completeSession({ type, outputDir: actualOutputDir }))
             continue

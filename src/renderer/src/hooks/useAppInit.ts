@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { isMac } from '@renderer/config/constant'
+import { DEFAULT_EDITION, normalizeEdition } from '@renderer/config/edition'
 import { isLocalAi } from '@renderer/config/env'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import db from '@renderer/databases'
@@ -10,7 +11,7 @@ import { useAppDispatch } from '@renderer/store'
 import { useAppSelector } from '@renderer/store'
 import { handleSaveData } from '@renderer/store'
 import { selectMemoryConfig } from '@renderer/store/memory'
-import { setAvatar, setFilesPath, setResourcesPath, setUpdateState } from '@renderer/store/runtime'
+import { setAvatar, setEdition, setFilesPath, setResourcesPath, setUpdateState } from '@renderer/store/runtime'
 import { delay, runAsyncFunction } from '@renderer/utils'
 import { checkDataLimit } from '@renderer/utils'
 import { defaultLanguage } from '@shared/config/constant'
@@ -124,9 +125,19 @@ export function useAppInit() {
 
   useEffect(() => {
     // set files path
-    window.api.getAppInfo().then((info) => {
+    runAsyncFunction(async () => {
+      const info = await window.api.getAppInfo()
       dispatch(setFilesPath(info.filesPath))
       dispatch(setResourcesPath(info.resourcesPath))
+      try {
+        const editionPath = await window.api.path.join(info.resourcesPath, 'data', 'edition.json')
+        const raw = await window.api.fs.read(editionPath, 'utf-8')
+        const parsed = JSON.parse(raw)
+        dispatch(setEdition(normalizeEdition(parsed?.edition)))
+      } catch (error) {
+        logger.warn('Failed to load edition config, fallback to default', error as Error)
+        dispatch(setEdition(DEFAULT_EDITION))
+      }
     })
   }, [dispatch])
 

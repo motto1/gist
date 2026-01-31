@@ -3,30 +3,77 @@ import { isEmbeddingModel, isRerankModel, isTextToImageModel } from '@renderer/c
 import { useAppSelector } from '@renderer/store'
 import type { Model } from '@shared/types'
 import { ChevronDown, Cpu } from 'lucide-react'
-import { FC, useCallback, useMemo, useState } from 'react'
+import { FC, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface ModelSelectorProps {
   selectedModel: Model | null
   onModelSelect: (model: Model) => void
+  /**
+   * localStorage key，用于在不同页面/功能之间隔离“上一次选择”的缓存。
+   * 不传则使用默认 key（历史兼容）。
+   */
+  storageKey?: string
 }
 
-const ModelSelector: FC<ModelSelectorProps> = ({ selectedModel, onModelSelect }) => {
+const DEFAULT_MODEL_STORAGE_KEY = 'workflow.modelSelector.last.v1'
+
+const isSelectableModel = (m: Model) => !isEmbeddingModel(m) && !isRerankModel(m) && !isTextToImageModel(m)
+
+const ModelSelector: FC<ModelSelectorProps> = ({ selectedModel, onModelSelect, storageKey }) => {
   const { t } = useTranslation()
   const providers = useAppSelector((s) => s.llm.providers)
   const [isOpen, setIsOpen] = useState(false)
+  const resolvedStorageKey = storageKey || DEFAULT_MODEL_STORAGE_KEY
 
   // Filter only enabled providers
   const enabledProviders = useMemo(() => {
     return providers.filter((p) => p.enabled !== false)
   }, [providers])
 
+  // 恢复上一次选择的“阅读模型”
+  useEffect(() => {
+    if (selectedModel) return
+    if (!enabledProviders.length) return
+    if (typeof window === 'undefined') return
+
+    try {
+      const raw = window.localStorage.getItem(resolvedStorageKey)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as unknown
+      if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        typeof (parsed as any).provider !== 'string' ||
+        typeof (parsed as any).id !== 'string'
+      ) {
+        return
+      }
+
+      const provider = (parsed as any).provider as string
+      const id = (parsed as any).id as string
+      const match =
+        enabledProviders
+          .flatMap((p) => p.models)
+          .filter(isSelectableModel)
+          .find((m) => m.provider === provider && m.id === id) ?? null
+      if (match) onModelSelect(match)
+    } catch {
+      // ignore
+    }
+  }, [enabledProviders, onModelSelect, resolvedStorageKey, selectedModel])
+
   const handleModelSelect = useCallback(
     (model: Model) => {
+      try {
+        window.localStorage.setItem(resolvedStorageKey, JSON.stringify({ provider: model.provider, id: model.id }))
+      } catch {
+        // ignore storage failures
+      }
       onModelSelect(model)
       setIsOpen(false)
     },
-    [onModelSelect]
+    [onModelSelect, resolvedStorageKey]
   )
 
   if (!enabledProviders.length) {
@@ -68,9 +115,7 @@ const ModelSelector: FC<ModelSelectorProps> = ({ selectedModel, onModelSelect })
         <Card className="mt-2 max-h-80 overflow-y-auto">
           <CardBody className="p-2">
             {enabledProviders.map((provider) => {
-              const providerModels = provider.models.filter(
-                (m) => !isEmbeddingModel(m) && !isRerankModel(m) && !isTextToImageModel(m)
-              )
+              const providerModels = provider.models.filter(isSelectableModel)
               if (providerModels.length === 0) return null
 
               return (

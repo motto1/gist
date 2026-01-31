@@ -1,22 +1,47 @@
-import { Button, Card, CardBody, Chip, Input, Progress, Select, SelectItem, Switch, Tab, Tabs, Textarea, Tooltip } from '@heroui/react'
 import {
-  getActualProvider,
-  providerToAiSdkConfig
-} from '@renderer/aiCore/provider/providerConfig'
+  Button,
+  Card,
+  CardBody,
+  Chip,
+  Input,
+  Progress,
+  Select,
+  SelectItem,
+  Switch,
+  Tab,
+  Tabs,
+  Textarea,
+  Tooltip
+} from '@heroui/react'
+import { getActualProvider, providerToAiSdkConfig } from '@renderer/aiCore/provider/providerConfig'
+import { isBasicEdition } from '@renderer/config/edition'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
-import { clearActiveSession, clearCompletedSession, completeSession, setActiveSession, updateSessionOutputDir, updateSessionProgress } from '@renderer/store/workflow'
+import {
+  clearActiveSession,
+  clearCompletedSession,
+  completeSession,
+  setActiveSession,
+  updateSessionOutputDir,
+  updateSessionProgress
+} from '@renderer/store/workflow'
 import type { Model } from '@shared/types'
 import { ArrowLeft, ArrowRight, Download, Info, Loader2, Mic, Play, Plus, Sparkles } from 'lucide-react'
 import { FC, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 
+import { useLocalStorageState } from '@renderer/hooks/useLocalStorageState'
+import { useRuntime } from '@renderer/hooks/useRuntime'
+
 import DragBar from './components/DragBar'
 import FullscreenResultViewer from './components/FullscreenResultViewer'
 import ModelSelector from './components/ModelSelector'
 import NovelPicker, { SelectedFile } from './components/NovelPicker'
 import ProgressDisplay from './components/ProgressDisplay'
+import TtsVoiceConfigCard from './components/TtsVoiceConfigCard'
+import { getLocaleLabelZh } from './components/ttsLabels'
 import WorkflowStepMotion from './components/WorkflowStepMotion'
+import { estimateProgressPercent, estimateSecondsFromChars } from './utils/estimateTime'
 
 type WorkflowStep = 'config' | 'extracting' | 'secondary' | 'tts' | 'done'
 
@@ -36,34 +61,93 @@ interface FsEntry {
   size: number
 }
 
+type VoiceRaw = {
+  name?: string
+  display_name?: string
+  local_name?: string
+  short_name?: string
+  gender?: string
+  locale?: string
+  locale_name?: string
+  style_list?: string[]
+  sample_rate_hertz?: string
+}
+
+type VoiceListResult = {
+  locales: Array<{
+    locale: string
+    voices: VoiceRaw[]
+  }>
+}
+
+type VoiceStylesResult = {
+  styles?: string[]
+}
+
+type VoiceItem = {
+  shortName: string
+  displayName: string
+  localName?: string
+  gender?: string
+  locale?: string
+  localeName?: string
+  styleList?: string[]
+}
+
+const formatSigned = (value: number) => `${value >= 0 ? '+' : ''}${value}`
+const formatSignedPercent = (value: number) => `${value >= 0 ? '+' : ''}${value}%`
+
+const PREF_KEY_PREFIX = 'tts.voicePrefs.v1'
+
+const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
+
+const getGenderKey = (gender?: string) => {
+  const normalized = gender?.toLowerCase()
+  if (normalized?.startsWith('f')) return 'female'
+  if (normalized?.startsWith('m')) return 'male'
+  return 'unknown'
+}
+
+const getGenderLabel = (gender?: string) => {
+  const key = getGenderKey(gender)
+  if (key === 'female') return '女声'
+  if (key === 'male') return '男声'
+  return '未知'
+}
+
+const getLanguageLabel = (code: string) => {
+  try {
+    const display = new Intl.DisplayNames(['zh-CN'], { type: 'language' })
+    return display.of(code) ?? code
+  } catch {
+    return code
+  }
+}
+
 // --- Reusable UI Components ---
 
-const WorkflowLayout: FC<{ children: ReactNode; nav?: ReactNode; className?: string }> = ({ children, nav, className }) => (
-  <div className={`flex flex-col h-full w-full bg-background relative group ${className || ''}`}>
-    <div className="flex-1 flex flex-col items-center overflow-y-auto px-6 md:px-20 lg:px-32 py-12">
-      <div className="w-full max-w-4xl space-y-10 my-auto pb-20">
-        {children}
-      </div>
+const WorkflowLayout: FC<{ children: ReactNode; nav?: ReactNode; className?: string }> = ({
+  children,
+  nav,
+  className
+}) => (
+  <div className={`group relative flex h-full w-full flex-col bg-background ${className || ''}`}>
+    <div className="flex flex-1 flex-col items-center overflow-y-auto px-6 py-12 md:px-20 lg:px-32">
+      <div className="my-auto w-full max-w-4xl space-y-10 pb-20">{children}</div>
     </div>
     {nav}
   </div>
 )
 
 const StepHeader: FC<{ title: string; hint?: string }> = ({ title, hint }) => (
-  <div className="text-center space-y-6">
-    <h1 className="text-4xl font-serif font-medium text-foreground">
-      {title}
-    </h1>
-    {hint && (
-      <p className="text-lg text-foreground/60 font-serif">
-        {hint}
-      </p>
-    )}
+  <div className="space-y-6 text-center">
+    <h1 className="font-medium font-serif text-4xl text-foreground">{title}</h1>
+    {hint && <p className="font-serif text-foreground/60 text-lg">{hint}</p>}
   </div>
 )
 
 const GlassContainer: FC<{ children: ReactNode; className?: string }> = ({ children, className }) => (
-  <div className={`p-8 bg-content2/30 rounded-3xl border border-white/5 backdrop-blur-sm ${className || ''}`}>
+  <div className={`rounded-3xl border border-white/5 bg-content2/30 p-8 backdrop-blur-sm ${className || ''}`}>
     {children}
   </div>
 )
@@ -75,9 +159,9 @@ const CircularNavButton: FC<{
   isLoading?: boolean
   tooltip: string
   icon?: ReactNode
-  color?: "primary" | "light"
+  color?: 'primary' | 'light'
   className?: string
-}> = ({ direction, onPress, isDisabled, isLoading, tooltip, icon, color = "light", className }) => (
+}> = ({ direction, onPress, isDisabled, isLoading, tooltip, icon, color = 'light', className }) => (
   <Tooltip content={tooltip} placement={direction === 'left' ? 'right' : 'left'}>
     <Button
       isIconOnly
@@ -85,15 +169,12 @@ const CircularNavButton: FC<{
       variant={color === 'light' ? 'light' : 'solid'}
       color={color === 'primary' ? 'primary' : 'default'}
       size="lg"
-      className={`absolute ${direction === 'left' ? 'left-10' : 'right-10'} top-1/2 -translate-y-1/2 h-16 w-16 z-50 ${
-        color === 'light'
-          ? 'text-foreground/50 hover:text-foreground hover:bg-content2/50'
-          : 'shadow-xl'
+      className={`absolute ${direction === 'left' ? 'left-10' : 'right-10'} -translate-y-1/2 top-1/2 z-50 h-16 w-16 ${
+        color === 'light' ? 'text-foreground/50 hover:bg-content2/50 hover:text-foreground' : 'shadow-xl'
       } transition-all hover:scale-105 ${className || ''}`}
       onPress={onPress}
       isDisabled={isDisabled}
-      isLoading={isLoading}
-    >
+      isLoading={isLoading}>
       {!isLoading && (icon || (direction === 'left' ? <ArrowLeft size={28} /> : <ArrowRight size={28} />))}
     </Button>
   </Tooltip>
@@ -103,6 +184,8 @@ const CharacterWorkflow: FC = () => {
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
   const [searchParams] = useSearchParams()
+  const { edition } = useRuntime()
+  const allowAdvanced = !isBasicEdition(edition)
 
   // Redux state
   const activeSession = useAppSelector((state) => state.workflow.activeSessions['character'])
@@ -134,7 +217,7 @@ const CharacterWorkflow: FC = () => {
   const [outputDir, setOutputDir] = useState<string | null>(null)
   const [isRestoring, setIsRestoring] = useState(true)
   const [historyBookTitle, setHistoryBookTitle] = useState<string | null>(null)
-  const [isStarting, setIsStarting] = useState(false)  // 防重复提交
+  const [isStarting, setIsStarting] = useState(false) // 防重复提交
 
   // 人物 TXT 合集（用于“非指定人物模式”的结果展示）
   const [characterTxtFiles, setCharacterTxtFiles] = useState<FsEntry[]>([])
@@ -186,29 +269,333 @@ const CharacterWorkflow: FC = () => {
   }, [])
 
   // 语音生成（第三阶段）
+  const [ttsMode, setTtsMode] = useState<'normal' | 'advanced'>(allowAdvanced ? 'normal' : 'normal')
   const [ttsSourceKind, setTtsSourceKind] = useState<'bio' | 'monologue'>('bio')
-  const [ttsVoice, setTtsVoice] = useState('zh-CN-XiaoxiaoNeural')
-  const [ttsRate, setTtsRate] = useState('+0%')
-  const [ttsPitch, setTtsPitch] = useState('+0Hz')
-  const [ttsVolume, setTtsVolume] = useState('+0%')
+  const [normalVoiceLocales, setNormalVoiceLocales] = useState<VoiceListResult['locales']>([])
+  const [advancedVoiceLocales, setAdvancedVoiceLocales] = useState<VoiceListResult['locales']>([])
+  const [isLoadingNormalVoices, setIsLoadingNormalVoices] = useState(false)
+  const [normalVoiceLoadError, setNormalVoiceLoadError] = useState<string | null>(null)
+  const [isLoadingAdvancedVoices, setIsLoadingAdvancedVoices] = useState(false)
+  const [advancedVoiceLoadError, setAdvancedVoiceLoadError] = useState<string | null>(null)
+
+  const isLoadingVoices = ttsMode === 'advanced' ? isLoadingAdvancedVoices : isLoadingNormalVoices
+  const voiceLoadError = ttsMode === 'advanced' ? advancedVoiceLoadError : normalVoiceLoadError
+  const [ttsVoice, setTtsVoice] = useLocalStorageState<string>(
+    `${PREF_KEY_PREFIX}.normal.voice`,
+    'zh-CN-XiaoxiaoNeural',
+    isNonEmptyString
+  )
+  const [advancedTtsVoice, setAdvancedTtsVoice] = useLocalStorageState<string>(
+    `${PREF_KEY_PREFIX}.advanced.voice`,
+    'zh-CN-XiaoxiaoMultilingualNeural',
+    isNonEmptyString
+  )
+  const [advancedTtsStyle, setAdvancedTtsStyle] = useLocalStorageState<string>(
+    `${PREF_KEY_PREFIX}.advanced.style`,
+    'general',
+    isNonEmptyString
+  )
+  const [styleOptions, setStyleOptions] = useState<string[]>([])
+  const [isLoadingStyles, setIsLoadingStyles] = useState(false)
+  const [ttsRateValue, setTtsRateValue] = useState(0)
+  const [ttsPitchValue, setTtsPitchValue] = useState(0)
+  const [advancedTtsRateValue, setAdvancedTtsRateValue] = useState(0)
+  const [advancedTtsPitchValue, setAdvancedTtsPitchValue] = useState(0)
+  // 默认：中文 + 区域全部 + 性别全部（普通版/高级版一致）
+  const [languageFilter, setLanguageFilter] = useLocalStorageState<string>(
+    `${PREF_KEY_PREFIX}.filter.language`,
+    'zh',
+    isNonEmptyString
+  )
+  const [regionFilter, setRegionFilter] = useLocalStorageState<string>(
+    `${PREF_KEY_PREFIX}.filter.region`,
+    'all',
+    isNonEmptyString
+  )
+  const [genderFilter, setGenderFilter] = useLocalStorageState<string>(
+    `${PREF_KEY_PREFIX}.filter.gender`,
+    'all',
+    isNonEmptyString
+  )
   const [isTtsGenerating, setIsTtsGenerating] = useState(false)
   const [ttsAudioPath, setTtsAudioPath] = useState<string | null>(null)
   const [ttsAudioUrl, setTtsAudioUrl] = useState<string | null>(null)
+  const [ttsAudioMime, setTtsAudioMime] = useState('audio/mpeg')
   const ttsGenerationTokenRef = useRef(0)
 
-  const ttsVoices = useMemo(() => {
-    return [
-      { value: 'zh-CN-XiaoxiaoNeural', label: '中文 - 晓晓（女）' },
-      { value: 'zh-CN-YunxiNeural', label: '中文 - 云希（男）' },
-      { value: 'zh-CN-YunjianNeural', label: '中文 - 云健（男）' },
-      { value: 'zh-CN-XiaoyiNeural', label: '中文 - 晓伊（女）' },
-      { value: 'en-US-AriaNeural', label: 'English (US) - Aria (Female)' },
-      { value: 'en-US-GuyNeural', label: 'English (US) - Guy (Male)' },
-      { value: 'en-US-JennyNeural', label: 'English (US) - Jenny (Female)' },
-      { value: 'ja-JP-NanamiNeural', label: 'Japanese - Nanami (Female)' },
-      { value: 'ja-JP-KeitaNeural', label: 'Japanese - Keita (Male)' }
+  const activeVoice = ttsMode === 'advanced' ? advancedTtsVoice : ttsVoice
+
+  const setActiveVoice = useCallback(
+    (value: string) => {
+      if (ttsMode === 'advanced') {
+        setAdvancedTtsVoice(value)
+        return
+      }
+      setTtsVoice(value)
+    },
+    [ttsMode]
+  )
+
+  const advancedVoices = useMemo<VoiceItem[]>(() => {
+    const items: VoiceItem[] = []
+    for (const group of advancedVoiceLocales) {
+      for (const raw of group.voices ?? []) {
+        const shortName = raw.short_name?.trim() || raw.name?.trim()
+        if (!shortName) continue
+        items.push({
+          shortName,
+          displayName: raw.display_name || raw.local_name || shortName,
+          localName: raw.local_name,
+          gender: raw.gender,
+          locale: raw.locale || group.locale,
+          localeName: raw.locale_name,
+          styleList: raw.style_list
+        })
+      }
+    }
+    return items
+  }, [advancedVoiceLocales])
+
+  const normalVoices = useMemo<VoiceItem[]>(() => {
+    const items: VoiceItem[] = []
+    for (const group of normalVoiceLocales) {
+      for (const raw of group.voices ?? []) {
+        const shortName = raw.short_name?.trim() || raw.name?.trim()
+        if (!shortName) continue
+        items.push({
+          shortName,
+          displayName: raw.display_name || raw.local_name || shortName,
+          localName: raw.local_name,
+          gender: raw.gender,
+          locale: raw.locale || group.locale,
+          localeName: raw.locale_name
+        })
+      }
+    }
+    return items
+  }, [normalVoiceLocales])
+
+  const voicesForMode = useMemo(() => {
+    // 普通版与高级版数据源完全解耦：普通版来自 EdgeTTS 在线 voices；高级版来自 tts.exe --list-voices
+    return ttsMode === 'advanced' ? advancedVoices : normalVoices
+  }, [advancedVoices, normalVoices, ttsMode])
+
+  const localesForMode = useMemo(() => {
+    return ttsMode === 'advanced' ? advancedVoiceLocales : normalVoiceLocales
+  }, [advancedVoiceLocales, normalVoiceLocales, ttsMode])
+
+  const advancedVoiceMap = useMemo(() => {
+    return new Map(advancedVoices.map((v) => [v.shortName, v]))
+  }, [advancedVoices])
+
+  useEffect(() => {
+    let isMounted = true
+    const loadAdvancedVoices = async () => {
+      if (!allowAdvanced) return
+      setIsLoadingAdvancedVoices(true)
+      setAdvancedVoiceLoadError(null)
+      try {
+        const result = await window.api.advancedTTS.listVoices()
+        const locales = (result as VoiceListResult)?.locales ?? []
+        if (!isMounted) return
+        setAdvancedVoiceLocales(locales)
+      } catch (error) {
+        if (!isMounted) return
+        setAdvancedVoiceLoadError((error as Error).message)
+        window.toast?.error?.(t('workflow.tts.voiceLoadFailed', '语音模型加载失败'))
+      } finally {
+        if (isMounted) {
+          setIsLoadingAdvancedVoices(false)
+        }
+      }
+    }
+
+    void loadAdvancedVoices()
+    return () => {
+      isMounted = false
+    }
+  }, [allowAdvanced, t])
+
+  useEffect(() => {
+    let isMounted = true
+    const loadNormalVoices = async () => {
+      setIsLoadingNormalVoices(true)
+      setNormalVoiceLoadError(null)
+      try {
+        const result = await window.api.edgeTTS.listVoices()
+        if (!isMounted) return
+        const locales = (result as VoiceListResult)?.locales ?? []
+        setNormalVoiceLocales(locales)
+      } catch (error) {
+        if (!isMounted) return
+        setNormalVoiceLoadError((error as Error).message)
+        window.toast?.error?.(t('workflow.tts.voiceLoadFailed', '语音模型加载失败'))
+      } finally {
+        if (isMounted) {
+          setIsLoadingNormalVoices(false)
+        }
+      }
+    }
+
+    void loadNormalVoices()
+    return () => {
+      isMounted = false
+    }
+  }, [t])
+
+  useEffect(() => {
+    if (normalVoices.length > 0) {
+      const hasVoice = normalVoices.some((item) => item.shortName === ttsVoice)
+      if (!hasVoice) {
+        setTtsVoice(normalVoices[0].shortName)
+      }
+    }
+
+    if (advancedVoices.length > 0) {
+      const hasAdvancedVoice = advancedVoices.some((item) => item.shortName === advancedTtsVoice)
+      if (!hasAdvancedVoice) {
+        setAdvancedTtsVoice(advancedVoices[0].shortName)
+      }
+    }
+  }, [advancedTtsVoice, advancedVoices, normalVoices, ttsVoice])
+
+  useEffect(() => {
+    // 当语言筛选变化后，如果当前“区域”不再匹配语言，则自动回退为“全部”，避免出现空列表/跳动。
+    if (languageFilter === 'all') return
+    if (regionFilter === 'all') return
+    if (!regionFilter.toLowerCase().startsWith(`${languageFilter.toLowerCase()}-`)) {
+      setRegionFilter('all')
+    }
+  }, [languageFilter, regionFilter])
+
+  useEffect(() => {
+    // 如果先选了“区域”，则同步语言筛选（仅在语言为“全部”时），保证筛选条件一致。
+    if (regionFilter === 'all') return
+    if (languageFilter !== 'all') return
+    const nextLanguage = regionFilter.split('-')[0]
+    if (nextLanguage) {
+      setLanguageFilter(nextLanguage)
+    }
+  }, [languageFilter, regionFilter])
+
+  const languageOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const group of localesForMode) {
+      const languageCode = group.locale?.split('-')[0]
+      if (!languageCode || map.has(languageCode)) continue
+      map.set(languageCode, getLanguageLabel(languageCode))
+    }
+    return Array.from(map.entries()).map(([value, label]) => ({ value, label }))
+  }, [localesForMode])
+
+  const regionOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const group of localesForMode) {
+      const locale = group.locale
+      if (!locale) continue
+      if (languageFilter !== 'all' && !locale.toLowerCase().startsWith(`${languageFilter.toLowerCase()}-`)) continue
+      if (map.has(locale)) continue
+      map.set(locale, getLocaleLabelZh(locale))
+    }
+    return Array.from(map.entries()).map(([value, label]) => ({ value, label }))
+  }, [languageFilter, localesForMode])
+
+  const genderOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const group of localesForMode) {
+      for (const voice of group.voices ?? []) {
+        const key = getGenderKey(voice.gender)
+        if (map.has(key)) continue
+        map.set(key, getGenderLabel(voice.gender))
+      }
+    }
+    return Array.from(map.entries()).map(([value, label]) => ({ value, label }))
+  }, [localesForMode])
+
+  const languageSelectItems = useMemo(() => {
+    const base = [
+      { value: 'all', label: t('workflow.tts.all', '全部') },
+      { value: 'zh', label: getLanguageLabel('zh') }
     ]
-  }, [])
+    const extra = languageOptions.filter((item) => item.value !== 'zh')
+    return [...base, ...extra]
+  }, [languageOptions, t])
+
+  const regionSelectItems = useMemo(() => {
+    return [{ value: 'all', label: t('workflow.tts.all', '全部') }, ...regionOptions]
+  }, [regionOptions, t])
+
+  const genderSelectItems = useMemo(() => {
+    return [{ value: 'all', label: t('workflow.tts.all', '全部') }, ...genderOptions]
+  }, [genderOptions, t])
+
+  const filteredVoices = useMemo(() => {
+    return voicesForMode.filter((item) => {
+      if (languageFilter !== 'all') {
+        if (!item.locale?.toLowerCase().startsWith(`${languageFilter.toLowerCase()}-`)) return false
+      }
+      if (regionFilter !== 'all') {
+        if (item.locale !== regionFilter) return false
+      }
+      if (genderFilter !== 'all') {
+        if (getGenderKey(item.gender) !== genderFilter) return false
+      }
+      return true
+    })
+  }, [genderFilter, languageFilter, regionFilter, voicesForMode])
+
+  useEffect(() => {
+    if (filteredVoices.length === 0) return
+    const isIncluded = filteredVoices.some((item) => item.shortName === activeVoice)
+    if (!isIncluded) {
+      setActiveVoice(filteredVoices[0].shortName)
+    }
+  }, [activeVoice, filteredVoices, setActiveVoice])
+
+  useEffect(() => {
+    let isMounted = true
+    const fetchStyles = async () => {
+      if (ttsMode !== 'advanced') return
+      if (!allowAdvanced) return
+      if (!advancedTtsVoice) return
+      if (!advancedVoiceMap.get(advancedTtsVoice)) {
+        setStyleOptions([])
+        if (!advancedTtsStyle) {
+          setAdvancedTtsStyle('general')
+        }
+        return
+      }
+      setIsLoadingStyles(true)
+      try {
+        const result = await window.api.advancedTTS.getVoiceStyles(advancedTtsVoice)
+        if (!isMounted) return
+        const styles = (result as VoiceStylesResult)?.styles ?? []
+        setStyleOptions(styles)
+        if (styles.length > 0 && !styles.includes(advancedTtsStyle)) {
+          setAdvancedTtsStyle(styles[0])
+        } else if (styles.length === 0 && !advancedTtsStyle) {
+          setAdvancedTtsStyle('general')
+        }
+      } catch {
+        if (!isMounted) return
+        const fallback = advancedVoiceMap.get(advancedTtsVoice)?.styleList ?? []
+        setStyleOptions(fallback)
+        if (fallback.length > 0 && !fallback.includes(advancedTtsStyle)) {
+          setAdvancedTtsStyle(fallback[0])
+        } else if (fallback.length === 0 && !advancedTtsStyle) {
+          setAdvancedTtsStyle('general')
+        }
+      } finally {
+        if (!isMounted) return
+        setIsLoadingStyles(false)
+      }
+    }
+
+    void fetchStyles()
+    return () => {
+      isMounted = false
+    }
+  }, [advancedTtsStyle, advancedTtsVoice, advancedVoiceMap, ttsMode, allowAdvanced])
 
   const popoverPortalContainer = useMemo(() => {
     return typeof document !== 'undefined' ? document.body : undefined
@@ -216,9 +603,8 @@ const CharacterWorkflow: FC = () => {
 
   // Check if can start
   const canStart =
-    selectedModel !== null &&
-    selectedFile !== null &&
-    (!isTargetCharacterModeEnabled || targetCharacters.length > 0)
+    selectedModel !== null && selectedFile !== null && (!isTargetCharacterModeEnabled || targetCharacters.length > 0)
+  const estimatedTotalSeconds = estimateSecondsFromChars(activeSession?.inputCharCount ?? 0)
 
   // 追踪是否已完成首次恢复
   const hasRestoredRef = useRef(false)
@@ -311,8 +697,8 @@ const CharacterWorkflow: FC = () => {
           try {
             const audioDir = await window.api.path.join(dir, 'audio')
             const entries = (await window.api.fs.readdir(audioDir)) as FsEntry[]
-            const hasMp3 = entries.some((e) => e.isFile && e.name?.toLowerCase().endsWith('.mp3'))
-            if (hasMp3) return 'done'
+            const hasAudio = entries.some((e) => e.isFile && /\.(mp3|wav)$/i.test(e.name ?? ''))
+            if (hasAudio) return 'done'
           } catch {
             // ignore - audio folder may not exist yet
           }
@@ -450,7 +836,7 @@ const CharacterWorkflow: FC = () => {
       } catch (error) {
         console.error('Failed to restore state:', error)
       } finally {
-        hasRestoredRef.current = true  // 标记已完成恢复
+        hasRestoredRef.current = true // 标记已完成恢复
         setIsRestoring(false)
       }
     }
@@ -462,8 +848,7 @@ const CharacterWorkflow: FC = () => {
   const selectedCharacterName = selectedCharacterFile?.name?.replace(/\.txt$/i, '') ?? null
 
   // 二次总结/语音阶段：从“人物TXT合集”读取人物列表（文件系统即真相）
-  const shouldUseCharacterTxtFolder =
-    (step === 'secondary' || step === 'tts' || step === 'done') && !!outputDir
+  const shouldUseCharacterTxtFolder = (step === 'secondary' || step === 'tts' || step === 'done') && !!outputDir
   const hasSecondaryOutput = Boolean(secondaryBioDraft.trim()) || Boolean(secondaryMonologueDraft.trim())
 
   const secondaryModel = useMemo(() => {
@@ -478,42 +863,48 @@ const CharacterWorkflow: FC = () => {
     return trimmed.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || '未命名人物'
   }, [])
 
-  const getSecondaryFilePath = useCallback(async (kind: SecondaryKind): Promise<string | null> => {
-    if (!outputDir || !selectedCharacterName) return null
-    const kindDirName = kind === 'bio' ? '人物志' : '心理独白'
-    const safeStem = sanitizeSecondaryFileStem(selectedCharacterName)
-    return await window.api.path.join(outputDir, '二次总结', kindDirName, `${safeStem}.txt`)
-  }, [outputDir, sanitizeSecondaryFileStem, selectedCharacterName])
+  const getSecondaryFilePath = useCallback(
+    async (kind: SecondaryKind): Promise<string | null> => {
+      if (!outputDir || !selectedCharacterName) return null
+      const kindDirName = kind === 'bio' ? '人物志' : '心理独白'
+      const safeStem = sanitizeSecondaryFileStem(selectedCharacterName)
+      return await window.api.path.join(outputDir, '二次总结', kindDirName, `${safeStem}.txt`)
+    },
+    [outputDir, sanitizeSecondaryFileStem, selectedCharacterName]
+  )
 
-  const persistSecondaryDraftToDisk = useCallback(async (kind: SecondaryKind, value: string) => {
-    const filePath = await getSecondaryFilePath(kind)
-    if (!filePath) return
+  const persistSecondaryDraftToDisk = useCallback(
+    async (kind: SecondaryKind, value: string) => {
+      const filePath = await getSecondaryFilePath(kind)
+      if (!filePath) return
 
-    const dirPath = await window.api.path.dirname(filePath)
-    await window.api.file.mkdir(dirPath)
-    await window.api.file.write(filePath, value)
+      const dirPath = await window.api.path.dirname(filePath)
+      await window.api.file.mkdir(dirPath)
+      await window.api.file.write(filePath, value)
 
-    const normalized = value.trim() ? value : null
-    if (kind === 'bio') {
-      setSecondaryBioText(normalized)
-      setSecondaryBioDraft(normalized ?? '')
-      secondaryDraftDirtyRef.current.bio = false
-    } else {
-      setSecondaryMonologueText(normalized)
-      setSecondaryMonologueDraft(normalized ?? '')
-      secondaryDraftDirtyRef.current.monologue = false
-    }
-  }, [getSecondaryFilePath])
+      const normalized = value.trim() ? value : null
+      if (kind === 'bio') {
+        setSecondaryBioText(normalized)
+        setSecondaryBioDraft(normalized ?? '')
+        secondaryDraftDirtyRef.current.bio = false
+      } else {
+        setSecondaryMonologueText(normalized)
+        setSecondaryMonologueDraft(normalized ?? '')
+        secondaryDraftDirtyRef.current.monologue = false
+      }
+    },
+    [getSecondaryFilePath]
+  )
 
   const findAnyAudioFile = useCallback(async (): Promise<string | null> => {
     if (!outputDir) return null
     try {
       const audioDir = await window.api.path.join(outputDir, 'audio')
       const entries = (await window.api.fs.readdir(audioDir)) as FsEntry[]
-      const mp3s = entries
-        .filter((e) => e.isFile && e.name?.toLowerCase().endsWith('.mp3'))
+      const audios = entries
+        .filter((e) => e.isFile && /\.(mp3|wav)$/i.test(e.name ?? ''))
         .sort((a, b) => b.mtimeMs - a.mtimeMs)
-      return mp3s[0]?.path ?? null
+      return audios[0]?.path ?? null
     } catch {
       return null
     }
@@ -537,60 +928,66 @@ const CharacterWorkflow: FC = () => {
   }, [])
 
   const loadAudioByPath = useCallback(async (audioPath: string) => {
+    const mime = audioPath.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg'
     try {
       const base64 = await window.api.fs.read(audioPath, 'base64')
-      const url = `data:audio/mpeg;base64,${base64}`
+      const url = `data:${mime};base64,${base64}`
       setTtsAudioPath(audioPath)
       setTtsAudioUrl(url)
+      setTtsAudioMime(mime)
       return audioPath
     } catch {
       setTtsAudioPath(audioPath)
       setTtsAudioUrl(null)
+      setTtsAudioMime(mime)
       return audioPath
     }
   }, [])
 
-  const loadSecondaryFromDisk = useCallback(async (kind: SecondaryKind) => {
-    const key = outputDir && selectedCharacterPath ? `${outputDir}::${selectedCharacterPath}` : null
-    if (key && secondaryDraftKeyRef.current !== key) {
-      secondaryDraftKeyRef.current = key
-      secondaryDraftDirtyRef.current = { bio: false, monologue: false }
-    }
+  const loadSecondaryFromDisk = useCallback(
+    async (kind: SecondaryKind) => {
+      const key = outputDir && selectedCharacterPath ? `${outputDir}::${selectedCharacterPath}` : null
+      if (key && secondaryDraftKeyRef.current !== key) {
+        secondaryDraftKeyRef.current = key
+        secondaryDraftDirtyRef.current = { bio: false, monologue: false }
+      }
 
-    // 若用户正在编辑当前 kind，则不要用磁盘内容覆盖编辑中的草稿
-    if (secondaryDraftDirtyRef.current[kind]) {
-      return
-    }
+      // 若用户正在编辑当前 kind，则不要用磁盘内容覆盖编辑中的草稿
+      if (secondaryDraftDirtyRef.current[kind]) {
+        return
+      }
 
-    const filePath = await getSecondaryFilePath(kind)
-    if (!filePath) {
-      if (kind === 'bio') setSecondaryBioText(null)
-      else setSecondaryMonologueText(null)
-      if (kind === 'bio') setSecondaryBioDraft('')
-      else setSecondaryMonologueDraft('')
-      secondaryDraftDirtyRef.current[kind] = false
-      return
-    }
+      const filePath = await getSecondaryFilePath(kind)
+      if (!filePath) {
+        if (kind === 'bio') setSecondaryBioText(null)
+        else setSecondaryMonologueText(null)
+        if (kind === 'bio') setSecondaryBioDraft('')
+        else setSecondaryMonologueDraft('')
+        secondaryDraftDirtyRef.current[kind] = false
+        return
+      }
 
-    const setLoading = kind === 'bio' ? setIsSecondaryBioLoading : setIsSecondaryMonologueLoading
-    const setText = kind === 'bio' ? setSecondaryBioText : setSecondaryMonologueText
-    const setDraft = kind === 'bio' ? setSecondaryBioDraft : setSecondaryMonologueDraft
+      const setLoading = kind === 'bio' ? setIsSecondaryBioLoading : setIsSecondaryMonologueLoading
+      const setText = kind === 'bio' ? setSecondaryBioText : setSecondaryMonologueText
+      const setDraft = kind === 'bio' ? setSecondaryBioDraft : setSecondaryMonologueDraft
 
-    setLoading(true)
-    try {
-      const content = await window.api.fs.readText(filePath)
-      const normalized = content?.trim() ? content : null
-      setText(normalized)
-      setDraft(normalized ?? '')
-      secondaryDraftDirtyRef.current[kind] = false
-    } catch {
-      setText(null)
-      setDraft('')
-      secondaryDraftDirtyRef.current[kind] = false
-    } finally {
-      setLoading(false)
-    }
-  }, [getSecondaryFilePath, outputDir, selectedCharacterPath])
+      setLoading(true)
+      try {
+        const content = await window.api.fs.readText(filePath)
+        const normalized = content?.trim() ? content : null
+        setText(normalized)
+        setDraft(normalized ?? '')
+        secondaryDraftDirtyRef.current[kind] = false
+      } catch {
+        setText(null)
+        setDraft('')
+        secondaryDraftDirtyRef.current[kind] = false
+      } finally {
+        setLoading(false)
+      }
+    },
+    [getSecondaryFilePath, outputDir, selectedCharacterPath]
+  )
 
   const secondaryAutoLoadKeyRef = useRef<string | null>(null)
 
@@ -659,7 +1056,16 @@ const CharacterWorkflow: FC = () => {
     return () => {
       cancelled = true
     }
-  }, [activeSession?.status, dispatch, findAnyAudioFile, isTtsGenerating, loadAudioByPath, outputDir, step, ttsAudioPath])
+  }, [
+    activeSession?.status,
+    dispatch,
+    findAnyAudioFile,
+    isTtsGenerating,
+    loadAudioByPath,
+    outputDir,
+    step,
+    ttsAudioPath
+  ])
 
   // done 阶段：确保能从磁盘加载音频预览（history/重启后也能直接播放）
   useEffect(() => {
@@ -781,7 +1187,9 @@ const CharacterWorkflow: FC = () => {
     const finalPercentage = opts?.finalPercentage
     const keepMs = opts?.keepMs ?? 250
     if (finalPercentage !== undefined) {
-      setStageProgress((prev) => (prev ? { ...prev, percentage: finalPercentage } : { stage: 'completed', percentage: finalPercentage }))
+      setStageProgress((prev) =>
+        prev ? { ...prev, percentage: finalPercentage } : { stage: 'completed', percentage: finalPercentage }
+      )
       window.setTimeout(() => setStageProgress(null), keepMs)
     } else {
       setStageProgress(null)
@@ -842,23 +1250,30 @@ const CharacterWorkflow: FC = () => {
       return
     }
 
-    // 初始化计时
-    extractStartMsRef.current = Date.now()
-    setExtractElapsedSeconds(0)
+    const startedAtMs = (() => {
+      try {
+        const iso = activeSession?.startedAt
+        if (!iso) return 0
+        const ms = new Date(iso).getTime()
+        return Number.isNaN(ms) ? 0 : ms
+      } catch {
+        return 0
+      }
+    })()
 
-    // 伪进度：从 0 平滑爬升到 92%，完成时再跳到 100%
-    let pct = 0
-    setExtractPseudoPercentage(pct)
-    extractPseudoTimerRef.current = window.setInterval(() => {
-      pct = Math.min(92, pct + Math.max(1, Math.round(Math.random() * 6)))
-      setExtractPseudoPercentage(pct)
-    }, 450)
+    // 初始化计时（尽量复用 Redux 的 startedAt，用于“返回进行中”时恢复计时）
+    extractStartMsRef.current = extractStartMsRef.current || startedAtMs || Date.now()
+    const initialElapsedSeconds = Math.max(0, Math.floor((Date.now() - extractStartMsRef.current) / 1000))
+    setExtractElapsedSeconds(initialElapsedSeconds)
+    setExtractPseudoPercentage(estimateProgressPercent(initialElapsedSeconds, estimatedTotalSeconds))
 
     // 计时器
     extractElapsedTimerRef.current = window.setInterval(() => {
       const start = extractStartMsRef.current
       if (!start) return
-      setExtractElapsedSeconds(Math.floor((Date.now() - start) / 1000))
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - start) / 1000))
+      setExtractElapsedSeconds(elapsedSeconds)
+      setExtractPseudoPercentage(estimateProgressPercent(elapsedSeconds, estimatedTotalSeconds))
     }, 1000)
 
     // dots: 1,2,3,2,1 循环
@@ -873,13 +1288,13 @@ const CharacterWorkflow: FC = () => {
     return () => {
       stopAll()
     }
-  }, [progress.stage, step])
+  }, [activeSession?.startedAt, estimatedTotalSeconds, progress.stage, step])
 
   // Handle start processing
   const handleStart = useCallback(async () => {
     if (!canStart || !selectedModel || !selectedFile || isStarting) return
 
-    setIsStarting(true)  // 防重复提交
+    setIsStarting(true) // 防重复提交
     try {
       // 重置本地状态，防止显示旧任务的结果
       setResult(null)
@@ -896,11 +1311,13 @@ const CharacterWorkflow: FC = () => {
         return
       }
       const config = providerToAiSdkConfig(actualProvider, selectedModel)
-      const providerConfigs = [{
-        modelId: selectedModel.id,
-        providerId: config.providerId,
-        options: config.options
-      }]
+      const providerConfigs = [
+        {
+          modelId: selectedModel.id,
+          providerId: config.providerId,
+          options: config.options
+        }
+      ]
 
       // Determine output path - all files are now library books
       const sanitizeBaseName = (raw: string) => {
@@ -964,22 +1381,25 @@ const CharacterWorkflow: FC = () => {
 
       // Save session to Redux
       const sessionId = crypto.randomUUID()
-      dispatch(setActiveSession({
-        type: 'character',
-        session: {
-          id: sessionId,
+      dispatch(
+        setActiveSession({
           type: 'character',
-          status: 'processing',
-          bookId: selectedFile.id,
-          bookTitle: selectedFile.origin_name || selectedFile.name || '未命名',
-          bookPath: selectedFile.path,
-          modelId: selectedModel.id,
-          modelName: selectedModel.name,
-          outputDir: characterDir,
-          startedAt: new Date().toISOString(),
-          progress: { percentage: 0, stage: 'initializing' }
-        }
-      }))
+          session: {
+            id: sessionId,
+            type: 'character',
+            status: 'processing',
+            bookId: selectedFile.id,
+            bookTitle: selectedFile.origin_name || selectedFile.name || '未命名',
+            bookPath: selectedFile.path,
+            inputCharCount: fileContent.length,
+            modelId: selectedModel.id,
+            modelName: selectedModel.name,
+            outputDir: characterDir,
+            startedAt: new Date().toISOString(),
+            progress: { percentage: 0, stage: 'initializing' }
+          }
+        })
+      )
 
       // Reset state first to clear any previous completed state, then set new task config
       // This ensures we start fresh and don't carry over old progress/result
@@ -1018,7 +1438,7 @@ const CharacterWorkflow: FC = () => {
       setStepDirection(-1)
       setStep('config') // Revert to config on error
     } finally {
-      setIsStarting(false)  // 重置防重复提交状态
+      setIsStarting(false) // 重置防重复提交状态
     }
   }, [canStart, selectedModel, selectedFile, dispatch, isStarting])
 
@@ -1030,7 +1450,7 @@ const CharacterWorkflow: FC = () => {
     isProcessing?: boolean
     progress?: ProcessingState & { stage: string }
     result?: { merged?: string }
-    outputPath?: string  // 实际的任务目录路径（带时间戳）
+    outputPath?: string // 实际的任务目录路径（带时间戳）
   } | null>(null)
 
   // 订阅主进程状态更新 - 空依赖，永不重建订阅
@@ -1072,10 +1492,18 @@ const CharacterWorkflow: FC = () => {
   const outputDirRef = useRef(outputDir)
 
   // 同步 ref 值
-  useEffect(() => { stepRef.current = step }, [step])
-  useEffect(() => { resultRef.current = result }, [result])
-  useEffect(() => { progressRef.current = progress }, [progress])
-  useEffect(() => { outputDirRef.current = outputDir }, [outputDir])
+  useEffect(() => {
+    stepRef.current = step
+  }, [step])
+  useEffect(() => {
+    resultRef.current = result
+  }, [result])
+  useEffect(() => {
+    progressRef.current = progress
+  }, [progress])
+  useEffect(() => {
+    outputDirRef.current = outputDir
+  }, [outputDir])
 
   // 响应主进程状态变化 - 处理业务逻辑
   useEffect(() => {
@@ -1120,17 +1548,19 @@ const CharacterWorkflow: FC = () => {
         })
 
         // 更新 Redux session
-        dispatch(updateSessionProgress({
-          type: 'character',
-          progress: {
-            stage: newProgress.stage,
-            percentage: newProgress.percentage,
-            current: newProgress.current,
-            total: newProgress.total
-          },
-          // 工作流整体以 mp3 落盘为完成标志；人物提取完成不应归档历史
-          status: 'processing'
-        }))
+        dispatch(
+          updateSessionProgress({
+            type: 'character',
+            progress: {
+              stage: newProgress.stage,
+              percentage: newProgress.percentage,
+              current: newProgress.current,
+              total: newProgress.total
+            },
+            // 工作流整体以 mp3 落盘为完成标志；人物提取完成不应归档历史
+            status: 'processing'
+          })
+        )
       }
 
       // 处理失败状态 - 保持在 processing 步骤，等待自动重试
@@ -1141,7 +1571,8 @@ const CharacterWorkflow: FC = () => {
       }
 
       // 检查完成状态 - 支持 completed 和 finalizing (100% 且有结果)
-      const isCompleted = newProgress.stage === 'completed' ||
+      const isCompleted =
+        newProgress.stage === 'completed' ||
         (newProgress.stage === 'finalizing' && newProgress.percentage >= 100 && mainProcessState.result?.merged)
 
       if (isCompleted) {
@@ -1182,11 +1613,13 @@ const CharacterWorkflow: FC = () => {
               extractCompleteTimeoutRef.current = null
               setStepDirection(1)
               setStep('secondary')
-              dispatch(updateSessionProgress({
-                type: 'character',
-                progress: { percentage: 60, stage: '等待二次总结' },
-                status: 'processing'
-              }))
+              dispatch(
+                updateSessionProgress({
+                  type: 'character',
+                  progress: { percentage: 60, stage: '等待二次总结' },
+                  status: 'processing'
+                })
+              )
             }, 260)
           }
         }
@@ -1224,113 +1657,125 @@ const CharacterWorkflow: FC = () => {
     }
   }, [handleStart])
 
-  const handleGenerateSecondary = useCallback(async (kind: SecondaryKind) => {
-    if (!outputDir || !selectedCharacterPath || !selectedCharacterName) return
-    if (!secondaryModel) {
-      window.toast?.error?.(t('workflow.character.secondary.noModel', '未找到可用模型，请先配置模型'))
-      return
-    }
-
-    const setGenerating = kind === 'bio' ? setIsSecondaryBioGenerating : setIsSecondaryMonologueGenerating
-    const isGenerating = kind === 'bio' ? isSecondaryBioGenerating : isSecondaryMonologueGenerating
-    if (isGenerating) return
-
-    setGenerating(true)
-    const stageLabel = kind === 'bio' ? '生成人物志' : '生成心理独白'
-    startStageProgress(stageLabel)
-    dispatch(updateSessionProgress({
-      type: 'character',
-      progress: { percentage: 70, stage: stageLabel },
-      status: 'processing'
-    }))
-    try {
-      const actualProvider = getActualProvider(secondaryModel)
-      if (!actualProvider) {
-        throw new Error(`Could not find provider for model: ${secondaryModel.name}`)
+  const handleGenerateSecondary = useCallback(
+    async (kind: SecondaryKind) => {
+      if (!outputDir || !selectedCharacterPath || !selectedCharacterName) return
+      if (!secondaryModel) {
+        window.toast?.error?.(t('workflow.character.secondary.noModel', '未找到可用模型，请先配置模型'))
+        return
       }
-      const config = providerToAiSdkConfig(actualProvider, secondaryModel)
-      const providerConfigs = [{
-        modelId: secondaryModel.id,
-        providerId: config.providerId,
-        options: config.options
-      }]
 
-      await window.api.novelCharacter.generateSecondary({
-        providerConfigs,
-        outputDir,
-        plotFilePath: selectedCharacterPath,
-        characterName: selectedCharacterName,
-        kind
-      })
+      const setGenerating = kind === 'bio' ? setIsSecondaryBioGenerating : setIsSecondaryMonologueGenerating
+      const isGenerating = kind === 'bio' ? isSecondaryBioGenerating : isSecondaryMonologueGenerating
+      if (isGenerating) return
 
-      // 重新生成属于“覆盖落盘结果”的操作，允许覆盖当前编辑草稿
-      secondaryDraftDirtyRef.current[kind] = false
-      await loadSecondaryFromDisk(kind)
-      stopStageProgress({ finalPercentage: 100 })
-      // 生成完成后留在二次总结阶段；文本展示与编辑由 UI 决定
-      setStep('secondary')
-      window.toast?.success?.(
-        kind === 'bio'
-          ? t('workflow.character.secondary.bioDone', '人物志已生成')
-          : t('workflow.character.secondary.monologueDone', '心理独白已生成')
+      setGenerating(true)
+      const stageLabel = kind === 'bio' ? '生成人物志' : '生成心理独白'
+      startStageProgress(stageLabel)
+      dispatch(
+        updateSessionProgress({
+          type: 'character',
+          progress: { percentage: 70, stage: stageLabel },
+          status: 'processing'
+        })
       )
-    } catch (error: any) {
-      console.error('[CharacterWorkflow] Secondary generation failed:', error)
-      window.toast?.error?.(error?.message || t('workflow.character.secondary.failed', '生成失败'))
-    } finally {
+      try {
+        const actualProvider = getActualProvider(secondaryModel)
+        if (!actualProvider) {
+          throw new Error(`Could not find provider for model: ${secondaryModel.name}`)
+        }
+        const config = providerToAiSdkConfig(actualProvider, secondaryModel)
+        const providerConfigs = [
+          {
+            modelId: secondaryModel.id,
+            providerId: config.providerId,
+            options: config.options
+          }
+        ]
+
+        await window.api.novelCharacter.generateSecondary({
+          providerConfigs,
+          outputDir,
+          plotFilePath: selectedCharacterPath,
+          characterName: selectedCharacterName,
+          kind
+        })
+
+        // 重新生成属于“覆盖落盘结果”的操作，允许覆盖当前编辑草稿
+        secondaryDraftDirtyRef.current[kind] = false
+        await loadSecondaryFromDisk(kind)
+        stopStageProgress({ finalPercentage: 100 })
+        // 生成完成后留在二次总结阶段；文本展示与编辑由 UI 决定
+        setStep('secondary')
+        window.toast?.success?.(
+          kind === 'bio'
+            ? t('workflow.character.secondary.bioDone', '人物志已生成')
+            : t('workflow.character.secondary.monologueDone', '心理独白已生成')
+        )
+      } catch (error: any) {
+        console.error('[CharacterWorkflow] Secondary generation failed:', error)
+        window.toast?.error?.(error?.message || t('workflow.character.secondary.failed', '生成失败'))
+      } finally {
+        stopStageProgress()
+        setGenerating(false)
+      }
+    },
+    [
+      isSecondaryBioGenerating,
+      isSecondaryMonologueGenerating,
+      loadSecondaryFromDisk,
+      dispatch,
+      outputDir,
+      secondaryModel,
+      selectedCharacterName,
+      selectedCharacterPath,
+      startStageProgress,
+      stopStageProgress,
+      t
+    ]
+  )
+
+  const handleGoToTtsStep = useCallback(
+    async (opts?: { updateProgress?: boolean }) => {
+      // 第三阶段不展示内容，只展示参数与来源选择
+      ttsGenerationTokenRef.current += 1
       stopStageProgress()
-      setGenerating(false)
-    }
-  }, [
-    isSecondaryBioGenerating,
-    isSecondaryMonologueGenerating,
-    loadSecondaryFromDisk,
-    dispatch,
-    outputDir,
-    secondaryModel,
-    selectedCharacterName,
-    selectedCharacterPath,
-    startStageProgress,
-    stopStageProgress,
-    t
-  ])
+      setIsTtsGenerating(false)
 
-  const handleGoToTtsStep = useCallback(async (opts?: { updateProgress?: boolean }) => {
-    // 第三阶段不展示内容，只展示参数与来源选择
-    ttsGenerationTokenRef.current += 1
-    stopStageProgress()
-    setIsTtsGenerating(false)
+      // 进入第三阶段前，先将用户编辑的草稿写回文件，避免切换步骤/刷新后回退
+      if (secondaryBioDraft.trim()) {
+        await persistSecondaryDraftToDisk('bio', secondaryBioDraft)
+      }
+      if (secondaryMonologueDraft.trim()) {
+        await persistSecondaryDraftToDisk('monologue', secondaryMonologueDraft)
+      }
 
-    // 进入第三阶段前，先将用户编辑的草稿写回文件，避免切换步骤/刷新后回退
-    if (secondaryBioDraft.trim()) {
-      await persistSecondaryDraftToDisk('bio', secondaryBioDraft)
-    }
-    if (secondaryMonologueDraft.trim()) {
-      await persistSecondaryDraftToDisk('monologue', secondaryMonologueDraft)
-    }
+      // 从二次总结页进入第三阶段时，确保 UI 能立即按来源可用性更新
+      loadSecondaryFromDisk('bio')
+      loadSecondaryFromDisk('monologue')
 
-    // 从二次总结页进入第三阶段时，确保 UI 能立即按来源可用性更新
-    loadSecondaryFromDisk('bio')
-    loadSecondaryFromDisk('monologue')
+      setStepDirection(1)
+      setStep('tts')
 
-    setStepDirection(1)
-    setStep('tts')
+      if (opts?.updateProgress === false) return
 
-    if (opts?.updateProgress === false) return
-
-    dispatch(updateSessionProgress({
-      type: 'character',
-      progress: { percentage: 85, stage: '等待生成语音' },
-      status: 'processing'
-    }))
-  }, [
-    dispatch,
-    loadSecondaryFromDisk,
-    persistSecondaryDraftToDisk,
-    secondaryBioDraft,
-    secondaryMonologueDraft,
-    stopStageProgress
-  ])
+      dispatch(
+        updateSessionProgress({
+          type: 'character',
+          progress: { percentage: 85, stage: '等待生成语音' },
+          status: 'processing'
+        })
+      )
+    },
+    [
+      dispatch,
+      loadSecondaryFromDisk,
+      persistSecondaryDraftToDisk,
+      secondaryBioDraft,
+      secondaryMonologueDraft,
+      stopStageProgress
+    ]
+  )
 
   const handleBackToSecondaryStep = useCallback(() => {
     ttsGenerationTokenRef.current += 1
@@ -1354,11 +1799,13 @@ const CharacterWorkflow: FC = () => {
 
     setIsTtsGenerating(true)
     startStageProgress('生成语音')
-    dispatch(updateSessionProgress({
-      type: 'character',
-      progress: { percentage: 92, stage: '生成语音' },
-      status: 'processing'
-    }))
+    dispatch(
+      updateSessionProgress({
+        type: 'character',
+        progress: { percentage: 92, stage: '生成语音' },
+        status: 'processing'
+      })
+    )
 
     const generationToken = ++ttsGenerationTokenRef.current
 
@@ -1371,17 +1818,31 @@ const CharacterWorkflow: FC = () => {
       if (generationToken !== ttsGenerationTokenRef.current) return
 
       const safeStem = sanitizeSecondaryFileStem(selectedCharacterName)
-      const filename = `${safeStem}_${kind}.mp3`
+      const extension = ttsMode === 'advanced' ? '.wav' : '.mp3'
+      const filename = `${safeStem}_${kind}${extension}`
 
-      const result = await window.api.edgeTTS.generate({
-        text,
-        voice: ttsVoice,
-        rate: ttsRate,
-        pitch: ttsPitch,
-        volume: ttsVolume,
-        outputDir: audioDir,
-        filename
-      })
+      const textFilePath = ttsMode === 'advanced' ? await getSecondaryFilePath(kind) : null
+
+      const result =
+        ttsMode === 'advanced'
+          ? await window.api.advancedTTS.generate({
+              text,
+              textFilePath: textFilePath ?? undefined,
+              voice: advancedTtsVoice,
+              style: advancedTtsStyle || 'general',
+              rate: formatSigned(advancedTtsRateValue),
+              pitch: formatSigned(advancedTtsPitchValue),
+              outputDir: audioDir,
+              filename
+            })
+          : await window.api.edgeTTS.generate({
+              text,
+              voice: ttsVoice,
+              rate: formatSignedPercent(ttsRateValue),
+              pitch: formatSignedPercent(ttsPitchValue),
+              outputDir: audioDir,
+              filename
+            })
       if (generationToken !== ttsGenerationTokenRef.current) return
 
       const audioPath = result?.filePath as string | undefined
@@ -1389,11 +1850,13 @@ const CharacterWorkflow: FC = () => {
         throw new Error('生成成功但未返回音频路径')
       }
 
+      const mime = audioPath.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg'
       const base64 = await window.api.fs.read(audioPath, 'base64')
       if (generationToken !== ttsGenerationTokenRef.current) return
 
       setTtsAudioPath(audioPath)
-      setTtsAudioUrl(`data:audio/mpeg;base64,${base64}`)
+      setTtsAudioUrl(`data:${mime};base64,${base64}`)
+      setTtsAudioMime(mime)
       stopStageProgress({ finalPercentage: 100 })
 
       // 最终结果：渲染音频播放器，并将任务归档为完成
@@ -1421,16 +1884,20 @@ const CharacterWorkflow: FC = () => {
     startStageProgress,
     stopStageProgress,
     t,
-    ttsPitch,
-    ttsRate,
+    ttsMode,
+    advancedTtsStyle,
+    advancedTtsVoice,
+    advancedTtsPitchValue,
+    advancedTtsRateValue,
+    ttsPitchValue,
+    ttsRateValue,
     ttsSourceKind,
-    ttsVoice,
-    ttsVolume
+    ttsVoice
   ])
 
   const handleOpenAudioFile = useCallback(() => {
     if (ttsAudioPath) {
-      window.api.file.openPath(ttsAudioPath)
+      window.api.file.showItemInFolder(ttsAudioPath)
     }
   }, [ttsAudioPath])
 
@@ -1474,7 +1941,7 @@ const CharacterWorkflow: FC = () => {
     return (
       <>
         <DragBar />
-        <div className="flex flex-col items-center justify-center h-full w-full bg-background">
+        <div className="flex h-full w-full flex-col items-center justify-center bg-background">
           <Loader2 size={32} className="animate-spin text-primary" />
         </div>
       </>
@@ -1500,15 +1967,13 @@ const CharacterWorkflow: FC = () => {
           hint={t('workflow.character.processingHint', '请耐心等待，处理完成后将自动显示结果')}
         />
 
-        <div className="w-full max-w-2xl mx-auto flex flex-col items-center gap-8">
+        <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-8">
           {/* 失败状态提示 */}
           {progress.stage === 'failed' && (
             <Card className="w-full border-warning-200 bg-warning-50">
               <CardBody>
-                <div className="text-warning-600 font-semibold mb-2">
-                  ⚠️ 任务失败：部分分块未能生成
-                </div>
-                <div className="text-sm text-foreground/60">
+                <div className="mb-2 font-semibold text-warning-600">⚠️ 任务失败：部分分块未能生成</div>
+                <div className="text-foreground/60 text-sm">
                   已成功处理 {progress.current}/{progress.total} 个分块。
                   系统将在3秒后自动重试，或点击"取消任务"后手动重新开始。
                 </div>
@@ -1516,8 +1981,8 @@ const CharacterWorkflow: FC = () => {
             </Card>
           )}
 
-          <div className="w-full bg-content1/50 rounded-3xl p-8 border border-white/5 backdrop-blur-sm">
-            <div className="w-full max-w-lg mx-auto">
+          <div className="w-full rounded-3xl border border-white/5 bg-content1/50 p-8 backdrop-blur-sm">
+            <div className="mx-auto w-full max-w-lg">
               <div className="mb-6">
                 <Progress
                   aria-label="Extracting progress"
@@ -1529,12 +1994,13 @@ const CharacterWorkflow: FC = () => {
                 />
               </div>
 
-              <div className="text-center space-y-1">
-                <p className="text-lg font-medium text-foreground">
-                  {`少女祈祷中${'.'.repeat(extractDotCount)}`}
-                </p>
-                <p className="text-sm text-foreground/50">
+              <div className="space-y-1 text-center">
+                <p className="font-medium text-foreground text-lg">{`少女祈祷中${'.'.repeat(extractDotCount)}`}</p>
+                <p className="text-foreground/50 text-sm">
                   {t('workflow.elapsed', '已用时 {{time}}', { time: formatElapsed(extractElapsedSeconds) })}
+                </p>
+                <p className="text-foreground/50 text-sm">
+                  {t('workflow.estimatedTotal', '预计用时 {{time}}', { time: formatElapsed(estimatedTotalSeconds) })}
                 </p>
               </div>
             </div>
@@ -1562,7 +2028,13 @@ const CharacterWorkflow: FC = () => {
               direction="right"
               tooltip={t('workflow.character.secondary.generateBio', '生成：人物志')}
               onPress={() => handleGenerateSecondary('bio')}
-              isDisabled={!selectedCharacterName || !selectedCharacterPath || !outputDir || isSecondaryBioGenerating || isSecondaryBioLoading}
+              isDisabled={
+                !selectedCharacterName ||
+                !selectedCharacterPath ||
+                !outputDir ||
+                isSecondaryBioGenerating ||
+                isSecondaryBioLoading
+              }
               isLoading={isSecondaryBioGenerating || isSecondaryBioLoading}
               className="-mt-12"
             />
@@ -1570,7 +2042,13 @@ const CharacterWorkflow: FC = () => {
               direction="right"
               tooltip={t('workflow.character.secondary.generateMonologue', '生成：心理独白')}
               onPress={() => handleGenerateSecondary('monologue')}
-              isDisabled={!selectedCharacterName || !selectedCharacterPath || !outputDir || isSecondaryMonologueGenerating || isSecondaryMonologueLoading}
+              isDisabled={
+                !selectedCharacterName ||
+                !selectedCharacterPath ||
+                !outputDir ||
+                isSecondaryMonologueGenerating ||
+                isSecondaryMonologueLoading
+              }
               isLoading={isSecondaryMonologueGenerating || isSecondaryMonologueLoading}
               className="mt-12"
             />
@@ -1601,12 +2079,11 @@ const CharacterWorkflow: FC = () => {
               isDisabled={
                 isTtsGenerating ||
                 (ttsSourceKind === 'bio'
-                  ? (isSecondaryBioLoading || !secondaryBioDraft.trim())
-                  : (isSecondaryMonologueLoading || !secondaryMonologueDraft.trim()))
+                  ? isSecondaryBioLoading || !secondaryBioDraft.trim()
+                  : isSecondaryMonologueLoading || !secondaryMonologueDraft.trim())
               }
               isLoading={
-                isTtsGenerating ||
-                (ttsSourceKind === 'bio' ? isSecondaryBioLoading : isSecondaryMonologueLoading)
+                isTtsGenerating || (ttsSourceKind === 'bio' ? isSecondaryBioLoading : isSecondaryMonologueLoading)
               }
               color="primary"
               icon={<Mic size={28} />}
@@ -1634,16 +2111,13 @@ const CharacterWorkflow: FC = () => {
     stepContent = (
       <WorkflowLayout nav={navButtons}>
         {step === 'secondary' && (
-          <div className="w-full flex flex-col items-center gap-10">
-            <StepHeader
-              title={t('workflow.character.stage2.title', '第二阶段：二次总结')}
-              hint={t('workflow.character.stage2.hint', '不展示提取完成页，直接进入二次生成')}
-            />
+          <div className="flex w-full flex-col items-center gap-10">
+            <StepHeader title={t('workflow.character.stage2.title', '第二阶段：二次总结')} />
 
-            {showCharacterPicker && (
-              isSecondaryInitial ? (
+            {showCharacterPicker &&
+              (isSecondaryInitial ? (
                 // Initial View
-                <div className="flex flex-col items-center justify-center w-full max-w-2xl gap-8 mt-4">
+                <div className="mt-4 flex w-full max-w-2xl flex-col items-center justify-center gap-8">
                   <div className="w-full max-w-xs">
                     <Select
                       aria-label={t('workflow.character.result.selectCharacter', '选择人物')}
@@ -1658,8 +2132,8 @@ const CharacterWorkflow: FC = () => {
                       radius="full"
                       size="lg"
                       classNames={{
-                        trigger: "h-14 bg-content2/50 hover:bg-content2 transition-colors",
-                        value: "text-center font-medium text-lg",
+                        trigger: 'h-14 bg-content2/50 hover:bg-content2 transition-colors',
+                        value: 'text-center font-medium text-lg'
                       }}
                       isDisabled={isCharacterListLoading || characterTxtFiles.length === 0}
                       popoverProps={{
@@ -1672,13 +2146,12 @@ const CharacterWorkflow: FC = () => {
                             {item.textValue}
                           </div>
                         ))
-                      }}
-                    >
+                      }}>
                       {characterTxtFiles.map((f) => {
                         const name = f.name.replace(/\.txt$/i, '')
                         return (
                           <SelectItem key={f.path} textValue={name}>
-                            <div className="text-center w-full">{name}</div>
+                            <div className="w-full text-center">{name}</div>
                           </SelectItem>
                         )
                       })}
@@ -1686,17 +2159,16 @@ const CharacterWorkflow: FC = () => {
                   </div>
 
                   {!isCharacterListLoading && characterTxtFiles.length === 0 && (
-                    <div className="text-sm text-foreground/40 text-center">
+                    <div className="text-center text-foreground/40 text-sm">
                       {t('workflow.character.result.noCharacters', '未找到人物 TXT')}
                     </div>
                   )}
-
                 </div>
               ) : (
                 // Standard View
                 <div className="w-full max-w-3xl space-y-6">
                   {stageProgress && (
-                    <Card className="w-full mb-4">
+                    <Card className="mb-4 w-full">
                       <CardBody className="py-6">
                         <ProgressDisplay
                           percentage={stageProgress.percentage}
@@ -1709,26 +2181,25 @@ const CharacterWorkflow: FC = () => {
                   )}
 
                   <div className="flex flex-col items-center gap-4">
-                    <div className="p-1.5 bg-content2/30 rounded-2xl border border-white/5 backdrop-blur-sm">
+                    <div className="rounded-2xl border border-white/5 bg-content2/30 p-1.5 backdrop-blur-sm">
                       <Tabs
                         size="lg"
                         selectedKey={secondaryKind}
                         onSelectionChange={(key) => setSecondaryKind(key as SecondaryKind)}
                         variant="light"
                         classNames={{
-                          tabList: "gap-2",
-                          cursor: "bg-background shadow-sm",
-                          tab: "h-9 px-6",
-                          tabContent: "group-data-[selected=true]:text-primary font-medium"
-                        }}
-                      >
+                          tabList: 'gap-2',
+                          cursor: 'bg-background shadow-sm',
+                          tab: 'h-9 px-6',
+                          tabContent: 'group-data-[selected=true]:text-primary font-medium'
+                        }}>
                         <Tab key="bio" title={t('workflow.character.secondary.bio', '人物志')} />
                         <Tab key="monologue" title={t('workflow.character.secondary.monologue', '心理独白')} />
                       </Tabs>
                     </div>
 
                     <div className="flex items-center justify-center gap-4 py-2">
-                      <div className="bg-content2/30 rounded-2xl border border-white/5 backdrop-blur-sm p-1">
+                      <div className="rounded-2xl border border-white/5 bg-content2/30 p-1 backdrop-blur-sm">
                         <Select
                           aria-label={t('workflow.character.result.selectCharacter', '选择人物')}
                           placeholder={t('workflow.character.result.selectCharacter', '选择人物')}
@@ -1740,15 +2211,14 @@ const CharacterWorkflow: FC = () => {
                           isDisabled={isCharacterListLoading || characterTxtFiles.length === 0}
                           popoverProps={{ classNames: { content: 'z-[200]' } }}
                           classNames={{
-                            trigger: "bg-transparent shadow-none hover:bg-content2/50 min-h-unit-8 h-8",
-                            value: "text-center font-medium"
-                          }}
-                        >
+                            trigger: 'bg-transparent shadow-none hover:bg-content2/50 min-h-unit-8 h-8',
+                            value: 'text-center font-medium'
+                          }}>
                           {characterTxtFiles.map((f) => {
                             const name = f.name.replace(/\.txt$/i, '')
                             return (
                               <SelectItem key={f.path} textValue={name}>
-                                <div className="text-center w-full">{name}</div>
+                                <div className="w-full text-center">{name}</div>
                               </SelectItem>
                             )
                           })}
@@ -1762,22 +2232,25 @@ const CharacterWorkflow: FC = () => {
                         startContent={<Sparkles size={14} />}
                         isLoading={
                           secondaryKind === 'bio'
-                            ? (isSecondaryBioGenerating || isSecondaryBioLoading)
-                            : (isSecondaryMonologueGenerating || isSecondaryMonologueLoading)
+                            ? isSecondaryBioGenerating || isSecondaryBioLoading
+                            : isSecondaryMonologueGenerating || isSecondaryMonologueLoading
                         }
                         isDisabled={!selectedCharacterPath || !outputDir}
                         onPress={() => handleGenerateSecondary(secondaryKind)}
-                        className="h-10 px-6 rounded-xl"
-                      >
+                        className="h-10 rounded-xl px-6">
                         {secondaryKind === 'bio'
-                          ? (secondaryBioText ? t('workflow.character.secondary.regenerate', '重新生成') : t('workflow.character.secondary.generate', '生成'))
-                          : (secondaryMonologueText ? t('workflow.character.secondary.regenerate', '重新生成') : t('workflow.character.secondary.generate', '生成'))}
+                          ? secondaryBioText
+                            ? t('workflow.character.secondary.regenerate', '重新生成')
+                            : t('workflow.character.secondary.generate', '生成')
+                          : secondaryMonologueText
+                            ? t('workflow.character.secondary.regenerate', '重新生成')
+                            : t('workflow.character.secondary.generate', '生成')}
                       </Button>
                     </div>
                   </div>
 
                   {/* Editable Result Box - Matches OutlineWorkflow style */}
-                  <Card className="w-full max-w-3xl relative group">
+                  <Card className="group relative w-full max-w-3xl">
                     <CardBody className="p-0">
                       <Textarea
                         minRows={6}
@@ -1786,13 +2259,15 @@ const CharacterWorkflow: FC = () => {
                         onValueChange={(v) => setSecondaryDraft(secondaryKind, v)}
                         placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
                         classNames={{
-                          base: "w-full h-full",
-                          inputWrapper: "h-full !bg-transparent !shadow-none hover:!bg-transparent focus-within:!bg-transparent data-[hover=true]:!bg-transparent group-data-[focus=true]:!bg-transparent !ring-0 !ring-offset-0 !outline-none !border-none p-6 !rounded-none",
-                          input: "h-full !text-sm !leading-[1.75] text-foreground/80 font-normal !pr-2 !outline-none !ring-0 focus:!ring-0 placeholder:text-foreground/30 caret-primary"
+                          base: 'w-full h-full',
+                          inputWrapper:
+                            'h-full !bg-transparent !shadow-none hover:!bg-transparent focus-within:!bg-transparent data-[hover=true]:!bg-transparent group-data-[focus=true]:!bg-transparent !ring-0 !ring-offset-0 !outline-none !border-none p-6 !rounded-none',
+                          input:
+                            'h-full !text-sm !leading-[1.75] text-foreground/80 font-normal !pr-2 !outline-none !ring-0 focus:!ring-0 placeholder:text-foreground/30 caret-primary'
                         }}
                       />
                     </CardBody>
-                    {((secondaryKind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft).trim()) && (
+                    {(secondaryKind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft).trim() && (
                       <FullscreenResultViewer
                         content={secondaryKind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft}
                         kind="text"
@@ -1802,7 +2277,9 @@ const CharacterWorkflow: FC = () => {
                           secondaryKind === 'bio'
                             ? t('workflow.character.secondary.bio', '人物志')
                             : t('workflow.character.secondary.monologue', '心理独白')
-                        ].filter(Boolean).join(' · ')}
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
                         onSave={(newContent) => {
                           if (secondaryKind === 'bio') {
                             setSecondaryBioDraft(newContent)
@@ -1814,41 +2291,62 @@ const CharacterWorkflow: FC = () => {
                     )}
                   </Card>
                 </div>
-              )
-            )}
+              ))}
           </div>
         )}
 
         {step === 'tts' && (
-          <div className="w-full flex flex-col items-center gap-8">
-            <StepHeader
-              title={t('workflow.character.stage3.actions', '生成语音 (mp3)')}
-              hint={t('workflow.character.stage3.actionsHint', '仅展示音频参数与来源选择，不展示具体内容')}
-            />
+          <div className="flex w-full flex-col items-center gap-8">
+            <StepHeader title={t('workflow.character.stage3.actions', '声音设置')} />
 
             {/* Controls: Tabs & Character Select */}
-            <div className={`flex flex-col items-center gap-4 ${isTtsGenerating ? 'pointer-events-none opacity-60' : ''}`}>
+            <div
+              className={`flex flex-col items-center gap-4 ${isTtsGenerating ? 'pointer-events-none opacity-60' : ''}`}>
+              {/* Tabs for Mode */}
+              <div className="rounded-2xl border border-white/5 bg-content2/30 p-1.5 backdrop-blur-sm">
+                <Tabs
+                  size="lg"
+                  selectedKey={ttsMode}
+                  onSelectionChange={(key) => {
+                    if (!allowAdvanced && key === 'advanced') return
+                    setTtsMode(key as 'normal' | 'advanced')
+                    // 切换模式时重置筛选，避免沿用上一个模式的筛选导致“区域/音色”跳动
+                    setLanguageFilter('zh')
+                    setRegionFilter('all')
+                    setGenderFilter('all')
+                  }}
+                  variant="light"
+                  classNames={{
+                    tabList: 'gap-2',
+                    cursor: 'bg-background shadow-sm',
+                    tab: 'h-9 px-6',
+                    tabContent: 'group-data-[selected=true]:text-primary font-medium'
+                  }}>
+                  <Tab key="normal" title={t('workflow.tts.mode.normal', '普通版')} />
+                  {allowAdvanced && <Tab key="advanced" title={t('workflow.tts.mode.advanced', '高级版')} />}
+                </Tabs>
+              </div>
+
               {/* Tabs for Source */}
-              <div className="p-1.5 bg-content2/30 rounded-2xl border border-white/5 backdrop-blur-sm">
+              <div className="rounded-2xl border border-white/5 bg-content2/30 p-1.5 backdrop-blur-sm">
                 <Tabs
                   size="lg"
                   selectedKey={ttsSourceKind}
                   onSelectionChange={(key) => setTtsSourceKind(key as 'bio' | 'monologue')}
                   variant="light"
                   classNames={{
-                    tabList: "gap-2",
-                    cursor: "bg-background shadow-sm",
-                    tab: "h-9 px-6",
-                    tabContent: "group-data-[selected=true]:text-primary font-medium"
-                  }}
-                >
+                    tabList: 'gap-2',
+                    cursor: 'bg-background shadow-sm',
+                    tab: 'h-9 px-6',
+                    tabContent: 'group-data-[selected=true]:text-primary font-medium'
+                  }}>
                   <Tab key="bio" title={t('workflow.character.secondary.bio', '人物志')} />
                   <Tab key="monologue" title={t('workflow.character.secondary.monologue', '心理独白')} />
                 </Tabs>
               </div>
 
               {/* Character Selector */}
-              <div className="bg-content2/30 rounded-2xl border border-white/5 backdrop-blur-sm p-1">
+              <div className="rounded-2xl border border-white/5 bg-content2/30 p-1 backdrop-blur-sm">
                 <Select
                   aria-label={t('workflow.character.result.selectCharacter', '选择人物')}
                   placeholder={t('workflow.character.result.selectCharacter', '选择人物')}
@@ -1860,15 +2358,14 @@ const CharacterWorkflow: FC = () => {
                   isDisabled={isTtsGenerating || isCharacterListLoading || characterTxtFiles.length === 0}
                   popoverProps={{ classNames: { content: 'z-[200]' } }}
                   classNames={{
-                    trigger: "bg-transparent shadow-none hover:bg-content2/50 min-h-unit-8 h-8",
-                    value: "text-center font-medium"
-                  }}
-                >
+                    trigger: 'bg-transparent shadow-none hover:bg-content2/50 min-h-unit-8 h-8',
+                    value: 'text-center font-medium'
+                  }}>
                   {characterTxtFiles.map((f) => {
                     const name = f.name.replace(/\.txt$/i, '')
                     return (
                       <SelectItem key={f.path} textValue={name}>
-                        <div className="text-center w-full">{name}</div>
+                        <div className="w-full text-center">{name}</div>
                       </SelectItem>
                     )
                   })}
@@ -1877,97 +2374,61 @@ const CharacterWorkflow: FC = () => {
             </div>
 
             {/* Configuration Card */}
-            <Card className="w-full max-w-2xl bg-content1/50 border border-white/5 shadow-sm backdrop-blur-md">
-              <CardBody className="p-8 space-y-8">
-                <Select
-                  label={t('workflow.tts.voice', '选择语音')}
-                  selectedKeys={[ttsVoice]}
-                  onChange={(e) => setTtsVoice(e.target.value)}
-                  variant="flat"
-                  labelPlacement="outside"
-                  placeholder="选择一个语音"
-                  isDisabled={isTtsGenerating}
-                  classNames={{
-                    trigger: "bg-content2/50 hover:bg-content2/80 transition-colors h-12",
-                    value: "text-base"
-                  }}
-                  popoverProps={{
-                    portalContainer: popoverPortalContainer,
-                    classNames: { content: 'z-[200]' }
-                  }}
-                >
-                  {ttsVoices.map((v) => (
-                    <SelectItem key={v.value}>
-                      {v.label}
-                    </SelectItem>
-                  ))}
-                </Select>
-
-                <div className="grid grid-cols-2 gap-6">
-                  <Input
-                    label={t('workflow.tts.rate', '语速 (Rate)')}
-                    value={ttsRate}
-                    onValueChange={setTtsRate}
-                    placeholder="+0%"
-                    variant="flat"
-                    labelPlacement="outside"
-                    isDisabled={isTtsGenerating}
-                    classNames={{
-                      inputWrapper: "bg-content2/50 hover:bg-content2/80 transition-colors h-12"
-                    }}
-                  />
-                  <Input
-                    label={t('workflow.tts.pitch', '音调 (Pitch)')}
-                    value={ttsPitch}
-                    onValueChange={setTtsPitch}
-                    placeholder="+0Hz"
-                    variant="flat"
-                    labelPlacement="outside"
-                    isDisabled={isTtsGenerating}
-                    classNames={{
-                      inputWrapper: "bg-content2/50 hover:bg-content2/80 transition-colors h-12"
-                    }}
-                  />
-                </div>
-
-                <Input
-                  label={t('workflow.tts.volume', '音量 (Volume)')}
-                  value={ttsVolume}
-                  onValueChange={setTtsVolume}
-                  placeholder="+0%"
-                  variant="flat"
-                  labelPlacement="outside"
-                  isDisabled={isTtsGenerating}
-                  classNames={{
-                    inputWrapper: "bg-content2/50 hover:bg-content2/80 transition-colors h-12"
-                  }}
-                />
-              </CardBody>
-            </Card>
+            <TtsVoiceConfigCard
+              isGenerating={isTtsGenerating}
+              ttsMode={ttsMode}
+              portalContainer={popoverPortalContainer}
+              voiceLoadError={voiceLoadError}
+              isLoadingVoices={isLoadingVoices}
+              languageFilter={languageFilter}
+              setLanguageFilter={setLanguageFilter}
+              regionFilter={regionFilter}
+              setRegionFilter={setRegionFilter}
+              genderFilter={genderFilter}
+              setGenderFilter={setGenderFilter}
+              languageSelectItems={languageSelectItems}
+              regionSelectItems={regionSelectItems}
+              genderSelectItems={genderSelectItems}
+              filteredVoices={filteredVoices}
+              activeVoice={activeVoice}
+              setActiveVoice={setActiveVoice}
+              advancedStyle={advancedTtsStyle}
+              setAdvancedStyle={setAdvancedTtsStyle}
+              styleOptions={styleOptions}
+              isLoadingStyles={isLoadingStyles}
+              rateValue={ttsRateValue}
+              setRateValue={setTtsRateValue}
+              pitchValue={ttsPitchValue}
+              setPitchValue={setTtsPitchValue}
+              advancedRateValue={advancedTtsRateValue}
+              setAdvancedRateValue={setAdvancedTtsRateValue}
+              advancedPitchValue={advancedTtsPitchValue}
+              setAdvancedPitchValue={setAdvancedTtsPitchValue}
+            />
           </div>
         )}
 
         {step === 'done' && (
-          <div className="w-full flex flex-col items-center gap-10">
+          <div className="flex w-full flex-col items-center gap-10">
             <StepHeader
               title={t('workflow.character.stage4.title', '最终结果：语音')}
-              hint={t('workflow.character.stage4.hint', '已生成 mp3，可直接播放')}
+              hint={t('workflow.character.stage4.hint', '已生成音频，可直接播放')}
             />
 
-            <Card className="w-full max-w-2xl bg-success-50 border-success-200 shadow-sm">
-              <CardBody className="p-8 space-y-6">
-                <div className="flex items-center justify-center gap-2 text-success-700 font-medium text-lg">
+            <Card className="w-full max-w-2xl border-success-200 bg-success-50 shadow-sm">
+              <CardBody className="space-y-6 p-8">
+                <div className="flex items-center justify-center gap-2 font-medium text-lg text-success-700">
                   <Play size={24} />
                   {t('workflow.tts.result', '生成结果')}
                 </div>
 
                 {ttsAudioUrl ? (
                   <audio controls preload="metadata" className="w-full">
-                    <source src={ttsAudioUrl} type="audio/mpeg" />
-                    {ttsAudioPath && <source src={toFileUrl(ttsAudioPath)} type="audio/mpeg" />}
+                    <source src={ttsAudioUrl} type={ttsAudioMime} />
+                    {ttsAudioPath && <source src={toFileUrl(ttsAudioPath)} type={ttsAudioMime} />}
                   </audio>
                 ) : (
-                  <div className="text-sm text-foreground/50 text-center">
+                  <div className="text-center text-foreground/50 text-sm">
                     {t('workflow.tts.noAudioPreview', '音频已生成，但预览加载失败；可打开文件位置播放')}
                   </div>
                 )}
@@ -1979,15 +2440,10 @@ const CharacterWorkflow: FC = () => {
                     startContent={<Download size={18} />}
                     isDisabled={!ttsAudioPath}
                     onPress={handleOpenAudioFile}
-                    className="h-12 px-6"
-                  >
+                    className="h-12 px-6">
                     {t('workflow.tts.openFile', '打开文件位置')}
                   </Button>
-                  <Button
-                    variant="bordered"
-                    onPress={() => setStep('tts')}
-                    className="h-12 px-6"
-                  >
+                  <Button variant="bordered" onPress={() => setStep('tts')} className="h-12 px-6">
                     {t('workflow.tts.regenerate', '重新生成语音')}
                   </Button>
                 </div>
@@ -2015,34 +2471,35 @@ const CharacterWorkflow: FC = () => {
           title={t('workflow.character.title', '生成人物志')}
           hint={t('workflow.character.configHint', '选择模型和小说文件，开始提取人物信息')}
         />
-        <p className="text-xs text-foreground/30 font-mono tracking-wide uppercase text-center -mt-4 mb-8">
-          {t('workflow.character.settings', '分块方式: 按章节 | 目标字数: ~15万字/块')}
-        </p>
 
         <GlassContainer className="space-y-8">
-          <ModelSelector selectedModel={selectedModel} onModelSelect={setSelectedModel} />
+          <ModelSelector
+            selectedModel={selectedModel}
+            onModelSelect={setSelectedModel}
+            storageKey="workflow.modelSelector.last.character.v1"
+          />
           <NovelPicker selectedFile={selectedFile} onFileSelect={setSelectedFile} />
 
           {/* Target character mode */}
           <div className="w-full">
-            <label className="text-sm font-medium text-foreground/70 mb-2 block">
+            <label className="mb-2 block font-medium text-foreground/70 text-sm">
               {t('workflow.character.targetMode', '指定人物（可选）')}
             </label>
-            <Card className="w-full bg-content1/50 border border-white/5 shadow-sm">
-              <CardBody className="p-4 space-y-4">
+            <Card className="w-full border border-white/5 bg-content1/50 shadow-sm">
+              <CardBody className="space-y-4 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-foreground/80">
+                      <span className="font-medium text-foreground/80 text-sm">
                         {t('workflow.character.targetModeLabel', '仅分析指定人物')}
                       </span>
                       <Tooltip content={t('workflow.character.targetModeTip', '只分析指定人物的剧情')}>
-                        <span className="inline-flex items-center text-foreground/40 cursor-help">
+                        <span className="inline-flex cursor-help items-center text-foreground/40">
                           <Info size={14} />
                         </span>
                       </Tooltip>
                     </div>
-                    <p className="text-xs text-foreground/50">
+                    <p className="text-foreground/50 text-xs">
                       {t('workflow.character.targetModeHint', '开启后需要填写人物名称，否则无法开始任务')}
                     </p>
                   </div>
@@ -2070,7 +2527,7 @@ const CharacterWorkflow: FC = () => {
                           if (e.key === 'Enter') handleAddCharacter()
                         }}
                         classNames={{
-                          inputWrapper: "bg-content2/50 hover:bg-content2/70 focus-within:bg-content2/70"
+                          inputWrapper: 'bg-content2/50 hover:bg-content2/70 focus-within:bg-content2/70'
                         }}
                         className="flex-1"
                         variant="flat"
@@ -2081,8 +2538,7 @@ const CharacterWorkflow: FC = () => {
                         className="h-10"
                         startContent={<Plus size={14} />}
                         onPress={handleAddCharacter}
-                        isDisabled={!newCharacterName.trim()}
-                      >
+                        isDisabled={!newCharacterName.trim()}>
                         {t('workflow.character.targetAdd', '添加')}
                       </Button>
                     </div>
@@ -2090,13 +2546,17 @@ const CharacterWorkflow: FC = () => {
                     {targetCharacters.length > 0 ? (
                       <div className="flex flex-wrap gap-1.5">
                         {targetCharacters.map((char, index) => (
-                          <Chip key={`${char}-${index}`} onClose={() => handleRemoveCharacter(index)} size="sm" variant="flat">
+                          <Chip
+                            key={`${char}-${index}`}
+                            onClose={() => handleRemoveCharacter(index)}
+                            size="sm"
+                            variant="flat">
                             {char}
                           </Chip>
                         ))}
                       </div>
                     ) : (
-                      <div className="text-xs text-foreground/40">
+                      <div className="text-foreground/40 text-xs">
                         {t('workflow.character.targetEmpty', '请添加要分析的人物')}
                       </div>
                     )}

@@ -476,6 +476,7 @@ export function registerIpc(mainWindow: BrowserWindow, app: Electron.App) {
   // file
   ipcMain.handle(IpcChannel.File_Open, fileManager.open.bind(fileManager))
   ipcMain.handle(IpcChannel.File_OpenPath, fileManager.openPath.bind(fileManager))
+  ipcMain.handle(IpcChannel.File_ShowItemInFolder, fileManager.showItemInFolder.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Save, fileManager.save.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Select, fileManager.selectFile.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Upload, fileManager.uploadFile.bind(fileManager))
@@ -945,8 +946,25 @@ export function registerIpc(mainWindow: BrowserWindow, app: Electron.App) {
   // )
 
   // Edge TTS
+  ipcMain.handle(IpcChannel.EdgeTTS_ListVoices, async () => {
+    const { edgeTTSService } = await import('./services/EdgeTTSService')
+    return edgeTTSService.listVoices()
+  })
   ipcMain.handle(IpcChannel.EdgeTTS_Generate, async (_, options) => {
     const { edgeTTSService } = await import('./services/EdgeTTSService')
     return edgeTTSService.generate(options)
+  })
+  // Advanced TTS (tts.exe)
+  ipcMain.handle(IpcChannel.AdvancedTTS_Generate, async (_, options) => {
+    const { advancedTTSService } = await import('./services/AdvancedTTSService')
+    return advancedTTSService.generate(options)
+  })
+  ipcMain.handle(IpcChannel.AdvancedTTS_ListVoices, async () => {
+    const { advancedTTSService } = await import('./services/AdvancedTTSService')
+    return advancedTTSService.listVoices()
+  })
+  ipcMain.handle(IpcChannel.AdvancedTTS_GetVoiceStyles, async (_, voice: string) => {
+    const { advancedTTSService } = await import('./services/AdvancedTTSService')
+    return advancedTTSService.getVoiceStyles(voice)
   })
 }

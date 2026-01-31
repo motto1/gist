@@ -18,6 +18,7 @@ import {
   Languages,
   LayoutGrid,
   MessageSquareQuote,
+  Mic,
   NotepadText,
   Palette,
   Scissors,
@@ -128,6 +129,7 @@ const SidebarIconsManager: FC<SidebarIconsManagerProps> = ({
         files: <Folder size={16} />,
         code_tools: <Code size={16} />,
         novel_compress: <Scissors size={16} />,
+        tts: <Mic size={16} />,
         notes: <NotepadText size={16} />
       }),
       []
@@ -282,7 +284,6 @@ const EmptyPlaceholder = styled.div`
 `
 
 export default SidebarIconsManager
-
 
 
 

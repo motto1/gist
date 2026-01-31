@@ -679,6 +679,7 @@ export type SidebarIcon =
   | 'code_tools'
   | 'novel_compress'
   | 'novel_character'
+  | 'tts'
   | 'notes'
   | 'text_editor'
 
@@ -1263,7 +1264,6 @@ type PromptParams = BaseParams & {
 }
 
 export type FetchChatCompletionParams = MessagesParams | PromptParams
-
 
 
 

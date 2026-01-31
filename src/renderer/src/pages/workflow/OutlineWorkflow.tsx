@@ -19,6 +19,7 @@ import FullscreenResultViewer from './components/FullscreenResultViewer'
 import ModelSelector from './components/ModelSelector'
 import NovelPicker, { SelectedFile } from './components/NovelPicker'
 import WorkflowStepMotion from './components/WorkflowStepMotion'
+import { estimateProgressPercent, estimateSecondsFromChars } from './utils/estimateTime'
 
 type WorkflowStep = 'config' | 'processing' | 'complete'
 
@@ -131,6 +132,7 @@ const OutlineWorkflow: FC = () => {
 
   // Check if can start
   const canStart = selectedModel !== null && selectedFile !== null
+  const estimatedTotalSeconds = estimateSecondsFromChars(activeSession?.inputCharCount ?? 0)
 
   // 追踪是否已完成首次恢复
   const hasRestoredRef = useRef(false)
@@ -394,6 +396,12 @@ const OutlineWorkflow: FC = () => {
         return
       }
 
+      const fileContent = await window.api.fs.readText(selectedFile.path)
+      if (!fileContent) {
+        console.error('Failed to read file content')
+        return
+      }
+
       // Get book folder (parent of content.txt)
       const bookDir = await window.api.path.dirname(selectedFile.path)
 
@@ -415,6 +423,7 @@ const OutlineWorkflow: FC = () => {
           bookId: selectedFile.id,
           bookTitle: selectedFile.origin_name || selectedFile.name || '未命名',
           bookPath: selectedFile.path,
+          inputCharCount: fileContent.length,
           modelId: selectedModel.id,
           modelName: selectedModel.name,
           outputDir: outlineDir,
@@ -698,20 +707,28 @@ const OutlineWorkflow: FC = () => {
       return
     }
 
-    processStartMsRef.current = Date.now()
-    setProcessElapsedSeconds(0)
+    const startedAtMs = (() => {
+      try {
+        const iso = activeSession?.startedAt
+        if (!iso) return 0
+        const ms = new Date(iso).getTime()
+        return Number.isNaN(ms) ? 0 : ms
+      } catch {
+        return 0
+      }
+    })()
 
-    let pct = 0
-    setProcessPseudoPercentage(pct)
-    processPseudoTimerRef.current = window.setInterval(() => {
-      pct = Math.min(92, pct + Math.max(1, Math.round(Math.random() * 6)))
-      setProcessPseudoPercentage(pct)
-    }, 450)
+    processStartMsRef.current = processStartMsRef.current || startedAtMs || Date.now()
+    const initialElapsedSeconds = Math.max(0, Math.floor((Date.now() - processStartMsRef.current) / 1000))
+    setProcessElapsedSeconds(initialElapsedSeconds)
+    setProcessPseudoPercentage(estimateProgressPercent(initialElapsedSeconds, estimatedTotalSeconds))
 
     processElapsedTimerRef.current = window.setInterval(() => {
       const start = processStartMsRef.current
       if (!start) return
-      setProcessElapsedSeconds(Math.floor((Date.now() - start) / 1000))
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - start) / 1000))
+      setProcessElapsedSeconds(elapsedSeconds)
+      setProcessPseudoPercentage(estimateProgressPercent(elapsedSeconds, estimatedTotalSeconds))
     }, 1000)
 
     const pattern = [1, 2, 3, 2, 1]
@@ -725,7 +742,7 @@ const OutlineWorkflow: FC = () => {
     return () => {
       stopAll()
     }
-  }, [progress.stage, step])
+  }, [activeSession?.startedAt, estimatedTotalSeconds, progress.stage, step])
 
   // Return to home
   const handleReturnHome = useCallback(() => {
@@ -822,6 +839,9 @@ const OutlineWorkflow: FC = () => {
               <p className="text-sm text-foreground/50">
                 {t('workflow.elapsed', '已用时 {{time}}', { time: formatElapsed(processElapsedSeconds) })}
               </p>
+              <p className="text-sm text-foreground/50">
+                {t('workflow.estimatedTotal', '预计用时 {{time}}', { time: formatElapsed(estimatedTotalSeconds) })}
+              </p>
             </div>
           </div>
 
@@ -905,12 +925,12 @@ const OutlineWorkflow: FC = () => {
           hint={t('workflow.outline.configHint', '选择模型和小说文件，开始生成故事大纲')}
         />
 
-        <p className="text-xs text-foreground/30 font-mono tracking-wide uppercase text-center -mt-4 mb-8">
-          {t('workflow.outline.settings', '分块方式: 按字数强制分块 | 分块大小: 15万字')}
-        </p>
-
         <GlassContainer className="space-y-8">
-          <ModelSelector selectedModel={selectedModel} onModelSelect={setSelectedModel} />
+          <ModelSelector
+            selectedModel={selectedModel}
+            onModelSelect={setSelectedModel}
+            storageKey="workflow.modelSelector.last.outline.v1"
+          />
           <NovelPicker selectedFile={selectedFile} onFileSelect={setSelectedFile} />
         </GlassContainer>
       </WorkflowLayout>

@@ -168,6 +168,7 @@ const sidebarIconKeyMap = {
   novel_compress: 'novel.title',
   novel_character: 'novelCharacter.title',
   novel_outline: 'novelOutline.title',
+  tts: 'tts.title',
   notes: 'notes.title',
   text_editor: 'textEditor.title'
 } as const
@@ -344,4 +345,3 @@ export const getBuiltinOcrProviderLabel = (key: BuiltinOcrProviderId) => {
   else if (key == 'paddleocr') return 'PaddleOCR'
   else return getLabel(builtinOcrProviderKeyMap, key)
 }
-

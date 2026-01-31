@@ -2555,6 +2555,25 @@ const migrateConfig = {
       logger.error('migrate 160 error', error as Error)
       return state
     }
+  },
+  '161': (state: RootState) => {
+    try {
+      if (!state.settings.sidebarIcons) {
+        state.settings.sidebarIcons = {
+          visible: DEFAULT_SIDEBAR_ICONS,
+          disabled: []
+        }
+        return state
+      }
+      const icons = state.settings.sidebarIcons
+      if (!icons.visible.includes('tts') && !icons.disabled.includes('tts')) {
+        icons.visible.push('tts')
+      }
+      return state
+    } catch (error) {
+      logger.error('migrate 161 error', error as Error)
+      return state
+    }
   }
 }
 
@@ -2564,6 +2583,5 @@ const migrateConfig = {
 const migrate = createMigrate(migrateConfig as any)
 
 export default migrate
-
 
 
