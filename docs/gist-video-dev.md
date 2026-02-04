@@ -1,13 +1,13 @@
-﻿# 视频解说：本地编译与调试指南（无内置产物）
+﻿# 视频解说：本地编译与调试指南
 
-> 本仓库默认 **不提交** `resources/gist-video/`（包含后端代码/可执行文件、FFmpeg、模型等）。  
-> 因此要在开发环境完整使用「视频解说」，需要按本文档准备这些资源。
+> 本仓库当前 **已提交** `resources/gist-video/`（包含后端源码/可执行文件、FFmpeg、模型等），因此大多数情况下无需额外下载即可直接开发与调试。  
+> 如果你出于合规/体积考虑自行移除了其中的二进制/模型，请按本文档的“缺失资源补齐”章节处理。
 
 ## 0. 你将得到什么
 
 - `yarn dev` 可正常启动并编译整个 Electron 应用
 - 「视频解说」页面可启动本地后端（Python 模式），并完成素材库建库/一键成片等流程
-- 模型文件不在仓库中：需要**联系作者**获取（否则部分能力会降级或不可用）
+- 若模型缺失（例如你本地删除/未同步），需要**联系作者**获取（否则部分能力会降级或不可用）
 
 ## 1. 基础准备（Windows 优先）
 
@@ -33,24 +33,19 @@ GIST_VIDEO_PYTHON="F:/gist/resources/gist-video/backend/.venv/Scripts/python.exe
 #GIST_VIDEO_PORT=37123
 ```
 
-## 3. 准备 `resources/gist-video/backend`（必做）
+## 3. 后端资源目录确认（必做）
 
-你需要获取作者提供的 **gist-video 后端源码包**，并解压到：
-
-```
-resources/gist-video/backend/
-```
-
-最低要求：该目录内必须存在以下“标记文件/目录”，否则主进程无法识别后端根目录：
+最低要求：`resources/gist-video/backend/` 内必须存在以下“标记文件/目录”，否则主进程无法识别后端根目录：
 
 ```
 resources/gist-video/backend/app/server/__main__.py
 resources/gist-video/backend/requirements-dev.txt
 ```
 
-## 4. 准备 FFmpeg（必做）
+## 4. FFmpeg（必做）
 
-下载 FFmpeg 精简版 exe 后，把文件放到：
+仓库已包含 FFmpeg 精简版 exe 时，可跳过本节。  
+若缺失，请下载 FFmpeg 精简版 exe，并把文件放到：
 
 ```
 resources/gist-video/backend/bin/ffmpeg.exe
@@ -63,9 +58,9 @@ resources/gist-video/backend/bin/ffprobe.exe
 .\resources\gist-video\backend\bin\ffmpeg.exe -version
 ```
 
-## 5. 准备模型（可选，但影响功能）
+## 5. 模型（可选，但影响功能）
 
-模型与部分资源 **不在仓库中**，请联系作者获取并放到作者指定的目录。  
+如果模型与相关资源缺失，请联系作者获取并放到作者指定的目录。  
 如果缺少模型：
 - “向量化/检索”可能会降级（例如回退到轻量 local_hash），召回效果会变差
 - 某些功能可能直接不可用（取决于后端实现）
