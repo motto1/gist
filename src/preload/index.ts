@@ -29,7 +29,7 @@ import {
   ThemeMode,
   WebDavConfig
 } from '@types'
-import { contextBridge, ipcRenderer, OpenDialogOptions, shell, webUtils } from 'electron'
+import { contextBridge, ipcRenderer, OpenDialogOptions, SaveDialogOptions, shell, webUtils } from 'electron'
 import { CreateDirectoryOptions } from 'webdav'
 
 import type { ActionItem } from '../renderer/src/types/selectionTypes'
@@ -152,6 +152,8 @@ const api = {
   file: {
     select: (options?: OpenDialogOptions): Promise<FileMetadata[] | null> =>
       ipcRenderer.invoke(IpcChannel.File_Select, options),
+    selectSavePath: (options?: SaveDialogOptions): Promise<string | null> =>
+      ipcRenderer.invoke(IpcChannel.File_SelectSavePath, options),
     upload: (file: FileMetadata) => ipcRenderer.invoke(IpcChannel.File_Upload, file),
     delete: (fileId: string) => ipcRenderer.invoke(IpcChannel.File_Delete, fileId),
     deleteDir: (dirPath: string) => ipcRenderer.invoke(IpcChannel.File_DeleteDir, dirPath),
@@ -208,6 +210,10 @@ const api = {
       ipcRenderer.on('file-change', listener)
       return () => ipcRenderer.off('file-change', listener)
     }
+  },
+  gistVideo: {
+    ensureBackend: () => ipcRenderer.invoke(IpcChannel.GistVideo_EnsureBackend),
+    stopBackend: () => ipcRenderer.invoke(IpcChannel.GistVideo_StopBackend)
   },
   fs: {
     read: (pathOrUrl: string, encoding?: BufferEncoding) => ipcRenderer.invoke(IpcChannel.Fs_Read, pathOrUrl, encoding),

@@ -45,18 +45,87 @@ const platformToArch = {
 }
 
 exports.default = async function (context) {
+  // electron-builder doesn't always clean the unpacked output directory between runs on Windows.
+  // If an older build already renamed electron.exe -> <productName>.exe, the next run can fail with:
+  // ENOENT: rename '<out>/electron.exe' -> '<out>/<product>.exe'
+  // Clean it defensively (restricted to dist/*-unpacked under this repo).
+  try {
+    const appOutDir = context && context.appOutDir ? String(context.appOutDir) : ''
+    if (appOutDir) {
+      const resolved = path.resolve(appOutDir)
+      const distRoot = path.resolve(__dirname, '..', 'dist') + path.sep
+      if (resolved.startsWith(distRoot) && /-unpacked$/i.test(resolved)) {
+        fs.rmSync(resolved, { recursive: true, force: true })
+      }
+    }
+  } catch {
+    // ignore
+  }
+
   const rawEdition = process.env.APP_EDITION || 'pro'
   const normalizedEdition = rawEdition.toLowerCase()
   const edition = normalizedEdition === 'basic' ? 'basic' : 'pro'
   const editionFilePath = path.join(__dirname, '..', 'resources', 'data', 'edition.json')
 
+  const rawVoice = process.env.BUILD_VOICE || 'full'
+  const voiceMode = rawVoice.toLowerCase() === 'none' ? 'none' : 'full'
+
+  const rawBuildSuffix = process.env.BUILD_SUFFIX || ''
+  const normalizedBuildSuffix = rawBuildSuffix
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^0-9A-Za-z._-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
   fs.mkdirSync(path.dirname(editionFilePath), { recursive: true })
   fs.writeFileSync(editionFilePath, JSON.stringify({ edition }, null, 2), 'utf-8')
   console.log(`[before-pack] edition=${edition}`)
+  console.log(`[before-pack] voice=${voiceMode}`)
+  if (normalizedBuildSuffix) {
+    console.log(`[before-pack] suffix=${normalizedBuildSuffix}`)
+  }
+
+  if (voiceMode === 'none') {
+    const files = context.packager.config.files
+    if (Array.isArray(files) && files.length > 0 && files[0] && Array.isArray(files[0].filter)) {
+      files[0].filter = files[0].filter.filter((rule) => rule !== 'tts/**' && rule !== 'tts/**/*')
+      files[0].filter.push('!tts/**')
+    }
+  }
+
+  if (normalizedBuildSuffix) {
+    const win = context.packager.config.win
+    if (win && typeof win.artifactName === 'string' && win.artifactName.length > 0) {
+      const token = '.${ext}'
+      if (win.artifactName.includes(token)) {
+        win.artifactName = win.artifactName.replace(token, `-${normalizedBuildSuffix}${token}`)
+      } else {
+        win.artifactName = `${win.artifactName}-${normalizedBuildSuffix}`
+      }
+    }
+  }
 
   const arch = context.arch
   const archType = arch === Arch.arm64 ? 'arm64' : 'x64'
   const platform = context.packager.platform.name
+
+  // Build gist-video backend executable for packaged distributions.
+  // Without this, packaged apps may fall back to the user's system Python, which can miss deps (e.g. onnxruntime).
+  if (platform === 'windows') {
+    const hostArch = process.arch === 'arm64' ? 'arm64' : 'x64'
+    if (hostArch === archType) {
+      // Always rebuild in packaging to avoid shipping a stale backend executable after backend code changes.
+      process.env.GIST_VIDEO_FORCE_REBUILD = '1'
+      const buildGistVideoBackend = require('./build-gist-video-backend')
+      await buildGistVideoBackend()
+    } else {
+      throw new Error(
+        `[before-pack] Cannot build gist-video backend for ${archType} on a ${hostArch} host. ` +
+          `Please run the ${archType} build on a ${archType} machine (or prebuild and provide it via GIST_VIDEO_BACKEND_EXE).`
+      )
+    }
+  }
 
   const arm64Filters = Object.keys(allArm64).map((f) => '!node_modules/' + f + '/**')
   const x64Filters = Object.keys(allX64).map((f) => '!node_modules/' + f + '/*')

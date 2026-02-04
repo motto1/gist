@@ -972,6 +972,9 @@
     "title": "檔案",
     "type": "類型"
   },
+  "gistVideo": {
+    "title": "影片解說"
+  },
   "gpustack": {
     "keep_alive_time": {
       "description": "模型在記憶體中保持的時間（預設為 5 分鐘）",
@@ -4624,6 +4627,9 @@
     "show_mini_window": "快捷助手",
     "show_window": "顯示視窗"
   },
+  "tts": {
+    "title": "語音生成"
+  },
   "update": {
     "install": "立即安裝",
     "later": "稍後",
@@ -4639,9 +4645,6 @@
     "quit": "結束",
     "show_window": "顯示視窗",
     "visualization": "視覺化"
-  },
-  "tts": {
-    "title": "語音生成"
   },
   "workflow": {
     "character": {

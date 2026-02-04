@@ -58,6 +58,12 @@ files:
   - "!*.gif"
   - "!*.ps1"
   - "!*.patch"
+  - "!**/.venv/**"
+  # gist-video backend: packaged apps use the bundled executable; source code/data are not needed at runtime
+  - "!resources/gist-video/backend/app/**"
+  - "!resources/gist-video/backend/data/**"
+  - "!resources/gist-video/backend/requirements*.txt"
+  - "!resources/gist-video/backend/_backend_entry.py"
   - "!.tsbuildinfo"
   - "!.claude"
   - "!.roo"

@@ -42,6 +42,7 @@ import ObsidianVaultService from './services/ObsidianVaultService'
 import { ocrService } from './services/ocr/OcrService'
 import { proxyManager } from './services/ProxyManager'
 import { pythonService } from './services/PythonService'
+import { gistVideoService } from './services/GistVideoService'
 import { FileServiceManager } from './services/remotefile/FileServiceManager'
 import { searchService } from './services/SearchService'
 import { SelectionService } from './services/SelectionService'
@@ -478,6 +479,14 @@ export function registerIpc(mainWindow: BrowserWindow, app: Electron.App) {
   ipcMain.handle(IpcChannel.File_OpenPath, fileManager.openPath.bind(fileManager))
   ipcMain.handle(IpcChannel.File_ShowItemInFolder, fileManager.showItemInFolder.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Save, fileManager.save.bind(fileManager))
+  ipcMain.handle(IpcChannel.File_SelectSavePath, async (_, options?: Electron.SaveDialogOptions) => {
+    const result = await dialog.showSaveDialog({
+      title: '选择保存路径',
+      ...options
+    })
+    if (result.canceled) return null
+    return result.filePath || null
+  })
   ipcMain.handle(IpcChannel.File_Select, fileManager.selectFile.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Upload, fileManager.uploadFile.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Clear, fileManager.clear.bind(fileManager))
@@ -513,6 +522,10 @@ export function registerIpc(mainWindow: BrowserWindow, app: Electron.App) {
   ipcMain.handle(IpcChannel.File_ValidateNotesDirectory, fileManager.validateNotesDirectory.bind(fileManager))
   ipcMain.handle(IpcChannel.File_StartWatcher, fileManager.startFileWatcher.bind(fileManager))
   ipcMain.handle(IpcChannel.File_StopWatcher, fileManager.stopFileWatcher.bind(fileManager))
+
+  // gist-video
+  ipcMain.handle(IpcChannel.GistVideo_EnsureBackend, () => gistVideoService.ensureBackend())
+  ipcMain.handle(IpcChannel.GistVideo_StopBackend, () => gistVideoService.stopBackend())
 
   // file service
   ipcMain.handle(IpcChannel.FileService_Upload, async (_, provider: Provider, file: FileMetadata) => {

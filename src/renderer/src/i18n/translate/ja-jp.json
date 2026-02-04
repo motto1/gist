@@ -972,6 +972,9 @@
     "title": "ファイル",
     "type": "タイプ"
   },
+  "gistVideo": {
+    "title": "[to be translated]:视频解说"
+  },
   "gpustack": {
     "keep_alive_time": {
       "description": "モデルがメモリに保持される時間（デフォルト：5分）",
@@ -4623,6 +4626,9 @@
     "quit": "終了",
     "show_mini_window": "クイックアシスタント",
     "show_window": "ウィンドウを表示"
+  },
+  "tts": {
+    "title": "[to be translated]:语音生成"
   },
   "update": {
     "install": "今すぐインストール",

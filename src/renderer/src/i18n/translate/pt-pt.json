@@ -972,6 +972,9 @@
     "title": "Arquivo",
     "type": "Tipo"
   },
+  "gistVideo": {
+    "title": "[to be translated]:视频解说"
+  },
   "gpustack": {
     "keep_alive_time": {
       "description": "O tempo que o modelo permanece na memória (padrão: 5 minutos)",
@@ -4623,6 +4626,9 @@
     "quit": "Sair",
     "show_mini_window": "Atalho de Assistente",
     "show_window": "Exibir Janela"
+  },
+  "tts": {
+    "title": "[to be translated]:语音生成"
   },
   "update": {
     "install": "Instalar",

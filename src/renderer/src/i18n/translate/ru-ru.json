@@ -972,6 +972,9 @@
     "title": "Файлы",
     "type": "Тип"
   },
+  "gistVideo": {
+    "title": "[to be translated]:视频解说"
+  },
   "gpustack": {
     "keep_alive_time": {
       "description": "Время в минутах, в течение которого модель остается активной, по умолчанию 5 минут.",
@@ -4623,6 +4626,9 @@
     "quit": "Выйти",
     "show_mini_window": "Быстрый помощник",
     "show_window": "Показать окно"
+  },
+  "tts": {
+    "title": "[to be translated]:语音生成"
   },
   "update": {
     "install": "Установить",

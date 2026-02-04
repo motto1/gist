@@ -972,6 +972,9 @@
     "title": "Αρχεία",
     "type": "Τύπος"
   },
+  "gistVideo": {
+    "title": "[to be translated]:视频解说"
+  },
   "gpustack": {
     "keep_alive_time": {
       "description": "Χρόνος που ο μοντέλος παραμένει στη μνήμη (προεπιλογή: 5 λεπτά)",
@@ -4623,6 +4626,9 @@
     "quit": "Έξοδος",
     "show_mini_window": "Σύντομη βοήθεια",
     "show_window": "Εμφάνιση παραθύρου"
+  },
+  "tts": {
+    "title": "[to be translated]:语音生成"
   },
   "update": {
     "install": "Εγκατάσταση",

@@ -34,6 +34,7 @@ import {
   Settings,
   Sparkle,
   Sun,
+  Video,
   Users
 } from 'lucide-react'
 import { FC } from 'react'
@@ -197,7 +198,8 @@ const MainMenus: FC = () => {
     novel_outline: <BookOpen size={18} className="icon" />,
     tts: <Mic size={18} className="icon" />,
     notes: <NotepadText size={18} className="icon" />,
-    text_editor: <PenTool size={18} className="icon" />
+    text_editor: <PenTool size={18} className="icon" />,
+    gist_video: <Video size={18} className="icon" />
   }
 
   const pathMap = {
@@ -215,7 +217,8 @@ const MainMenus: FC = () => {
     novel_outline: '/novel-outline',
     tts: '/workflow/tts',
     notes: '/notes',
-    text_editor: '/text-editor'
+    text_editor: '/text-editor',
+    gist_video: '/gist-video'
   }
 
   const navigateTo = async (path: string) => {
@@ -226,7 +229,7 @@ const MainMenus: FC = () => {
 
   const textEditorFlyout = <TextEditorFlyout onNavigate={navigateTo} />
 
-  return ['launcher', 'tts', 'text_editor']
+  return ['launcher', 'tts', 'gist_video', 'text_editor']
     .filter((icon) => !(isBasic && icon === 'tts'))
     .map((icon) => {
       const path = pathMap[icon]

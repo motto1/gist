@@ -15,6 +15,7 @@ import CodeToolsPage from './pages/code/CodeToolsPage'
 import NovelCompressionPage from './pages/compress/NovelCompressionPage'
 import FilesPage from './pages/files/FilesPage'
 import HomePage from './pages/home/HomePage'
+import GistVideoRoutePage from './pages/gistVideo/GistVideoRoutePage'
 import KnowledgePage from './pages/knowledge/KnowledgePage'
 import LaunchpadPage from './pages/launchpad/LaunchpadPage'
 import MinAppPage from './pages/minapps/MinAppPage'
@@ -62,6 +63,7 @@ const AppRoutes: FC = () => {
             <Route path="/files" element={<FilesPage />} />
             <Route path="/notes" element={<NotesPage />} />
             <Route path="/knowledge" element={<KnowledgePage />} />
+            <Route path="/gist-video" element={<GistVideoRoutePage />} />
             <Route path="/apps/:appId" element={<MinAppPage />} />
             <Route path="/apps" element={<MinAppsPage />} />
             <Route path="/novel-character" element={<NovelCharacterPage />} />

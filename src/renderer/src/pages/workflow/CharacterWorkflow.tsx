@@ -694,15 +694,38 @@ const CharacterWorkflow: FC = () => {
     const restoreState = async () => {
       try {
         const detectStepByOutputDir = async (dir: string): Promise<WorkflowStep> => {
-          try {
-            const audioDir = await window.api.path.join(dir, 'audio')
-            const entries = (await window.api.fs.readdir(audioDir)) as FsEntry[]
-            const hasAudio = entries.some((e) => e.isFile && /\.(mp3|wav)$/i.test(e.name ?? ''))
-            if (hasAudio) return 'done'
-          } catch {
-            // ignore - audio folder may not exist yet
+          const safeReadDir = async (targetDir: string): Promise<FsEntry[] | null> => {
+            try {
+              return (await window.api.fs.readdir(targetDir)) as FsEntry[]
+            } catch {
+              return null
+            }
           }
-          return 'secondary'
+
+          const hasMatchingFile = async (targetDir: string, namePattern: RegExp) => {
+            const entries = await safeReadDir(targetDir)
+            if (!entries) return false
+            return entries.some((e) => e.isFile && namePattern.test(e.name ?? ''))
+          }
+
+          if (!(await safeReadDir(dir))) return 'config'
+
+          const audioDir = await window.api.path.join(dir, 'audio')
+          if (await hasMatchingFile(audioDir, /\.(mp3|wav)$/i)) return 'done'
+
+          // 若已有“二次总结”落盘（哪怕未生成音频），说明已过第一阶段
+          const bioDir = await window.api.path.join(dir, '二次总结', '人物志')
+          const monologueDir = await window.api.path.join(dir, '二次总结', '心理独白')
+          if ((await hasMatchingFile(bioDir, /\.txt$/i)) || (await hasMatchingFile(monologueDir, /\.txt$/i))) {
+            return 'secondary'
+          }
+
+          // 第一阶段完成的强标志：人物TXT合集里出现任意 .txt 文件
+          const charactersDir = await window.api.path.join(dir, '人物TXT合集')
+          if (await hasMatchingFile(charactersDir, /\.txt$/i)) return 'secondary'
+
+          // 默认回到“少女祈祷中”：避免空目录/临时目录导致误跳二次总结
+          return 'extracting'
         }
 
         // Prefer file-based history navigation (outputDir is the source of truth)

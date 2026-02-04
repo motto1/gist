@@ -972,6 +972,9 @@
     "title": "Files",
     "type": "Type"
   },
+  "gistVideo": {
+    "title": "Video Narration"
+  },
   "gpustack": {
     "keep_alive_time": {
       "description": "The time in minutes to keep the connection alive, default is 5 minutes.",
@@ -4624,6 +4627,9 @@
     "show_mini_window": "Quick Assistant",
     "show_window": "Show Window"
   },
+  "tts": {
+    "title": "Speech"
+  },
   "update": {
     "install": "Install",
     "later": "Later",
@@ -4639,9 +4645,6 @@
     "quit": "Quit",
     "show_window": "Show Window",
     "visualization": "Visualization"
-  },
-  "tts": {
-    "title": "Speech"
   },
   "workflow": {
     "character": {

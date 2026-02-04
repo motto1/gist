@@ -170,7 +170,8 @@ const sidebarIconKeyMap = {
   novel_outline: 'novelOutline.title',
   tts: 'tts.title',
   notes: 'notes.title',
-  text_editor: 'textEditor.title'
+  text_editor: 'textEditor.title',
+  gist_video: 'gistVideo.title'
 } as const
 
 export const getSidebarIconLabel = (key: string): string => {

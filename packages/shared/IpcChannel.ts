@@ -91,6 +91,10 @@ export enum IpcChannel {
   // Python
   Python_Execute = 'python:execute',
 
+  // gist-video (local python service for video indexing/rendering)
+  GistVideo_EnsureBackend = 'gist-video:ensure-backend',
+  GistVideo_StopBackend = 'gist-video:stop-backend',
+
   //copilot
   Copilot_GetAuthMessage = 'copilot:get-auth-message',
   Copilot_GetCopilotToken = 'copilot:get-copilot-token',
@@ -148,6 +152,7 @@ export enum IpcChannel {
   File_OpenPath = 'file:openPath',
   File_ShowItemInFolder = 'file:showItemInFolder',
   File_Save = 'file:save',
+  File_SelectSavePath = 'file:selectSavePath',
   File_Select = 'file:select',
   File_Upload = 'file:upload',
   File_Clear = 'file:clear',

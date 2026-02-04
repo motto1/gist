@@ -157,9 +157,62 @@
       Abort
   ${EndIf}
   ContinueInstall:
+    ; Preserve TextBooks directory before uninstalling old version (copy for cross-drive installs).
+    RMDir /r "$TEMP\gist-textbooks-backup"
+    CreateDirectory "$TEMP\gist-textbooks-backup"
+    StrCpy $R9 "$INSTDIR"
+    ReadRegStr $R8 SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}" "InstallLocation"
+    ${If} $R8 != ""
+      StrCpy $R9 "$R8"
+    ${EndIf}
+    IfFileExists "$R9\TextBooks\*.*" 0 +4
+      ExecWait '"$SYSDIR\cmd.exe" /c xcopy /E /I /H /Y "$R9\TextBooks" "$TEMP\gist-textbooks-backup\TextBooks" >NUL' $0
+      ${If} $0 != 0
+        Abort "Failed to preserve TextBooks directory."
+      ${EndIf}
     Pop $4
     Pop $3
     Pop $2
     Pop $1
     Pop $0
+!macroend
+
+!macro customRemoveFiles
+  ${if} ${isUpdated}
+    ; Preserve TextBooks directory across uninstall/upgrade (copy for cross-drive installs).
+    CreateDirectory "$PLUGINSDIR\preserved-textbooks"
+    IfFileExists "$INSTDIR\TextBooks\*.*" 0 +4
+      ExecWait '"$SYSDIR\cmd.exe" /c xcopy /E /I /H /Y "$INSTDIR\TextBooks" "$PLUGINSDIR\preserved-textbooks\TextBooks" >NUL' $R0
+      ${If} $R0 != 0
+        Abort "Failed to preserve TextBooks directory."
+      ${EndIf}
+
+    CreateDirectory "$PLUGINSDIR\old-install"
+    Push ""
+    Call un.atomicRMDir
+    Pop $R0
+    ${if} $R0 != 0
+      DetailPrint "File is busy, aborting: $R0"
+      Push ""
+      Call un.restoreFiles
+      Pop $R0
+      Abort `Can't rename "$INSTDIR" to "$PLUGINSDIR\old-install".`
+    ${endif}
+
+    RMDir /r $INSTDIR
+
+    IfFileExists "$PLUGINSDIR\preserved-textbooks\TextBooks\*.*" 0 +3
+      CreateDirectory "$INSTDIR\TextBooks"
+      ExecWait '"$SYSDIR\cmd.exe" /c xcopy /E /I /H /Y "$PLUGINSDIR\preserved-textbooks\TextBooks" "$INSTDIR\TextBooks" >NUL' $R0
+  ${else}
+    RMDir /r $INSTDIR
+  ${endif}
+!macroend
+
+!macro customInstall
+  ; Restore TextBooks directory after install if preserved.
+  IfFileExists "$TEMP\gist-textbooks-backup\TextBooks\*.*" 0 +5
+    CreateDirectory "$INSTDIR\TextBooks"
+    ExecWait '"$SYSDIR\cmd.exe" /c xcopy /E /I /H /Y "$TEMP\gist-textbooks-backup\TextBooks" "$INSTDIR\TextBooks" >NUL' $0
+    RMDir /r "$TEMP\gist-textbooks-backup"
 !macroend
