@@ -344,14 +344,27 @@ export class GistVideoService {
       const stderrPath = path.join(dataDir, 'server.stderr.log')
 
       // Persist logs for debugging.
+      // Note: If the child exits extremely early, the streams may never emit data.
+      // We still create log files to make failures diagnosable.
       try {
+        fs.mkdirSync(dataDir, { recursive: true })
+        if (!fs.existsSync(stdoutPath)) fs.writeFileSync(stdoutPath, '', 'utf8')
+        if (!fs.existsSync(stderrPath)) fs.writeFileSync(stderrPath, '', 'utf8')
+
         const stdoutLog = fs.createWriteStream(stdoutPath, { flags: 'a' })
         const stderrLog = fs.createWriteStream(stderrPath, { flags: 'a' })
         child.stdout.pipe(stdoutLog)
         child.stderr.pipe(stderrLog)
+
+        child.stdout.on('data', (chunk) => logger.debug(`backend stdout: ${String(chunk).slice(0, 500)}`))
+        child.stderr.on('data', (chunk) => logger.debug(`backend stderr: ${String(chunk).slice(0, 500)}`))
       } catch (e) {
         logger.warn('Failed to create backend log files', e as Error)
       }
+
+      child.on('error', (error) => {
+        logger.warn('gist-video backend spawn error', error as Error)
+      })
 
       child.on('exit', (code) => {
         logger.warn(`gist-video backend exited: code=${code}`)
