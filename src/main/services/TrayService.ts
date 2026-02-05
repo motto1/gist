@@ -1,3 +1,7 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
+import { loggerService } from '@logger'
 import { isLinux, isMac, isWin } from '@main/constant'
 import { locales } from '@main/utils/locales'
 import { app, Menu, MenuItemConstructorOptions, nativeImage, nativeTheme, Tray } from 'electron'
@@ -8,6 +12,43 @@ import iconLight from '../../../build/tray_icon_light.png?asset'
 import { ConfigKeys, configManager } from './ConfigManager'
 import selectionService from './SelectionService'
 import { windowService } from './WindowService'
+
+const logger = loggerService.withContext('TrayService')
+
+const toFilePath = (maybePathOrUrl: string): string => {
+  try {
+    if (maybePathOrUrl.startsWith('file://')) {
+      return decodeURIComponent(new URL(maybePathOrUrl).pathname.replace(/^\//, ''))
+    }
+  } catch {
+    // ignore
+  }
+  return maybePathOrUrl
+}
+
+const resolveIconPath = (candidate: string): string | null => {
+  const raw = (candidate || '').trim()
+  if (!raw) return null
+
+  const asPath = toFilePath(raw)
+  if (fs.existsSync(asPath)) return asPath
+
+  const base = path.basename(asPath)
+  const fallbacks = [
+    path.join(process.cwd(), 'out', 'main', base),
+    path.join(process.cwd(), 'build', base),
+    path.join(app.getAppPath(), base)
+  ]
+  for (const p of fallbacks) {
+    try {
+      if (fs.existsSync(p)) return p
+    } catch {
+      // ignore
+    }
+  }
+
+  return null
+}
 
 export class TrayService {
   private static instance: TrayService
@@ -27,8 +68,24 @@ export class TrayService {
   private createTray() {
     this.destroyTray()
 
-    const iconPath = isMac ? (nativeTheme.shouldUseDarkColors ? iconLight : iconDark) : icon
-    const tray = new Tray(iconPath)
+    const iconCandidate = isMac ? (nativeTheme.shouldUseDarkColors ? iconLight : iconDark) : icon
+    const iconPath = resolveIconPath(iconCandidate)
+    if (!iconPath) {
+      logger.warn('Tray icon file missing, skip creating tray', {
+        candidate: iconCandidate,
+        cwd: process.cwd(),
+        appPath: app.getAppPath()
+      })
+      return
+    }
+
+    let tray: Tray
+    try {
+      tray = new Tray(iconPath)
+    } catch (error) {
+      logger.warn('Failed to create Tray, skip', error as Error)
+      return
+    }
 
     if (isWin) {
       tray.setImage(iconPath)
