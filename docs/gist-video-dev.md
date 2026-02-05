@@ -24,15 +24,19 @@ yarn install
 copy .env.example .env
 ```
 
-如需明确指定视频后端路径（推荐，避免误用系统 Python）：
+如需明确指定视频后端路径（推荐）：
 
 ```dotenv
 # .env（示例）
 GIST_VIDEO_BACKEND_ROOT="F:/gist/resources/gist-video/backend"
-GIST_VIDEO_PYTHON="F:/gist/resources/gist-video/backend/.venv/Scripts/python.exe"
+# 推荐：优先使用仓库已提交的后端 exe（不依赖本机 Python 环境）
+GIST_VIDEO_BACKEND_EXE="F:/gist/resources/gist-video/backend/gist-video-backend/gist-video-backend.exe"
+# 可选：仅当你要用 Python 调试时再打开（前提：已运行 setup 脚本创建 .venv）
+#GIST_VIDEO_PYTHON="F:/gist/resources/gist-video/backend/.venv/Scripts/python.exe"
 #GIST_VIDEO_PORT=37123
 ```
 
+注意：`.venv/` **不应提交**到仓库（体积大且机器相关）。同事首次开发必须先运行 `setup-gist-video-backend.ps1` 创建虚拟环境，否则如果你在 `.env` 中写死了 `GIST_VIDEO_PYTHON`，他们会遇到 `spawn ...\.venv\\Scripts\\python.exe ENOENT`。
 ## 3. 后端资源目录确认（必做）
 
 最低要求：`resources/gist-video/backend/` 内必须存在以下“标记文件/目录”，否则主进程无法识别后端根目录：
@@ -65,7 +69,18 @@ resources/gist-video/backend/bin/ffprobe.exe
 - “向量化/检索”可能会降级（例如回退到轻量 local_hash），召回效果会变差
 - 某些功能可能直接不可用（取决于后端实现）
 
-## 6. 一键安装后端依赖（必做）
+## 6. 后端启动方式（二选一）
+
+### 6.1 推荐：直接使用已提交的后端 exe
+
+仓库已包含 `resources/gist-video/backend/gist-video-backend/gist-video-backend.exe` 时，你可以**不安装** Python 依赖，直接在 `.env` 里设置：
+
+```dotenv
+GIST_VIDEO_BACKEND_ROOT="F:/gist/resources/gist-video/backend"
+GIST_VIDEO_BACKEND_EXE="F:/gist/resources/gist-video/backend/gist-video-backend/gist-video-backend.exe"
+```
+
+### 6.2 需要 Python 调试时：创建 venv 并安装依赖
 
 在确认 `resources/gist-video/backend/` 已就绪后，运行：
 
@@ -73,7 +88,7 @@ resources/gist-video/backend/bin/ffprobe.exe
 .\scripts\setup-gist-video-backend.ps1
 ```
 
-该脚本会在 `resources/gist-video/backend/.venv/` 创建虚拟环境并安装 `requirements-dev.txt` 依赖。
+该脚本会在 `resources/gist-video/backend/.venv/` 创建虚拟环境并安装 `requirements-dev.txt` 依赖。随后你才可以启用 `.env` 的 `GIST_VIDEO_PYTHON`。
 
 ## 7. 启动开发模式
 
@@ -110,9 +125,13 @@ Set-Location "F:/gist/resources/gist-video/backend"
 
 按优先级排查：
 1) `resources/gist-video/backend/app/server/__main__.py` 是否存在  
-2) 是否已运行 `.\scripts\setup-gist-video-backend.ps1`（并成功安装依赖）  
+2) 优先确认你走的是哪种启动方式：
+   - `GIST_VIDEO_BACKEND_EXE`：确保 exe 文件存在
+   - `GIST_VIDEO_PYTHON`：确保 `.venv/Scripts/python.exe` 存在（必须先跑 `setup-gist-video-backend.ps1`）
 3) `bin/ffmpeg.exe` 与 `bin/ffprobe.exe` 是否存在  
 4) 端口是否被占用（可通过设置 `GIST_VIDEO_PORT` 固定端口排查）
+
+如果看到 `spawn ...\.venv\\Scripts\\python.exe ENOENT`：说明你配置了 `GIST_VIDEO_PYTHON` 但本机还没创建 venv。请先运行 `.\scripts\setup-gist-video-backend.ps1`，或直接改用 `GIST_VIDEO_BACKEND_EXE`。
 
 ### 10.2 `pip install` 失败
 

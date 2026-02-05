@@ -63,9 +63,36 @@ function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 }
 
+function isExistingFile(filePath: string): boolean {
+  try {
+    return fs.existsSync(filePath) && fs.statSync(filePath).isFile()
+  } catch {
+    return false
+  }
+}
+
+function hasBackendMarker(candidate: string, exeName: string): boolean {
+  try {
+    const markerPy = path.join(candidate, 'app', 'server', '__main__.py')
+    const markerExe = path.join(candidate, exeName)
+    const markerExeOnedir = path.join(candidate, 'gist-video-backend', exeName)
+
+    return isExistingFile(markerPy) || isExistingFile(markerExe) || isExistingFile(markerExeOnedir)
+  } catch {
+    return false
+  }
+}
+
 function resolveBackendRoot(): string {
   const envRoot = (process.env.GIST_VIDEO_BACKEND_ROOT || '').trim()
-  if (envRoot) return path.resolve(envRoot)
+  if (envRoot) {
+    const resolved = path.resolve(envRoot)
+    const exeName = process.platform === 'win32' ? 'gist-video-backend.exe' : 'gist-video-backend'
+    if (!hasBackendMarker(resolved, exeName)) {
+      logger.warn('GIST_VIDEO_BACKEND_ROOT is set but marker files are missing', { backendRoot: resolved })
+    }
+    return resolved
+  }
 
   const appRoot = app.getAppPath()
   const unpackedRoot = path.join(path.dirname(appRoot), 'app.asar.unpacked')
@@ -73,46 +100,60 @@ function resolveBackendRoot(): string {
   const exeName = process.platform === 'win32' ? 'gist-video-backend.exe' : 'gist-video-backend'
 
   const candidates = [
+    // dev: most common (repo root)
     path.join(process.cwd(), 'resources', 'gist-video', 'backend'),
+    // dev: if cwd is `out/main` or similar
+    path.join(process.cwd(), '..', 'resources', 'gist-video', 'backend'),
+    path.join(process.cwd(), '..', '..', 'resources', 'gist-video', 'backend'),
+
+    // packaged
     path.join(unpackedRoot, 'resources', 'gist-video', 'backend'),
     path.join(path.dirname(app.getPath('exe')), 'resources', 'gist-video', 'backend'),
     path.join(unpackedRoot, 'gist-video', 'backend'),
     path.join(path.dirname(app.getPath('exe')), 'gist-video', 'backend'),
+
+    // fallback
     path.join(appRoot, 'resources', 'gist-video', 'backend'),
-    ...(isAsarApp ? [] : [path.join(appRoot, '..', 'resources', 'gist-video', 'backend')])
+    ...(isAsarApp
+      ? []
+      : [
+          path.join(appRoot, '..', 'resources', 'gist-video', 'backend'),
+          path.join(appRoot, '..', '..', 'resources', 'gist-video', 'backend')
+        ])
   ]
 
-  for (const candidate of candidates) {
+  const normalizedCandidates = Array.from(new Set(candidates.map((c) => path.resolve(c))))
+
+  for (const candidate of normalizedCandidates) {
     if (isAsarPath(candidate)) continue
-    try {
-      const markerPy = path.join(candidate, 'app', 'server', '__main__.py')
-      const markerExe = path.join(candidate, exeName)
-      const markerExeOnedir = path.join(candidate, 'gist-video-backend', exeName)
-      if (
-        (fs.existsSync(markerPy) && fs.statSync(markerPy).isFile()) ||
-        (fs.existsSync(markerExe) && fs.statSync(markerExe).isFile()) ||
-        (fs.existsSync(markerExeOnedir) && fs.statSync(markerExeOnedir).isFile())
-      ) {
-        return candidate
-      }
-    } catch {
-      // ignore
-    }
+    if (hasBackendMarker(candidate, exeName)) return candidate
   }
 
-  return candidates[0]
+  logger.warn('Failed to resolve gist-video backend root, falling back to first candidate', {
+    fallback: normalizedCandidates[0],
+    candidates: normalizedCandidates
+  })
+
+  return normalizedCandidates[0]
 }
 
 function resolvePythonCommand(backendRoot: string): string {
   const envPython = (process.env.GIST_VIDEO_PYTHON || '').trim()
-  if (envPython) return envPython
+  if (envPython) {
+    const looksLikePath = /[\\/]/.test(envPython) || /^[a-zA-Z]:/.test(envPython)
+    if (looksLikePath && !isExistingFile(envPython)) {
+      logger.warn('GIST_VIDEO_PYTHON points to a missing file; ignoring it', { python: envPython })
+    } else {
+      return envPython
+    }
+  }
 
   // Prefer a local venv if present (dev-friendly; avoids polluting global Python).
   const venvPython =
     process.platform === 'win32'
       ? path.join(backendRoot, '.venv', 'Scripts', 'python.exe')
       : path.join(backendRoot, '.venv', 'bin', 'python')
-  if (fs.existsSync(venvPython) && fs.statSync(venvPython).isFile()) {
+  if (isExistingFile(venvPython)) {
     return venvPython
   }
 
@@ -122,14 +163,21 @@ function resolvePythonCommand(backendRoot: string): string {
 
 function resolveBackendExe(backendRoot: string): string | null {
   const envExe = (process.env.GIST_VIDEO_BACKEND_EXE || '').trim()
-  if (envExe) return path.resolve(envExe)
+  if (envExe) {
+    const resolved = path.resolve(envExe)
+    if (!isExistingFile(resolved)) {
+      logger.warn('GIST_VIDEO_BACKEND_EXE points to a missing file; ignoring it', { exe: resolved })
+    } else {
+      return resolved
+    }
+  }
 
   const exeName = process.platform === 'win32' ? 'gist-video-backend.exe' : 'gist-video-backend'
   const direct = path.join(backendRoot, exeName)
-  if (fs.existsSync(direct) && fs.statSync(direct).isFile()) return direct
+  if (isExistingFile(direct)) return direct
 
   const onedir = path.join(backendRoot, 'gist-video-backend', exeName)
-  if (fs.existsSync(onedir) && fs.statSync(onedir).isFile()) return onedir
+  if (isExistingFile(onedir)) return onedir
 
   return null
 }
@@ -233,6 +281,25 @@ export class GistVideoService {
 
       const exe = resolveBackendExe(backendRoot)
       const python = resolvePythonCommand(backendRoot)
+
+      // Dev-only guard rails:
+      // - If no bundled exe is found, and Python resolves to a venv path that doesn't exist,
+      //   fail fast with a clear instruction instead of a cryptic spawn ENOENT.
+      if (!exe && !app.isPackaged) {
+        const looksLikePath = /[\\/]/.test(python) || /^[a-zA-Z]:/.test(python)
+        if (looksLikePath && !isExistingFile(python)) {
+          throw new Error(
+            [
+              'gist-video 后端虚拟环境未安装（找不到 Python 可执行文件）。',
+              `backendRoot=${backendRoot}`,
+              `python=${python}`,
+              '请在仓库根目录运行：',
+              '  .\\scripts\\setup-gist-video-backend.ps1',
+              '或在 .env 中移除/修正 GIST_VIDEO_PYTHON（并确保已安装 Python 3.11 x64）。'
+            ].join('\n')
+          )
+        }
+      }
 
       // If a previous run crashed, the randomly chosen port may still be in TIME_WAIT.
       // Prefer the port from existing backend settings if present to reduce flakiness.
