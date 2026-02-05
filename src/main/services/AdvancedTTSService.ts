@@ -8,7 +8,10 @@ import path from 'node:path'
 
 const logger = loggerService.withContext('AdvancedTTSService')
 
+type AdvancedTTSProvider = 'microsoft' | 'zai'
+
 interface AdvancedTTSOptions {
+  provider?: AdvancedTTSProvider
   text?: string
   textFilePath?: string
   voice: string
@@ -397,12 +400,25 @@ export class AdvancedTTSService {
       const outputPath = path.join(outputDir, filename)
       const timelinePath = path.join(outputDir, `${path.basename(filename, path.extname(filename))}.json`)
 
+      const provider: AdvancedTTSProvider = options.provider === 'zai' ? 'zai' : 'microsoft'
+      const voice = options.voice?.trim()
+      if (!voice) {
+        throw new Error('缺少音色（voice / voice_id）')
+      }
+      const rate = options.rate ?? '0'
+      const microsoftConfig =
+        provider === 'microsoft'
+          ? {
+              region: options.region ?? 'eastasia',
+              style: options.style ?? 'general',
+              pitch: options.pitch ?? '0'
+            }
+          : null
       const config = {
-        region: options.region ?? 'eastasia',
-        voice: options.voice,
-        style: options.style ?? 'general',
-        rate: options.rate ?? '0',
-        pitch: options.pitch ?? '0',
+        provider,
+        voice,
+        rate,
+        ...(microsoftConfig ?? {}),
         align_model_dir: alignModelDir
       }
 
@@ -412,11 +428,10 @@ export class AdvancedTTSService {
 
       logger.info('Advanced TTS start', {
         exePath,
-        voice: config.voice,
-        style: config.style,
-        rate: config.rate,
-        pitch: config.pitch,
-        region: config.region,
+        provider,
+        voice,
+        rate,
+        ...(microsoftConfig ?? {}),
         outputDir,
         filename,
         textFile: path.basename(input.path),

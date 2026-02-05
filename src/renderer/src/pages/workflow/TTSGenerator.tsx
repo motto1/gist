@@ -9,7 +9,7 @@ import { useLocalStorageState } from '@renderer/hooks/useLocalStorageState'
 import { useRuntime } from '@renderer/hooks/useRuntime'
 
 import DragBar from './components/DragBar'
-import TtsVoiceConfigCard from './components/TtsVoiceConfigCard'
+import TtsVoiceConfigCard, { type AdvancedTTSProvider } from './components/TtsVoiceConfigCard'
 import { getLocaleLabelZh } from './components/ttsLabels'
 
 type VoiceRaw = {
@@ -47,6 +47,7 @@ type VoiceItem = {
 
 type HistoryItem = {
   id: string
+  provider?: AdvancedTTSProvider
   voice: string
   voiceLabel: string
   style?: string
@@ -60,6 +61,7 @@ const HISTORY_STORAGE_KEY = 'tts.generator.history.v1'
 const PREF_KEY_PREFIX = 'tts.voicePrefs.v1'
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
+const isAdvancedProvider = (value: unknown): value is AdvancedTTSProvider => value === 'microsoft' || value === 'zai'
 
 const formatSigned = (value: number) => `${value >= 0 ? '+' : ''}${value}`
 const formatSignedPercent = (value: number) => `${value >= 0 ? '+' : ''}${value}%`
@@ -164,8 +166,24 @@ const TTSGenerator: FC = () => {
   const [isLoadingAdvancedVoices, setIsLoadingAdvancedVoices] = useState(false)
   const [advancedVoiceLoadError, setAdvancedVoiceLoadError] = useState<string | null>(null)
 
-  const isLoadingVoices = ttsMode === 'advanced' ? isLoadingAdvancedVoices : isLoadingNormalVoices
-  const voiceLoadError = ttsMode === 'advanced' ? advancedVoiceLoadError : normalVoiceLoadError
+  const [advancedProvider, setAdvancedProvider] = useLocalStorageState<AdvancedTTSProvider>(
+    `${PREF_KEY_PREFIX}.advanced.provider`,
+    'microsoft',
+    isAdvancedProvider
+  )
+
+  const isLoadingVoices =
+    ttsMode === 'advanced'
+      ? advancedProvider === 'microsoft'
+        ? isLoadingAdvancedVoices
+        : false
+      : isLoadingNormalVoices
+  const voiceLoadError =
+    ttsMode === 'advanced'
+      ? advancedProvider === 'microsoft'
+        ? advancedVoiceLoadError
+        : null
+      : normalVoiceLoadError
 
   const [voice, setVoice] = useLocalStorageState<string>(
     `${PREF_KEY_PREFIX}.normal.voice`,
@@ -180,6 +198,11 @@ const TTSGenerator: FC = () => {
   const [advancedStyle, setAdvancedStyle] = useLocalStorageState<string>(
     `${PREF_KEY_PREFIX}.advanced.style`,
     'general',
+    isNonEmptyString
+  )
+  const [advancedZaiVoice, setAdvancedZaiVoice] = useLocalStorageState<string>(
+    `${PREF_KEY_PREFIX}.advanced.zai.voice`,
+    'system_001',
     isNonEmptyString
   )
   const [styleOptions, setStyleOptions] = useState<string[]>([])
@@ -212,17 +235,26 @@ const TTSGenerator: FC = () => {
   const [audioMime, setAudioMime] = useState('audio/mpeg')
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([])
 
-  const activeVoice = ttsMode === 'advanced' ? advancedVoice : voice
+  const activeVoice =
+    ttsMode === 'advanced'
+      ? advancedProvider === 'zai'
+        ? advancedZaiVoice
+        : advancedVoice
+      : voice
 
   const setActiveVoice = useCallback(
     (value: string) => {
       if (ttsMode === 'advanced') {
-        setAdvancedVoice(value)
-      } else {
-        setVoice(value)
+        if (advancedProvider === 'zai') {
+          setAdvancedZaiVoice(value)
+        } else {
+          setAdvancedVoice(value)
+        }
+        return
       }
+      setVoice(value)
     },
-    [ttsMode]
+    [advancedProvider, ttsMode]
   )
 
   const toFileUrl = useCallback((filePath: string) => {
@@ -236,6 +268,7 @@ const TTSGenerator: FC = () => {
     let isMounted = true
     const loadAdvancedVoices = async () => {
       if (!allowAdvanced) return
+      if (advancedProvider !== 'microsoft') return
       setIsLoadingAdvancedVoices(true)
       setAdvancedVoiceLoadError(null)
       try {
@@ -258,7 +291,7 @@ const TTSGenerator: FC = () => {
     return () => {
       isMounted = false
     }
-  }, [allowAdvanced, t])
+  }, [advancedProvider, allowAdvanced, t])
 
   useEffect(() => {
     let isMounted = true
@@ -453,18 +486,20 @@ const TTSGenerator: FC = () => {
   }, [genderFilter, languageFilter, regionFilter, voicesForMode])
 
   useEffect(() => {
+    if (ttsMode === 'advanced' && advancedProvider === 'zai') return
     if (filteredVoices.length === 0) return
     const isIncluded = filteredVoices.some((item) => item.shortName === activeVoice)
     if (!isIncluded) {
       setActiveVoice(filteredVoices[0].shortName)
     }
-  }, [activeVoice, filteredVoices, setActiveVoice])
+  }, [activeVoice, advancedProvider, filteredVoices, setActiveVoice, ttsMode])
 
   useEffect(() => {
     let isMounted = true
     const fetchStyles = async () => {
       if (ttsMode !== 'advanced') return
       if (!allowAdvanced) return
+      if (advancedProvider !== 'microsoft') return
       if (!advancedVoice) return
       if (!advancedVoiceMap.get(advancedVoice)) {
         setStyleOptions([])
@@ -504,14 +539,16 @@ const TTSGenerator: FC = () => {
     return () => {
       isMounted = false
     }
-  }, [advancedStyle, advancedVoice, advancedVoiceMap, ttsMode, allowAdvanced])
+  }, [advancedProvider, advancedStyle, advancedVoice, advancedVoiceMap, ttsMode, allowAdvanced])
 
   const activeVoiceLabel = useMemo(() => {
     const item = voiceMap.get(activeVoice)
-    if (!item) return activeVoice
-    const name = item.localName || item.shortName
-    return `${name} - ${getGenderLabel(item.gender)}`
-  }, [activeVoice, voiceMap])
+    const name = item ? item.localName || item.shortName : activeVoice
+    const label = item ? `${name} - ${getGenderLabel(item.gender)}` : name
+
+    if (ttsMode !== 'advanced') return label
+    return advancedProvider === 'zai' ? `ZAI - ${label}` : `Microsoft - ${label}`
+  }, [activeVoice, advancedProvider, ttsMode, voiceMap])
 
   const handleGenerate = useCallback(async () => {
     if (!currentText) return
@@ -531,15 +568,27 @@ const TTSGenerator: FC = () => {
 
       const result =
         ttsMode === 'advanced'
-          ? await window.api.advancedTTS.generate({
-              text: currentText,
-              voice: advancedVoice,
-              style: advancedStyle || 'general',
-              rate: formatSigned(advancedRateValue),
-              pitch: formatSigned(advancedPitchValue),
-              outputDir: outputDirPath,
-              filename
-            })
+          ? await window.api.advancedTTS.generate(
+              advancedProvider === 'zai'
+                ? {
+                    provider: 'zai',
+                    text: currentText,
+                    voice: advancedZaiVoice,
+                    rate: formatSigned(advancedRateValue),
+                    outputDir: outputDirPath,
+                    filename
+                  }
+                : {
+                    provider: 'microsoft',
+                    text: currentText,
+                    voice: advancedVoice,
+                    style: advancedStyle || 'general',
+                    rate: formatSigned(advancedRateValue),
+                    pitch: formatSigned(advancedPitchValue),
+                    outputDir: outputDirPath,
+                    filename
+                  }
+            )
           : await window.api.edgeTTS.generate({
               text: currentText,
               voice,
@@ -557,12 +606,12 @@ const TTSGenerator: FC = () => {
         setAudioMime(mime)
 
         const preview = currentText.length > 80 ? `${currentText.slice(0, 80)}...` : currentText
-        const voiceLabel = ttsMode === 'advanced' ? activeVoiceLabel : activeVoiceLabel
         const newItem: HistoryItem = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          voice: ttsMode === 'advanced' ? advancedVoice : voice,
-          voiceLabel,
-          style: ttsMode === 'advanced' ? advancedStyle : undefined,
+          provider: ttsMode === 'advanced' ? advancedProvider : undefined,
+          voice: activeVoice,
+          voiceLabel: activeVoiceLabel,
+          style: ttsMode === 'advanced' && advancedProvider === 'microsoft' ? advancedStyle : undefined,
           textPreview: preview,
           createdAt: new Date().toISOString(),
           audioPath: result.filePath,
@@ -579,11 +628,14 @@ const TTSGenerator: FC = () => {
       setIsGenerating(false)
     }
   }, [
+    activeVoice,
     activeVoiceLabel,
     advancedPitchValue,
+    advancedProvider,
     advancedRateValue,
     advancedStyle,
     advancedVoice,
+    advancedZaiVoice,
     characterName,
     currentText,
     outputDir,
@@ -670,6 +722,8 @@ const TTSGenerator: FC = () => {
                 <TtsVoiceConfigCard
                   isGenerating={isGenerating}
                   ttsMode={ttsMode}
+                  advancedProvider={advancedProvider}
+                  setAdvancedProvider={setAdvancedProvider}
                   portalContainer={popoverPortalContainer}
                   voiceLoadError={voiceLoadError}
                   isLoadingVoices={isLoadingVoices}

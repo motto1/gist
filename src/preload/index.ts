@@ -635,6 +635,7 @@ const api = {
   },
   advancedTTS: {
     generate: (options: {
+      provider?: 'microsoft' | 'zai'
       text?: string
       textFilePath?: string
       voice: string

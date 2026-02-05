@@ -84,6 +84,8 @@ type VoiceStylesResult = {
   styles?: string[]
 }
 
+type AdvancedTTSProvider = 'microsoft' | 'zai'
+
 type VoiceItem = {
   shortName: string
   displayName: string
@@ -100,6 +102,7 @@ const formatSignedPercent = (value: number) => `${value >= 0 ? '+' : ''}${value}
 const PREF_KEY_PREFIX = 'tts.voicePrefs.v1'
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
+const isAdvancedProvider = (value: unknown): value is AdvancedTTSProvider => value === 'microsoft' || value === 'zai'
 
 const getGenderKey = (gender?: string) => {
   const normalized = gender?.toLowerCase()
@@ -278,8 +281,24 @@ const CharacterWorkflow: FC = () => {
   const [isLoadingAdvancedVoices, setIsLoadingAdvancedVoices] = useState(false)
   const [advancedVoiceLoadError, setAdvancedVoiceLoadError] = useState<string | null>(null)
 
-  const isLoadingVoices = ttsMode === 'advanced' ? isLoadingAdvancedVoices : isLoadingNormalVoices
-  const voiceLoadError = ttsMode === 'advanced' ? advancedVoiceLoadError : normalVoiceLoadError
+  const [advancedProvider, setAdvancedProvider] = useLocalStorageState<AdvancedTTSProvider>(
+    `${PREF_KEY_PREFIX}.advanced.provider`,
+    'microsoft',
+    isAdvancedProvider
+  )
+
+  const isLoadingVoices =
+    ttsMode === 'advanced'
+      ? advancedProvider === 'microsoft'
+        ? isLoadingAdvancedVoices
+        : false
+      : isLoadingNormalVoices
+  const voiceLoadError =
+    ttsMode === 'advanced'
+      ? advancedProvider === 'microsoft'
+        ? advancedVoiceLoadError
+        : null
+      : normalVoiceLoadError
   const [ttsVoice, setTtsVoice] = useLocalStorageState<string>(
     `${PREF_KEY_PREFIX}.normal.voice`,
     'zh-CN-XiaoxiaoNeural',
@@ -293,6 +312,11 @@ const CharacterWorkflow: FC = () => {
   const [advancedTtsStyle, setAdvancedTtsStyle] = useLocalStorageState<string>(
     `${PREF_KEY_PREFIX}.advanced.style`,
     'general',
+    isNonEmptyString
+  )
+  const [advancedZaiVoice, setAdvancedZaiVoice] = useLocalStorageState<string>(
+    `${PREF_KEY_PREFIX}.advanced.zai.voice`,
+    'system_001',
     isNonEmptyString
   )
   const [styleOptions, setStyleOptions] = useState<string[]>([])
@@ -323,17 +347,26 @@ const CharacterWorkflow: FC = () => {
   const [ttsAudioMime, setTtsAudioMime] = useState('audio/mpeg')
   const ttsGenerationTokenRef = useRef(0)
 
-  const activeVoice = ttsMode === 'advanced' ? advancedTtsVoice : ttsVoice
+  const activeVoice =
+    ttsMode === 'advanced'
+      ? advancedProvider === 'zai'
+        ? advancedZaiVoice
+        : advancedTtsVoice
+      : ttsVoice
 
   const setActiveVoice = useCallback(
     (value: string) => {
       if (ttsMode === 'advanced') {
-        setAdvancedTtsVoice(value)
+        if (advancedProvider === 'zai') {
+          setAdvancedZaiVoice(value)
+        } else {
+          setAdvancedTtsVoice(value)
+        }
         return
       }
       setTtsVoice(value)
     },
-    [ttsMode]
+    [advancedProvider, ttsMode]
   )
 
   const advancedVoices = useMemo<VoiceItem[]>(() => {
@@ -392,6 +425,7 @@ const CharacterWorkflow: FC = () => {
     let isMounted = true
     const loadAdvancedVoices = async () => {
       if (!allowAdvanced) return
+      if (advancedProvider !== 'microsoft') return
       setIsLoadingAdvancedVoices(true)
       setAdvancedVoiceLoadError(null)
       try {
@@ -414,7 +448,7 @@ const CharacterWorkflow: FC = () => {
     return () => {
       isMounted = false
     }
-  }, [allowAdvanced, t])
+  }, [advancedProvider, allowAdvanced, t])
 
   useEffect(() => {
     let isMounted = true
@@ -545,18 +579,20 @@ const CharacterWorkflow: FC = () => {
   }, [genderFilter, languageFilter, regionFilter, voicesForMode])
 
   useEffect(() => {
+    if (ttsMode === 'advanced' && advancedProvider === 'zai') return
     if (filteredVoices.length === 0) return
     const isIncluded = filteredVoices.some((item) => item.shortName === activeVoice)
     if (!isIncluded) {
       setActiveVoice(filteredVoices[0].shortName)
     }
-  }, [activeVoice, filteredVoices, setActiveVoice])
+  }, [activeVoice, advancedProvider, filteredVoices, setActiveVoice, ttsMode])
 
   useEffect(() => {
     let isMounted = true
     const fetchStyles = async () => {
       if (ttsMode !== 'advanced') return
       if (!allowAdvanced) return
+      if (advancedProvider !== 'microsoft') return
       if (!advancedTtsVoice) return
       if (!advancedVoiceMap.get(advancedTtsVoice)) {
         setStyleOptions([])
@@ -595,7 +631,7 @@ const CharacterWorkflow: FC = () => {
     return () => {
       isMounted = false
     }
-  }, [advancedTtsStyle, advancedTtsVoice, advancedVoiceMap, ttsMode, allowAdvanced])
+  }, [advancedProvider, advancedTtsStyle, advancedTtsVoice, advancedVoiceMap, ttsMode, allowAdvanced])
 
   const popoverPortalContainer = useMemo(() => {
     return typeof document !== 'undefined' ? document.body : undefined
@@ -1848,16 +1884,29 @@ const CharacterWorkflow: FC = () => {
 
       const result =
         ttsMode === 'advanced'
-          ? await window.api.advancedTTS.generate({
-              text,
-              textFilePath: textFilePath ?? undefined,
-              voice: advancedTtsVoice,
-              style: advancedTtsStyle || 'general',
-              rate: formatSigned(advancedTtsRateValue),
-              pitch: formatSigned(advancedTtsPitchValue),
-              outputDir: audioDir,
-              filename
-            })
+          ? await window.api.advancedTTS.generate(
+              advancedProvider === 'zai'
+                ? {
+                    provider: 'zai',
+                    text,
+                    textFilePath: textFilePath ?? undefined,
+                    voice: advancedZaiVoice,
+                    rate: formatSigned(advancedTtsRateValue),
+                    outputDir: audioDir,
+                    filename
+                  }
+                : {
+                    provider: 'microsoft',
+                    text,
+                    textFilePath: textFilePath ?? undefined,
+                    voice: advancedTtsVoice,
+                    style: advancedTtsStyle || 'general',
+                    rate: formatSigned(advancedTtsRateValue),
+                    pitch: formatSigned(advancedTtsPitchValue),
+                    outputDir: audioDir,
+                    filename
+                  }
+            )
           : await window.api.edgeTTS.generate({
               text,
               voice: ttsVoice,
@@ -1908,10 +1957,12 @@ const CharacterWorkflow: FC = () => {
     stopStageProgress,
     t,
     ttsMode,
+    advancedProvider,
     advancedTtsStyle,
     advancedTtsVoice,
     advancedTtsPitchValue,
     advancedTtsRateValue,
+    advancedZaiVoice,
     ttsPitchValue,
     ttsRateValue,
     ttsSourceKind,
@@ -2400,6 +2451,8 @@ const CharacterWorkflow: FC = () => {
             <TtsVoiceConfigCard
               isGenerating={isTtsGenerating}
               ttsMode={ttsMode}
+              advancedProvider={advancedProvider}
+              setAdvancedProvider={setAdvancedProvider}
               portalContainer={popoverPortalContainer}
               voiceLoadError={voiceLoadError}
               isLoadingVoices={isLoadingVoices}

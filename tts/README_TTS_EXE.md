@@ -42,12 +42,15 @@ speech_timestamp_prediction-v1-16k-offline/
 - `onnxruntime.dll`
 - `onnxruntime_providers_shared.dll`
 
+建议：把上述 DLL **直接放到 `tts.exe` 同目录**（尤其是将 `tts.exe` 放在 `dist/` 或单独拷贝到其它目录运行时）。部分系统会禁用“当前工作目录”参与 DLL 搜索，导致 DLL 虽在项目根目录但仍无法启动。
+
 ## 3. 配置文件说明（JSON）
 
 `cli-config.example.json` 支持字段：
 
 ```json
 {
+  "provider": "microsoft",
   "region": "eastasia",
   "voice": "zh-CN-XiaoxiaoNeural",
   "style": "cheerful",
@@ -56,6 +59,11 @@ speech_timestamp_prediction-v1-16k-offline/
   "align_model_dir": "speech_timestamp_prediction-v1-16k-offline/sherpa-onnx-streaming-zipformer-small-ctc-zh-2025-04-01"
 }
 ```
+
+注意：
+
+- **编码要求**：JSON 文件建议使用 **UTF-8（无 BOM）**。如果出现 `invalid character 'ï' looking for beginning of value`，通常是文件带 BOM 导致解析失败（见 6.4）。
+- `api_key`：仅 Microsoft 模式需要（Azure Speech Key）。ZAI 模式默认使用程序内置凭据（也可在 `configs/config.yaml` 的 `zai` 节点覆盖）。
 
 默认值（未填写时）：
 
@@ -67,10 +75,33 @@ speech_timestamp_prediction-v1-16k-offline/
 
 说明：
 
-- **输出格式写死为 WAV**：`riff-16khz-16bit-mono-pcm`
-- **请求超时写死为 120 秒**：`request_timeout = 120`
+- **Microsoft 输出格式固定为 WAV**：`riff-16khz-16bit-mono-pcm`
+- **请求超时固定为 120 秒**：`request_timeout = 120`
 
 如需变更格式/超时，需要修改源码并重新编译。
+
+#### provider 说明
+
+- `provider`: `microsoft`（默认）或 `zai`
+- 当 `provider="zai"` 时：
+  - `voice` 字段表示 ZAI 的 `voice_id`（例如 `system_001` 或克隆音色的 `voice_id`）
+  - `region/style/pitch` 会被忽略；`rate` 会尝试映射为 ZAI 的 `speed`
+
+#### 使用 config.yaml（完整配置，可覆盖 ZAI 凭据）
+
+如使用 `configs/config.yaml`（或你自己的 YAML 配置），ZAI 相关字段在 `zai` 节点（留空则使用程序内置默认值）：
+
+```yaml
+tts:
+  provider: zai
+  default_voice: system_001
+
+zai:
+  base_url: https://audio.z.ai
+  token: ""   # 可选：覆盖内置 token
+  user_id: "" # 可选：覆盖内置 user_id
+  timeout_sec: 120
+```
 
 ## 4. 常用命令
 
@@ -79,6 +110,8 @@ speech_timestamp_prediction-v1-16k-offline/
 ```
 .\tts.exe --list-voices
 ```
+
+说明：该命令当前固定走 Microsoft 语音列表接口（不受 `provider` 影响）。如未配置有效的 Microsoft `api_key`，可能调用失败。
 
 输出示例（完整结构）：
 
@@ -138,6 +171,8 @@ speech_timestamp_prediction-v1-16k-offline/
 .\tts.exe --voice-styles zh-CN-XiaoxiaoNeural
 ```
 
+说明：该命令当前固定走 Microsoft 语音风格查询接口（不受 `provider` 影响）。
+
 输出示例（完整结构）：
 
 ```json
@@ -154,6 +189,25 @@ speech_timestamp_prediction-v1-16k-offline/
 ```
 .\tts.exe -i weban.txt -o output.wav -c cli-config.example.json
 ```
+
+### 4.2.1 使用 ZAI/GLM TTS（输出 WAV）
+
+把 `cli-config.example.json` 中的 `provider` 改为 `zai`，并把 `voice` 改为 `system_001`（或你的克隆音色 `voice_id`）：
+
+```
+.\tts.exe -i weban.txt -o zai_output.wav -c cli-config.example.json
+```
+
+#### 4.2.1.1 ZAI 参数映射（与原 CLI 传参保持一致）
+
+- `voice` → `voice_id`
+  - 示例：`system_001`
+  - 如需使用克隆音色，请在 `audio.z.ai` 获取对应的 `voice_id`，并填入 `voice`
+- `rate` → `speed`
+  - 解析规则：把 `rate` 当作百分比（允许带 `%`），计算 `speed = 1.0 + rate/100`
+  - 例如：`rate="+0"` → `speed=1.0`；`rate="+20"` → `speed=1.2`；`rate="-30"` → `speed=0.7`
+  - `speed` 会被限制在 `[0.1, 3.0]`，并四舍五入到 1 位小数
+- `style` / `pitch` / `region`：ZAI 模式下会被忽略（保留字段仅为兼容原 CLI 配置结构）
 
 ### 4.3 文本转语音 + 时间戳（输出雪诺_bio.json格式）
 
@@ -180,7 +234,7 @@ speech_timestamp_prediction-v1-16k-offline/
 当启用 `--timestamps` 时：
 
 - **输出文件必须是 `.wav`**，否则会直接报错
-- 输出格式固定为 **16kHz / 16bit / mono PCM**
+- 对齐模型以 **16kHz** 特征配置运行，建议输出为 **16kHz / 16bit / mono PCM**；否则可能出现对齐效果异常或失败
 
 ### 5.2 JSON 输出格式（雪诺_bio.json）
 
@@ -240,11 +294,58 @@ context deadline exceeded (Client.Timeout...)
 - `onnxruntime.dll`
 - `onnxruntime_providers_shared.dll`
 
+### 6.4 JSON 配置解析失败（BOM/编码问题）
+
+报错：
+
+```
+invalid character 'ï' looking for beginning of value
+```
+
+原因：`cli-config.example.json`（或你的 JSON 配置）使用了 **UTF-8 with BOM**。  
+处理：用编辑器把文件保存为 **UTF-8（无 BOM）** 后重试。
+
+### 6.5 ZAI 合成失败
+
+常见原因：
+
+- 网络不可达 / 被防火墙拦截，导致请求 `audio.z.ai` 失败
+- `voice` 不是有效的 `voice_id`
+- 内置凭据失效：在 `configs/config.yaml` 的 `zai.token` / `zai.user_id` 中覆盖，或更新程序内置凭据后重新编译
+
+### 6.6 已构建的 tts.exe 无法执行
+
+可能报错：
+
+- `Access is denied.`
+- `The specified executable is not a valid application for this OS platform.`
+
+处理建议：
+
+- 确认在 **Windows x64** 上运行，并使用 `GOOS=windows GOARCH=amd64` 构建
+- 如果被安全策略拦截，可尝试右键文件属性解除阻止（或执行 `powershell -Command "Unblock-File .\\tts.exe"`）
+- 临时验证功能时，可用源码方式跑同等 CLI（仅用于本地排错）：`go run ./cmd/api -i weban.txt -o out.wav -c cli-config.example.json`
+
 ## 7. 构建（从源码生成 tts.exe）
 
 ```
-gofmt -w "F:/tts-main/internal/align/bio.go" "F:/tts-main/cmd/api/main.go"
-go build -ldflags "-s -w" -o tts.exe ./cmd/api
+go fmt ./...
+go build -buildvcs=false -ldflags "-s -w" -o tts.exe ./cmd/api
 ```
 
 如需调整默认输出格式或超时，请修改 `F:/tts-main/cmd/api/main.go` 后重新构建。
+
+## 8. 自动化冒烟测试（ZAI 模式）
+
+项目内置了一键脚本用于验证 **ZAI 合成 + WAV 输出** 是否正常：
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File "F:/tts-main/script/smoke_zai.ps1"
+```
+
+脚本行为：
+
+- `go test ./...`
+- 构建 `dist/tts.exe`
+- 运行一次 ZAI 集成测试（in-process）
+- 按 CLI 参数模式执行一次文本合成，输出 `dist/zai_output.wav` 并校验 WAV 头（`RIFF/WAVE`）
