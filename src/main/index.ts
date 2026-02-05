@@ -121,9 +121,21 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     const mainWindow = windowService.createMainWindow()
-    new TrayService()
 
-    nodeTraceService.init()
+    // Ensure IPC handlers are registered even if optional initializers fail.
+    registerIpc(mainWindow, app)
+
+    try {
+      new TrayService()
+    } catch (error) {
+      logger.error('Failed to init TrayService:', error as Error)
+    }
+
+    try {
+      nodeTraceService.init()
+    } catch (error) {
+      logger.error('Failed to init NodeTraceService:', error as Error)
+    }
 
     app.on('activate', function () {
       const mainWindow = windowService.getMainWindow()
@@ -134,11 +146,17 @@ if (!app.requestSingleInstanceLock()) {
       }
     })
 
-    registerShortcuts(mainWindow)
+    try {
+      registerShortcuts(mainWindow)
+    } catch (error) {
+      logger.error('Failed to register shortcuts:', error as Error)
+    }
 
-    registerIpc(mainWindow, app)
-
-    replaceDevtoolsFont(mainWindow)
+    try {
+      replaceDevtoolsFont(mainWindow)
+    } catch (error) {
+      logger.error('Failed to replace devtools font:', error as Error)
+    }
 
     // Setup deep link for AppImage on Linux
     await setupAppImageDeepLink()
