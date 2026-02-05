@@ -231,12 +231,27 @@ export class GistVideoService {
       const dataDir = path.join(app.getPath('userData'), 'gist-video')
       ensureDir(dataDir)
 
-      const port = Number(process.env.GIST_VIDEO_PORT || 0) || (await getFreePort())
-      const baseUrl = `http://127.0.0.1:${port}`
-      const wsBase = `ws://127.0.0.1:${port}`
-
       const exe = resolveBackendExe(backendRoot)
       const python = resolvePythonCommand(backendRoot)
+
+      // If a previous run crashed, the randomly chosen port may still be in TIME_WAIT.
+      // Prefer the port from existing backend settings if present to reduce flakiness.
+      let preferredPort = Number(process.env.GIST_VIDEO_PORT || 0) || 0
+      try {
+        const settingsPath = path.join(dataDir, 'settings.json')
+        if (!preferredPort && fs.existsSync(settingsPath)) {
+          const raw = fs.readFileSync(settingsPath, 'utf8')
+          const parsed = raw ? JSON.parse(raw) : {}
+          const fromFile = Number(parsed?.server?.port || parsed?.port || 0)
+          if (fromFile > 0) preferredPort = fromFile
+        }
+      } catch {
+        // ignore
+      }
+
+      const port = preferredPort || (await getFreePort())
+      const baseUrl = `http://127.0.0.1:${port}`
+      const wsBase = `ws://127.0.0.1:${port}`
 
       // In packaged builds we expect a bundled backend executable.
       // Falling back to system Python is brittle (users may not have deps like onnxruntime).
