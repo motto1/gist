@@ -67,6 +67,9 @@ CLAUDE.local.md
 *.txt
 nul
 
+# Keep renderer static image assets versioned
+!src/renderer/src/assets/images/**/*.png
+
 # vitest
 coverage
 .vitest-cache
