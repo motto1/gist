@@ -1,16 +1,16 @@
 import { Button, Card, CardBody, Tab, Tabs, Textarea } from '@heroui/react'
+import { isBasicEdition } from '@renderer/config/edition'
+import { useLocalStorageState } from '@renderer/hooks/useLocalStorageState'
+import { useRuntime } from '@renderer/hooks/useRuntime'
 import { ArrowLeft, Download, FileText, Mic, Play, Trash2 } from 'lucide-react'
 import { type CSSProperties, FC, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 
-import { isBasicEdition } from '@renderer/config/edition'
-import { useLocalStorageState } from '@renderer/hooks/useLocalStorageState'
-import { useRuntime } from '@renderer/hooks/useRuntime'
-
 import DragBar from './components/DragBar'
-import TtsVoiceConfigCard, { type AdvancedTTSProvider } from './components/TtsVoiceConfigCard'
 import { getLocaleLabelZh } from './components/ttsLabels'
+import TtsVoiceConfigCard, { type AdvancedTTSProvider } from './components/TtsVoiceConfigCard'
+import { useAdaptiveScale } from './components/useAdaptiveScale'
 
 type VoiceRaw = {
   name?: string
@@ -129,6 +129,7 @@ const saveHistoryToStorage = (items: HistoryItem[]) => {
 const TTSGenerator: FC = () => {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { hostRef: layoutHostRef, scaledStyle } = useAdaptiveScale(1380)
   const location = useLocation()
   const { edition } = useRuntime()
   const allowAdvanced = !isBasicEdition(edition)
@@ -691,9 +692,10 @@ const TTSGenerator: FC = () => {
           <h1 className="font-semibold text-xl">{t('workflow.tts.title', '语音生成')}</h1>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-8">
-          <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="space-y-5">
+        <div ref={layoutHostRef} className="flex-1 overflow-y-auto px-6 py-8">
+          <div className="mx-auto w-full max-w-6xl overflow-visible">
+            <div className="grid grid-cols-[minmax(0,1fr)_320px] gap-6" style={scaledStyle}>
+              <div className="space-y-5">
               <div className="flex flex-col items-center gap-4">
                 <div className="rounded-2xl border border-white/5 bg-content2/30 p-1.5 backdrop-blur-sm">
                   <Tabs
@@ -885,6 +887,7 @@ const TTSGenerator: FC = () => {
             </div>
           </div>
         </div>
+      </div>
       </div>
     </>
   )

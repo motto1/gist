@@ -209,23 +209,39 @@ export default function NovelToolHistoryView({ tool, book, baseName, showRuns = 
     }
   }, [tool, selectedRun, selectedCharacterPath, onOpenViewer])
 
-  const title = tool === 'compression' ? '压缩器' : tool === 'character' ? '人物志' : '大纲'
-
   return (
     <div className="flex flex-col flex-1 overflow-hidden min-h-0">
       <div className="px-3 py-2 border-b border-[var(--color-border)]">
-        <div className="flex items-center justify-between gap-2 w-full">
-          <span className="text-xs font-bold">
-            {title}{showRuns ? '历史' : '结果'}
-          </span>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="flat" startContent={<RefreshCw size={14} />} onPress={loadRuns} isDisabled={!rootDir}>
+        <div className="flex flex-col gap-2 w-full">
+          <span className="text-xs font-bold">{showRuns ? '历史' : '结果'}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="flat"
+              startContent={<RefreshCw size={14} />}
+              onPress={loadRuns}
+              isDisabled={!rootDir}
+              className="min-w-[88px] flex-1"
+            >
               刷新
             </Button>
-            <Button size="sm" variant="flat" startContent={<FolderOpen size={14} />} onPress={openRootDir} isDisabled={!rootDir}>
+            <Button
+              size="sm"
+              variant="flat"
+              startContent={<FolderOpen size={14} />}
+              onPress={openRootDir}
+              isDisabled={!rootDir}
+              className="min-w-[88px] flex-1"
+            >
               打开根目录
             </Button>
-            <Button size="sm" variant="flat" onPress={openSelectedDir} isDisabled={!selectedRun}>
+            <Button
+              size="sm"
+              variant="flat"
+              onPress={openSelectedDir}
+              isDisabled={!selectedRun}
+              className="min-w-[88px] flex-1"
+            >
               打开任务目录
             </Button>
           </div>

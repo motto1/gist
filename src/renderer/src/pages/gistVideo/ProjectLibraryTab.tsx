@@ -1,12 +1,11 @@
-import { Button, Input } from '@heroui/react'
+import { Button, Card, CardBody, Input } from '@heroui/react'
+import { useAppSelector } from '@renderer/store'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { useAppSelector } from '@renderer/store'
-
-import { GlassPanel } from '../workflow/components'
+import { useAdaptiveScale } from '../workflow/components/useAdaptiveScale'
 import { apiGet, apiPost, apiPut, ensureEndpoint, getWsBase, setGistVideoRuntimeConfig } from './apiClient'
-import LogPanel from './components/LogPanel'
 import JobProgress from './components/JobProgress'
+import LogPanel from './components/LogPanel'
 import { pickVideos } from './dialog'
 import type { JobEvent, Project } from './types'
 
@@ -33,12 +32,10 @@ export default function ProjectLibraryTab() {
   const [logs, setLogs] = useState<string[]>([])
 
   const wsRef = useRef<WebSocket | null>(null)
+  const { hostRef: layoutHostRef, scaledStyle } = useAdaptiveScale(1280)
 
   const busy = !!jobId
-  const selectedProject = useMemo(
-    () => projects.find((p) => p.project_id === selected) || null,
-    [projects, selected]
-  )
+  const selectedProject = useMemo(() => projects.find((p) => p.project_id === selected) || null, [projects, selected])
 
   const pushLog = (line: string) => {
     setLogs((prev) => {
@@ -112,9 +109,7 @@ export default function ProjectLibraryTab() {
       }
       handleEvent(raw as JobEvent)
     }
-    ws.onerror = () => {
-      pushLog('WARNING: WebSocket 连接异常（可能后端未启动或端口不对）。')
-    }
+    ws.onerror = () => pushLog('WARNING: WebSocket 连接异常（可能后端未启动或端口不对）。')
   }
 
   const refreshProjects = async () => {
@@ -149,7 +144,6 @@ export default function ProjectLibraryTab() {
   }
 
   const prepareVisionRuntime = async (): Promise<boolean> => {
-    // 1) Try to infer provider/model from last selection
     let providerId = ''
     let modelId = ''
     try {
@@ -174,16 +168,13 @@ export default function ProjectLibraryTab() {
       return false
     }
 
-    // 2) Push runtime credentials to python backend
     setGistVideoRuntimeConfig({ visionApiBase: provider.apiHost, visionApiKey: provider.apiKey })
     await ensureEndpoint(true)
 
-    // 3) Persist non-sensitive settings (vision_model)
     try {
       await apiPut('/api/settings', { vision: { backend: 'auto', vision_model: modelId } })
     } catch (e) {
       pushLog(`WARNING: 写入 vision_model 失败：${String(e)}`)
-      // still allow index; backend may already have the model set
     }
 
     return true
@@ -192,7 +183,6 @@ export default function ProjectLibraryTab() {
   const startIndex = async () => {
     if (!selectedProject || busy) return
 
-    // Ensure captioning runtime is ready BEFORE starting the job.
     const ok = await prepareVisionRuntime()
     if (!ok) return
 
@@ -222,96 +212,109 @@ export default function ProjectLibraryTab() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-      <GlassPanel paddingClassName="p-6" className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              value={newName}
-              onValueChange={setNewName}
-              placeholder="输入项目名称..."
-              isDisabled={busy}
-              variant="flat"
-              classNames={{ inputWrapper: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12' }}
-            />
-            <Button color="primary" onPress={() => void createProject()} isDisabled={busy || !newName.trim()}>
-              新建项目
-            </Button>
-            <Button variant="flat" onPress={() => void refreshProjects()} isDisabled={busy}>
-              刷新
-            </Button>
-          </div>
-
-          <div className="text-foreground/60 text-sm">项目列表</div>
-          <div className="flex max-h-[420px] flex-col gap-2 overflow-auto">
-            {projects.map((p) => {
-              const active = p.project_id === selected
-              return (
-                <button
-                  key={p.project_id}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setSelected(p.project_id)}
-                  className={[
-                    'text-left',
-                    'rounded-lg border p-3 transition-colors',
-                    active ? 'border-primary/60 bg-content2' : 'border-divider bg-content1',
-                    busy ? 'opacity-60' : 'hover:bg-content2'
-                  ].join(' ')}
-                >
-                  <div className="text-sm font-medium">{p.name}</div>
-                  <div className="mt-1 text-foreground/40 text-xs">
-                    {p.project_id} · {ts(p.created_at)}
-                  </div>
-                </button>
-              )
-            })}
-            {!projects.length ? (
-              <div className="rounded-lg border border-dashed border-divider p-4 text-foreground/40 text-sm">
-                暂无项目
-              </div>
-            ) : null}
-          </div>
-      </GlassPanel>
-
-      <GlassPanel paddingClassName="p-6" className="space-y-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="flat" onPress={() => void addVideos()} isDisabled={!selectedProject || busy}>
-              添加视频...
-            </Button>
-
-            <div className="flex items-center gap-2">
-              <span className="text-foreground/60 text-sm">本次处理前 N 个视频</span>
-              <Input
-                type="number"
-                min={0}
-                value={String(maxVideos)}
-                onValueChange={(v) => setMaxVideos(Math.max(0, Number(v || 0)))}
-                isDisabled={busy}
-                variant="flat"
-                className="w-[160px]"
-                classNames={{ inputWrapper: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12' }}
-              />
+    <div ref={layoutHostRef} className="w-full overflow-visible">
+      <div className="grid grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] gap-6" style={scaledStyle}>
+        <Card>
+          <CardBody className="space-y-5 p-4">
+            <div className="text-center">
+              <h3 className="font-semibold text-lg">项目库</h3>
+              <p className="text-foreground/55 text-sm">先创建项目，再向项目添加原始视频素材。</p>
             </div>
 
-            <Button color="primary" onPress={() => void startIndex()} isDisabled={!selectedProject || busy}>
-              建立/更新索引
-            </Button>
-            <Button variant="flat" onPress={() => void pauseOrResume()} isDisabled={!jobId}>
-              {paused ? '继续' : '暂停'}
-            </Button>
-            <Button color="danger" variant="flat" onPress={() => void cancel()} isDisabled={!jobId}>
-              取消
-            </Button>
-          </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Input
+                value={newName}
+                onValueChange={setNewName}
+                placeholder="输入项目名称..."
+                isDisabled={busy}
+                variant="flat"
+                className="max-w-[380px]"
+                classNames={{ inputWrapper: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12' }}
+              />
+              <Button color="primary" onPress={() => void createProject()} isDisabled={busy || !newName.trim()}>
+                新建项目
+              </Button>
+              <Button variant="flat" onPress={() => void refreshProjects()} isDisabled={busy}>
+                刷新
+              </Button>
+            </div>
 
-          <JobProgress pct={pct} stage={status} />
+            <div className="space-y-2">
+              <div className="text-center text-foreground/60 text-sm">项目列表</div>
+              <div className="flex max-h-[520px] flex-col gap-2 overflow-auto">
+                {projects.map((p) => {
+                  const active = p.project_id === selected
+                  return (
+                    <button
+                      key={p.project_id}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setSelected(p.project_id)}
+                      className={[
+                        'rounded-xl border p-3 text-left transition-colors',
+                        active ? 'border-primary/60 bg-content2' : 'border-divider bg-content1',
+                        busy ? 'opacity-60' : 'hover:bg-content2'
+                      ].join(' ')}
+                    >
+                      <div className="text-sm font-medium">{p.name}</div>
+                      <div className="mt-1 text-foreground/40 text-xs">
+                        {p.project_id} · {ts(p.created_at)}
+                      </div>
+                    </button>
+                  )
+                })}
+                {!projects.length ? (
+                  <div className="rounded-xl border border-dashed border-divider p-4 text-center text-foreground/40 text-sm">暂无项目</div>
+                ) : null}
+              </div>
+            </div>
+          </CardBody>
+        </Card>
 
-          <div className="text-foreground/50 text-sm">
-            说明：建库会生成 proxy、抽帧、图生文缓存、最后做文本向量化并写入 index。
-          </div>
+        <Card>
+          <CardBody className="space-y-5 p-4">
+            <div className="text-center">
+              <h3 className="font-semibold text-lg">索引任务</h3>
+              <p className="text-foreground/55 text-sm">给选中项目添加素材并执行索引，后续渲染会直接复用该索引。</p>
+            </div>
 
-          <LogPanel lines={logs} />
-      </GlassPanel>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button variant="flat" onPress={() => void addVideos()} isDisabled={!selectedProject || busy}>
+                添加视频...
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <span className="text-foreground/60 text-sm">本次处理前 N 个视频</span>
+                <Input
+                  type="number"
+                  min={0}
+                  value={String(maxVideos)}
+                  onValueChange={(v) => setMaxVideos(Math.max(0, Number(v || 0)))}
+                  isDisabled={busy}
+                  variant="flat"
+                  className="w-[160px]"
+                  classNames={{ inputWrapper: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12' }}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button color="primary" onPress={() => void startIndex()} isDisabled={!selectedProject || busy}>
+                建立/更新索引
+              </Button>
+              <Button variant="flat" onPress={() => void pauseOrResume()} isDisabled={!jobId}>
+                {paused ? '继续' : '暂停'}
+              </Button>
+              <Button color="danger" variant="flat" onPress={() => void cancel()} isDisabled={!jobId}>
+                取消
+              </Button>
+            </div>
+
+            <JobProgress pct={pct} stage={status} />
+            <LogPanel lines={logs} />
+          </CardBody>
+        </Card>
+      </div>
     </div>
   )
 }

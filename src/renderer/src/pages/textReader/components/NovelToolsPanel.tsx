@@ -37,8 +37,7 @@ import {
   AdvancedSettings,
   ChunkModeSettings,
   EmptyState,
-  ProgressSection,
-  ToolHeader
+  ProgressSection
 } from './NovelToolShared'
 import RightPanelResultViewer from './RightPanelResultViewer'
 import { TextReaderMarkdown } from './TextReaderMarkdown'
@@ -96,23 +95,25 @@ const ToolViewSelector: FC<{
   value: ToolView
   onChange: (view: ToolView) => void
 }> = ({ value, onChange }) => (
-  <div className="px-3 py-2 border-b border-divider [&_button]:[-webkit-app-region:no-drag]">
-    <div className="flex gap-1 p-1 bg-content3 rounded-lg">
-      {TOOL_VIEW_OPTIONS.map((opt) => {
-        const selected = value === opt.key
-        return (
-          <button
-            key={opt.key}
-            type="button"
-            onClick={() => onChange(opt.key)}
-            className={`flex-1 flex items-center justify-center h-8 rounded-md transition-all text-sm ${
-              selected ? 'bg-content1 shadow-sm' : 'text-default-500 hover:bg-content1/50'
-            }`}
-          >
-            {opt.label}
-          </button>
-        )
-      })}
+  <div className="px-3 py-2 border-b border-white/10 [&_button]:[-webkit-app-region:no-drag]">
+    <div className="rounded-xl border border-white/10 bg-content2/40 p-1 backdrop-blur-sm">
+      <div className="flex gap-1">
+        {TOOL_VIEW_OPTIONS.map((opt) => {
+          const selected = value === opt.key
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => onChange(opt.key)}
+              className={`flex-1 flex h-8 items-center justify-center rounded-md text-sm transition-all ${
+                selected ? 'bg-content1 shadow-sm' : 'text-default-500 hover:bg-content1/50'
+              }`}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
     </div>
   </div>
 )
@@ -131,7 +132,6 @@ type Props = {
   onChapterClick: (chapterId: string) => void
   collapsed: boolean
   onCollapsedChange: (collapsed: boolean) => void
-  width?: number
 }
 
 const NovelToolsPanel: FC<Props> = ({
@@ -140,8 +140,7 @@ const NovelToolsPanel: FC<Props> = ({
   chapters,
   onChapterClick,
   collapsed,
-  onCollapsedChange,
-  width
+  onCollapsedChange
 }) => {
   const { t } = useTranslation()
   const [activeTool, setActiveTool] = useState<ToolType>('compression')
@@ -599,8 +598,6 @@ const NovelToolsPanel: FC<Props> = ({
 
     return (
       <div className="flex flex-col h-full overflow-hidden">
-        <ToolHeader title="小说压缩器" description="将小说压缩为简洁版本" />
-
         <ToolViewSelector value={toolViewByTool.compression} onChange={(view) => setToolView('compression', view)} />
 
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -765,8 +762,6 @@ const NovelToolsPanel: FC<Props> = ({
 
     return (
       <div className="flex flex-col h-full overflow-hidden">
-        <ToolHeader title="小说人物志" description="提取人物关系和剧情" />
-
         <ToolViewSelector value={toolViewByTool.character} onChange={(view) => setToolView('character', view)} />
 
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -952,8 +947,6 @@ const NovelToolsPanel: FC<Props> = ({
 
     return (
       <div className="flex flex-col h-full overflow-hidden">
-        <ToolHeader title="大纲提取器" description="提取小说整体大纲" />
-
         <ToolViewSelector value={toolViewByTool.outline} onChange={(view) => setToolView('outline', view)} />
 
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -1079,19 +1072,17 @@ const NovelToolsPanel: FC<Props> = ({
     return (
       <div
         onClick={() => onCollapsedChange(false)}
-        className="w-8 border-l border-divider bg-content2 flex flex-col items-center pt-3 pb-3 cursor-pointer transition-colors hover:bg-content3"
+        className="flex w-9 cursor-pointer flex-col items-center border-l border-white/10 bg-content1/85 pt-3 pb-3 shadow-[-6px_0_18px_rgba(0,0,0,0.12)] transition-colors hover:bg-content1"
       >
         <ChevronLeft size={16} />
-        <span className="text-xs text-default-500 mt-2 [writing-mode:vertical-rl]">工具</span>
+        <span className="mt-2 text-default-500 text-xs [writing-mode:vertical-rl]">工具</span>
       </div>
     )
   }
 
-  const panelWidth = width ?? 320
-
   return (
-    <div className="border-l border-divider bg-content2 flex flex-col h-full overflow-hidden relative [-webkit-app-region:no-drag]" style={{ width: panelWidth }}>
-      <div className="px-3 py-2.5 flex items-center justify-between border-b border-divider">
+    <div className="relative flex h-full min-w-0 max-w-full flex-1 flex-col overflow-hidden border-l border-white/10 bg-content1/92 shadow-[-10px_0_26px_rgba(0,0,0,0.16)] backdrop-blur-sm [-webkit-app-region:no-drag]">
+      <div className="flex items-center justify-between border-white/10 border-b px-3 py-2.5">
         <div className="flex items-center gap-2">
           <BookOpen size={16} />
           <span className="font-semibold text-sm">小说工具</span>
@@ -1102,20 +1093,22 @@ const NovelToolsPanel: FC<Props> = ({
       </div>
 
       {/* 工具选择器 */}
-      <div className="px-3 py-2 border-b border-divider">
-        <div className="flex gap-1 p-1 bg-content3 rounded-lg">
-          {toolOptions.map((option) => (
-            <Tooltip key={option.key} content={option.tooltip}>
-              <button
-                onClick={() => setActiveTool(option.key as ToolType)}
-                className={`flex-1 flex items-center justify-center h-8 rounded-md transition-all ${
-                  activeTool === option.key ? 'bg-content1 shadow-sm' : 'hover:bg-content1/50'
-                }`}
-              >
-                {option.icon}
-              </button>
-            </Tooltip>
-          ))}
+      <div className="border-white/10 border-b px-3 py-2">
+        <div className="rounded-xl border border-white/10 bg-content2/40 p-1 backdrop-blur-sm">
+          <div className="flex gap-1">
+            {toolOptions.map((option) => (
+              <Tooltip key={option.key} content={option.tooltip}>
+                <button
+                  onClick={() => setActiveTool(option.key as ToolType)}
+                  className={`flex h-8 flex-1 items-center justify-center rounded-md transition-all ${
+                    activeTool === option.key ? 'bg-content1 shadow-sm' : 'hover:bg-content1/50'
+                  }`}
+                >
+                  {option.icon}
+                </button>
+              </Tooltip>
+            ))}
+          </div>
         </div>
       </div>
 

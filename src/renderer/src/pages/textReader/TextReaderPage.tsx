@@ -27,13 +27,21 @@ import ChapterSidebar from './components/ChapterSidebar'
 import NovelToolsPanel from './components/NovelToolsPanel'
 import ReaderContent, { type ReaderContentRef } from './components/ReaderContent'
 
+const TOOLS_PANEL_WIDTH_STORAGE_KEY = 'textReader.toolsPanelWidth'
+const DEFAULT_TOOLS_PANEL_WIDTH = 320
+const MIN_TOOLS_PANEL_WIDTH = 260
+const COLLAPSED_TOOLS_PANEL_WIDTH = 36
+const MIN_READER_WIDTH = 360
+const RESIZE_HANDLE_WIDTH = 14
+const RESIZE_STEP_PX = 16
+const TOOLS_LAYOUT_SAFETY_GAP = 10
+
 const TextReaderPage: FC = () => {
   const { bookId } = useParams<{ bookId: string }>()
   const { t } = useTranslation()
   const { edition } = useRuntime()
   const showToolsPanel = !isBasicEdition(edition)
 
-  // 工具面板折叠状态
   const [toolsPanelCollapsed, setToolsPanelCollapsed] = useState(true)
 
   const {
@@ -51,94 +59,113 @@ const TextReaderPage: FC = () => {
   } = useTextReader(bookId || '')
 
   const readerRef = useRef<ReaderContentRef | null>(null)
-
-  const TOOLS_PANEL_WIDTH_STORAGE_KEY = 'textReader.toolsPanelWidth'
-  const DEFAULT_TOOLS_PANEL_WIDTH = 320
-  const MIN_TOOLS_PANEL_WIDTH = 260
-  const MIN_READER_WIDTH = 360
-  const RESIZE_HANDLE_WIDTH = 14
-  const RESIZE_STEP_PX = 16
-
-  const [toolsPanelWidth, setToolsPanelWidth] = useState(DEFAULT_TOOLS_PANEL_WIDTH)
   const mainContentRef = useRef<HTMLDivElement | null>(null)
   const resizeStateRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
-  const mainResizeObserverRef = useRef<ResizeObserver | null>(null)
+
+  const [toolsPanelWidth, setToolsPanelWidth] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem(TOOLS_PANEL_WIDTH_STORAGE_KEY)
+      const parsed = raw ? Number(raw) : NaN
+      return Number.isFinite(parsed) ? parsed : DEFAULT_TOOLS_PANEL_WIDTH
+    } catch {
+      return DEFAULT_TOOLS_PANEL_WIDTH
+    }
+  })
+
+  const [mainContentWidth, setMainContentWidth] = useState(0)
+  const [chapterSidebarWidth, setChapterSidebarWidth] = useState(260)
 
   const clamp = useCallback((value: number, min: number, max: number) => {
     return Math.min(max, Math.max(min, value))
   }, [])
 
-  const getMaxToolsPanelWidth = useCallback(() => {
-    // 关键：以"窗口可视宽度"作为上限约束，而不是完全信任 layout 宽度。
-    // 否则在某些情况下（flex 子项存在最小宽度/内容撑开），页面 layout 宽度可能会被撑大，
-    // 从而让工具面板在拖拽时出现"越拖越往右溢出窗口"的不符合直觉表现。
-    const viewportWidth = document.documentElement.clientWidth || window.innerWidth
-    const layoutWidth = mainContentRef.current?.getBoundingClientRect().width ?? viewportWidth
-    const mainWidth = Math.min(layoutWidth, viewportWidth)
-    const sidebarReserved = sidebarMode === 'fixed' ? 260 : 0
+  const updateLayoutMetrics = useCallback(() => {
+    const mainEl = mainContentRef.current
+    if (!mainEl) return
 
-    // 注意：不要在这里强行下限为 MIN_TOOLS_PANEL_WIDTH。
-    // 当窗口本身不足以容纳"目录 + 阅读区最小宽度 + 工具面板最小宽度"时，工具面板必须允许进一步收缩，
-    // 否则就会出现"工具面板超出软件窗口边界"的现象。
-    const available = mainWidth - sidebarReserved - MIN_READER_WIDTH - RESIZE_HANDLE_WIDTH
-    return Math.min(720, Math.max(0, available))
-  }, [sidebarMode])
+    setMainContentWidth(mainEl.clientWidth)
 
-  const maxToolsPanelWidth = useMemo(() => getMaxToolsPanelWidth(), [getMaxToolsPanelWidth])
+    const sidebarEl = mainEl.querySelector('[data-reader-chapter-sidebar]') as HTMLElement | null
+    if (sidebarEl) {
+      setChapterSidebarWidth(sidebarEl.offsetWidth)
+    }
+  }, [])
+
+  useEffect(() => {
+    const mainEl = mainContentRef.current
+    if (!mainEl) return
+
+    updateLayoutMetrics()
+
+    const sidebarEl = mainEl.querySelector('[data-reader-chapter-sidebar]') as HTMLElement | null
+    const ro = new ResizeObserver(() => updateLayoutMetrics())
+    ro.observe(mainEl)
+    if (sidebarEl) ro.observe(sidebarEl)
+
+    return () => ro.disconnect()
+  }, [sidebarMode, updateLayoutMetrics])
+
+  const toolsConstraints = useMemo(() => {
+    const measuredMainWidth = mainContentWidth || mainContentRef.current?.clientWidth || 0
+
+    // 首帧/切换瞬间还未完成测量时，避免把 maxWidth 误算为 0 导致展开后面板“消失”。
+    if (measuredMainWidth <= 0) {
+      return {
+        minWidth: MIN_TOOLS_PANEL_WIDTH,
+        maxWidth: DEFAULT_TOOLS_PANEL_WIDTH
+      }
+    }
+
+    const sidebarReserved = sidebarMode === 'fixed' ? chapterSidebarWidth : 0
+    const hardCap = measuredMainWidth - sidebarReserved - RESIZE_HANDLE_WIDTH - TOOLS_LAYOUT_SAFETY_GAP
+    const preferred = hardCap - MIN_READER_WIDTH
+
+    const resolvedMax = Math.min(720, Math.max(0, preferred > 0 ? preferred : hardCap))
+    const maxWidth = Math.max(1, resolvedMax)
+    const minWidth = Math.min(MIN_TOOLS_PANEL_WIDTH, maxWidth)
+
+    return { minWidth, maxWidth }
+  }, [chapterSidebarWidth, mainContentWidth, sidebarMode])
+
+  const effectiveToolsPanelWidth = useMemo(
+    () => clamp(toolsPanelWidth, toolsConstraints.minWidth, toolsConstraints.maxWidth),
+    [clamp, toolsConstraints.maxWidth, toolsConstraints.minWidth, toolsPanelWidth]
+  )
+
+  const rightRailWidth = useMemo(
+    () => (toolsPanelCollapsed ? COLLAPSED_TOOLS_PANEL_WIDTH : RESIZE_HANDLE_WIDTH + effectiveToolsPanelWidth),
+    [effectiveToolsPanelWidth, toolsPanelCollapsed]
+  )
 
   const applyToolsPanelWidth = useCallback(
     (next: number) => {
-      setToolsPanelWidth(clamp(next, MIN_TOOLS_PANEL_WIDTH, maxToolsPanelWidth))
+      setToolsPanelWidth(clamp(next, toolsConstraints.minWidth, toolsConstraints.maxWidth))
     },
-    [clamp, maxToolsPanelWidth]
+    [clamp, toolsConstraints.maxWidth, toolsConstraints.minWidth]
   )
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(TOOLS_PANEL_WIDTH_STORAGE_KEY)
-      const parsed = raw ? Number(raw) : NaN
-      if (Number.isFinite(parsed)) {
-        setToolsPanelWidth(clamp(parsed, MIN_TOOLS_PANEL_WIDTH, getMaxToolsPanelWidth()))
-      }
-    } catch {
-      // ignore
-    }
-  }, [clamp, getMaxToolsPanelWidth])
+    if (!showToolsPanel) return
+    setToolsPanelWidth((prev) => clamp(prev, toolsConstraints.minWidth, toolsConstraints.maxWidth))
+  }, [clamp, showToolsPanel, toolsConstraints.maxWidth, toolsConstraints.minWidth])
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(TOOLS_PANEL_WIDTH_STORAGE_KEY, String(toolsPanelWidth))
+      window.localStorage.setItem(TOOLS_PANEL_WIDTH_STORAGE_KEY, String(Math.round(toolsPanelWidth)))
     } catch {
       // ignore
     }
   }, [toolsPanelWidth])
 
+  const finishResize = useCallback(() => {
+    resizeStateRef.current = null
+    document.body.style.userSelect = ''
+    document.body.style.cursor = ''
+  }, [])
+
   useEffect(() => {
-    // 窗口尺寸/侧边栏模式变化时，若工具面板宽度超出可用空间，会出现右侧被裁切（MainContent overflow: hidden）。
-    // 这里用 ResizeObserver 持续将 width clamp 到可用范围，保证任何情况下都不会"截断"显示。
-    const el = mainContentRef.current
-    if (!el) return
-
-    // 先立即 clamp 一次：避免"从折叠状态打开但窗口未 resize，面板宽度仍沿用旧值"的情况。
-    if (!toolsPanelCollapsed) {
-      const maxWidth = getMaxToolsPanelWidth()
-      setToolsPanelWidth((prev) => clamp(prev, MIN_TOOLS_PANEL_WIDTH, maxWidth))
-    }
-
-    mainResizeObserverRef.current?.disconnect()
-    const ro = new ResizeObserver(() => {
-      if (toolsPanelCollapsed) return
-      const maxWidth = getMaxToolsPanelWidth()
-      setToolsPanelWidth((prev) => clamp(prev, MIN_TOOLS_PANEL_WIDTH, maxWidth))
-    })
-    mainResizeObserverRef.current = ro
-    ro.observe(el)
-
-    return () => {
-      ro.disconnect()
-      mainResizeObserverRef.current = null
-    }
-  }, [clamp, getMaxToolsPanelWidth, toolsPanelCollapsed])
+    return () => finishResize()
+  }, [finishResize])
 
   const handleResizePointerDown = useCallback<PointerEventHandler<HTMLDivElement>>(
     (e) => {
@@ -150,13 +177,13 @@ const TextReaderPage: FC = () => {
       resizeStateRef.current = {
         pointerId: e.pointerId,
         startX: e.clientX,
-        startWidth: toolsPanelWidth
+        startWidth: effectiveToolsPanelWidth
       }
 
       document.body.style.userSelect = 'none'
       document.body.style.cursor = 'col-resize'
     },
-    [toolsPanelCollapsed, toolsPanelWidth]
+    [effectiveToolsPanelWidth, toolsPanelCollapsed]
   )
 
   const handleResizePointerMove = useCallback<PointerEventHandler<HTMLDivElement>>(
@@ -165,18 +192,10 @@ const TextReaderPage: FC = () => {
       if (!state || state.pointerId !== e.pointerId) return
 
       const deltaX = e.clientX - state.startX
-      const maxWidth = getMaxToolsPanelWidth()
-      const nextWidth = clamp(state.startWidth - deltaX, MIN_TOOLS_PANEL_WIDTH, maxWidth)
-      setToolsPanelWidth(nextWidth)
+      applyToolsPanelWidth(state.startWidth - deltaX)
     },
-    [clamp, getMaxToolsPanelWidth]
+    [applyToolsPanelWidth]
   )
-
-  const finishResize = useCallback(() => {
-    resizeStateRef.current = null
-    document.body.style.userSelect = ''
-    document.body.style.cursor = ''
-  }, [])
 
   const handleResizePointerUp = useCallback<PointerEventHandler<HTMLDivElement>>(
     (e) => {
@@ -207,16 +226,33 @@ const TextReaderPage: FC = () => {
 
       const step = e.shiftKey ? RESIZE_STEP_PX * 4 : RESIZE_STEP_PX
       if (e.key === 'ArrowLeft') {
-        applyToolsPanelWidth(toolsPanelWidth + step)
+        applyToolsPanelWidth(effectiveToolsPanelWidth + step)
       } else if (e.key === 'ArrowRight') {
-        applyToolsPanelWidth(toolsPanelWidth - step)
+        applyToolsPanelWidth(effectiveToolsPanelWidth - step)
       } else if (e.key === 'Home') {
-        applyToolsPanelWidth(MIN_TOOLS_PANEL_WIDTH)
+        applyToolsPanelWidth(toolsConstraints.minWidth)
       } else if (e.key === 'End') {
-        applyToolsPanelWidth(maxToolsPanelWidth)
+        applyToolsPanelWidth(toolsConstraints.maxWidth)
       }
     },
-    [applyToolsPanelWidth, maxToolsPanelWidth, toolsPanelCollapsed, toolsPanelWidth]
+    [
+      applyToolsPanelWidth,
+      effectiveToolsPanelWidth,
+      toolsConstraints.maxWidth,
+      toolsConstraints.minWidth,
+      toolsPanelCollapsed
+    ]
+  )
+
+  const handleToolsCollapsedChange = useCallback(
+    (collapsed: boolean) => {
+      if (!collapsed) {
+        updateLayoutMetrics()
+        setToolsPanelWidth((prev) => (prev < 120 ? DEFAULT_TOOLS_PANEL_WIDTH : prev))
+      }
+      setToolsPanelCollapsed(collapsed)
+    },
+    [updateLayoutMetrics]
   )
 
   const focusChapterById = useCallback(
@@ -269,53 +305,82 @@ const TextReaderPage: FC = () => {
         </NavbarCenter>
       </Navbar>
 
-      <div ref={mainContentRef} data-main-content className="relative flex min-w-0 flex-1 overflow-hidden">
-        <ChapterSidebar
-          chapters={chapters}
-          currentChapterId={currentChapter?.id || null}
-          mode={sidebarMode}
-          onChapterClick={(chapter) => focusChapterById(chapter.id)}
-          onModeChange={setSidebarMode}
-        />
-        <ReaderContent
-          ref={readerRef}
-          preview={content}
-          chapters={chapters}
-          onChapterVisible={(chapter) => setCurrentChapter(chapter as any)}
-        />
-        {showToolsPanel && !toolsPanelCollapsed && (
+      <div ref={mainContentRef} data-main-content className="relative min-w-0 flex-1 overflow-hidden">
+        {showToolsPanel ? (
           <div
-            className="group pointer-events-auto relative z-10 w-[14px] flex-shrink-0 cursor-col-resize touch-none select-none bg-transparent [-webkit-app-region:no-drag] hover:bg-[color-mix(in_srgb,var(--color-primary)_6%,transparent)] focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--color-primary)_55%,transparent)] focus-visible:outline-offset-[-2px]"
-            title="拖拽调整比例"
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="调整右侧工具栏宽度"
-            tabIndex={0}
-            onPointerDown={handleResizePointerDown}
-            onPointerMove={handleResizePointerMove}
-            onPointerUp={handleResizePointerUp}
-            onPointerCancel={handleResizePointerCancel}
-            onDoubleClick={handleResizeDoubleClick}
-            onKeyDown={handleResizeKeyDown}>
-            <div className="-translate-x-1/2 absolute top-0 bottom-0 left-1/2 w-[2px] bg-[var(--color-border)] opacity-60 group-hover:bg-[var(--color-primary)] group-hover:opacity-100" />
-            <div
-              className="-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute top-1/2 left-1/2 h-[24px] w-[6px] rounded-lg opacity-0 group-hover:opacity-100"
-              style={{
-                background: 'radial-gradient(circle, rgba(0, 0, 0, 0.28) 1.1px, transparent 1.2px) center/6px 6px'
-              }}
+            className="grid h-full min-w-0"
+            style={{ gridTemplateColumns: `minmax(0,1fr) ${rightRailWidth}px` }}
+          >
+            <div className="flex min-w-0 overflow-hidden">
+              <ChapterSidebar
+                chapters={chapters}
+                currentChapterId={currentChapter?.id || null}
+                mode={sidebarMode}
+                onChapterClick={(chapter) => focusChapterById(chapter.id)}
+                onModeChange={setSidebarMode}
+              />
+
+              <ReaderContent
+                ref={readerRef}
+                preview={content}
+                chapters={chapters}
+                onChapterVisible={(chapter) => setCurrentChapter(chapter as any)}
+              />
+            </div>
+
+            <div className="z-20 flex h-full min-w-0 overflow-hidden">
+              {!toolsPanelCollapsed && (
+                <div
+                  className="group pointer-events-auto relative z-10 w-[14px] flex-shrink-0 cursor-col-resize touch-none select-none bg-transparent [-webkit-app-region:no-drag] hover:bg-[color-mix(in_srgb,var(--color-primary)_6%,transparent)] focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--color-primary)_55%,transparent)] focus-visible:outline-offset-[-2px]"
+                  title="拖拽调整比例"
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="调整右侧工具栏宽度"
+                  tabIndex={0}
+                  onPointerDown={handleResizePointerDown}
+                  onPointerMove={handleResizePointerMove}
+                  onPointerUp={handleResizePointerUp}
+                  onPointerCancel={handleResizePointerCancel}
+                  onDoubleClick={handleResizeDoubleClick}
+                  onKeyDown={handleResizeKeyDown}
+                >
+                  <div className="-translate-x-1/2 absolute top-0 bottom-0 left-1/2 w-[2px] bg-[var(--color-border)] opacity-60 group-hover:bg-[var(--color-primary)] group-hover:opacity-100" />
+                  <div
+                    className="-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute top-1/2 left-1/2 h-[24px] w-[6px] rounded-lg opacity-0 group-hover:opacity-100"
+                    style={{
+                      background: 'radial-gradient(circle, rgba(0, 0, 0, 0.28) 1.1px, transparent 1.2px) center/6px 6px'
+                    }}
+                  />
+                </div>
+              )}
+
+              <NovelToolsPanel
+                book={book}
+                content={content}
+                chapters={chapters}
+                onChapterClick={focusChapterById}
+                collapsed={toolsPanelCollapsed}
+                onCollapsedChange={handleToolsCollapsedChange}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex h-full min-w-0 overflow-hidden">
+            <ChapterSidebar
+              chapters={chapters}
+              currentChapterId={currentChapter?.id || null}
+              mode={sidebarMode}
+              onChapterClick={(chapter) => focusChapterById(chapter.id)}
+              onModeChange={setSidebarMode}
+            />
+
+            <ReaderContent
+              ref={readerRef}
+              preview={content}
+              chapters={chapters}
+              onChapterVisible={(chapter) => setCurrentChapter(chapter as any)}
             />
           </div>
-        )}
-        {showToolsPanel && (
-          <NovelToolsPanel
-            book={book}
-            content={content}
-            chapters={chapters}
-            onChapterClick={focusChapterById}
-            collapsed={toolsPanelCollapsed}
-            onCollapsedChange={setToolsPanelCollapsed}
-            width={toolsPanelWidth}
-          />
         )}
       </div>
     </div>

@@ -40,6 +40,7 @@ export default function ChapterSidebar({
 
   return (
     <div
+      data-reader-chapter-sidebar
       className={`
         w-[260px] border-r border-[var(--color-border)]
         overflow-hidden flex flex-col
