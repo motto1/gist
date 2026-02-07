@@ -28,6 +28,18 @@ export type Model = {
   supported_text_delta?: boolean
 }
 
+/**
+ * Runtime config injected by Electron host for gist-video backend.
+ *
+ * Notes:
+ * - Contains sensitive data (apiKey). Do NOT persist to disk.
+ * - Used to pass provider credentials to the local Python backend via env.
+ */
+export type GistVideoRuntimeConfig = {
+  visionApiBase?: string
+  visionApiKey?: string
+}
+
 export enum FileTypes {
   IMAGE = 'image',
   VIDEO = 'video',

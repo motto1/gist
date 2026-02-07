@@ -5,7 +5,7 @@ import { TerminalConfig, UpgradeChannel } from '@shared/config/constant'
 import type { LogLevel, LogSourceWithContext } from '@shared/config/logger'
 import type { FileChangeEvent } from '@shared/config/types'
 import { IpcChannel } from '@shared/IpcChannel'
-import { ChapterParseResult,NovelCompressionState, NovelOutlineState } from '@shared/types'
+import { ChapterParseResult, GistVideoRuntimeConfig, NovelCompressionState, NovelOutlineState } from '@shared/types'
 import type { Notification } from '@types'
 import {
   AddMemoryOptions,
@@ -212,7 +212,8 @@ const api = {
     }
   },
   gistVideo: {
-    ensureBackend: () => ipcRenderer.invoke(IpcChannel.GistVideo_EnsureBackend),
+    ensureBackend: (runtimeConfig?: GistVideoRuntimeConfig | null) =>
+      ipcRenderer.invoke(IpcChannel.GistVideo_EnsureBackend, runtimeConfig),
     stopBackend: () => ipcRenderer.invoke(IpcChannel.GistVideo_StopBackend)
   },
   fs: {

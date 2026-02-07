@@ -1,10 +1,24 @@
+import type { GistVideoRuntimeConfig } from '@shared/types'
+
 import type { GistVideoEndpoint } from './types'
 
 let endpointPromise: Promise<GistVideoEndpoint> | null = null
+let runtimeConfig: GistVideoRuntimeConfig | null | undefined = undefined
+
+/**
+ * Runtime-only config passed to Electron main, then forwarded to the Python backend
+ * via an in-memory runtime endpoint (NOT persisted).
+ * Contains sensitive data; do NOT persist.
+ */
+export function setGistVideoRuntimeConfig(config: GistVideoRuntimeConfig | null | undefined) {
+  runtimeConfig = config
+  // force re-resolve on next request
+  endpointPromise = null
+}
 
 export async function ensureEndpoint(force: boolean = false): Promise<GistVideoEndpoint> {
   if (force || !endpointPromise) {
-    endpointPromise = window.api.gistVideo.ensureBackend() as Promise<GistVideoEndpoint>
+    endpointPromise = window.api.gistVideo.ensureBackend(runtimeConfig) as Promise<GistVideoEndpoint>
   }
   return endpointPromise
 }

@@ -1,7 +1,10 @@
-import { Button, Card, CardBody, Input, Select, SelectItem, Switch, Textarea } from '@heroui/react'
+import { Button, Input, Select, SelectItem, Switch, Textarea } from '@heroui/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { apiGet, apiPost, getWsBase } from './apiClient'
+import { useAppSelector } from '@renderer/store'
+
+import { GlassPanel } from '../workflow/components'
+import { apiGet, apiPost, apiPut, ensureEndpoint, getWsBase, setGistVideoRuntimeConfig } from './apiClient'
 import LogPanel from './components/LogPanel'
 import JobProgress from './components/JobProgress'
 import { pickOutputMp4 } from './dialog'
@@ -25,6 +28,7 @@ const pickOnePath = async (title: string, exts?: string[]): Promise<string | nul
 }
 
 export default function RenderTab() {
+  const providers = useAppSelector((s) => s.llm.providers)
   const [projects, setProjects] = useState<Project[]>([])
   const [projectId, setProjectId] = useState<string>('')
 
@@ -158,9 +162,50 @@ export default function RenderTab() {
     if (p) setOut(p)
   }
 
+  const prepareVisionRuntime = async (): Promise<boolean> => {
+    let providerId = ''
+    let modelId = ''
+    try {
+      const raw = window.localStorage.getItem('gist-video.visionModelSelector.last.v1')
+      if (raw) {
+        const parsed = JSON.parse(raw) as any
+        providerId = String(parsed?.provider || '').trim()
+        modelId = String(parsed?.id || '').trim()
+      }
+    } catch {
+      // ignore
+    }
+
+    if (!providerId || !modelId) {
+      pushLog('ERROR: 未找到图生文模型选择。请先到「图生文设置」里选择模型并点击“应用配置”。')
+      return false
+    }
+
+    const provider = providers.find((p) => p.id === providerId) || null
+    if (!provider?.apiHost?.trim() || !provider?.apiKey?.trim()) {
+      pushLog('ERROR: Provider 未配置 apiHost/apiKey。请到主程序「设置 → Provider」补全后再生成。')
+      return false
+    }
+
+    setGistVideoRuntimeConfig({ visionApiBase: provider.apiHost, visionApiKey: provider.apiKey })
+    await ensureEndpoint(true)
+
+    try {
+      await apiPut('/api/settings', { vision: { backend: 'auto', vision_model: modelId } })
+    } catch (e) {
+      pushLog(`WARNING: 写入 vision_model 失败：${String(e)}`)
+    }
+
+    return true
+  }
+
   const startRender = async () => {
     if (!selectedProject || busy) return
     if (!audio.trim() || !script.trim() || !out.trim()) return
+
+    const ok = await prepareVisionRuntime()
+    if (!ok) return
+
     setLogs([])
     setPct(0)
     setStatus('正在生成视频...')
@@ -202,8 +247,7 @@ export default function RenderTab() {
   }
 
   return (
-    <Card className="bg-content1/50 border border-white/5 shadow-sm backdrop-blur-md">
-      <CardBody className="space-y-6 p-6">
+    <GlassPanel paddingClassName="p-6" className="space-y-6">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Select
             label="选择项目"
@@ -232,21 +276,29 @@ export default function RenderTab() {
             <SelectItem key="v">竖屏 9:16（1080x1920）</SelectItem>
           </Select>
 
-          <div className="flex items-center justify-between rounded-xl border border-white/5 bg-content2/30 px-4 py-3">
+          <GlassPanel
+            radiusClassName="rounded-xl"
+            paddingClassName="px-4 py-3"
+            className="flex items-center justify-between"
+          >
             <div className="space-y-1">
               <div className="font-medium text-foreground text-sm">保持原速</div>
               <div className="text-foreground/40 text-xs">启用后不会对视频片段做变速</div>
             </div>
             <Switch isSelected={keepSpeed} onValueChange={setKeepSpeed} isDisabled={busy} />
-          </div>
+          </GlassPanel>
 
-          <div className="flex items-center justify-between rounded-xl border border-white/5 bg-content2/30 px-4 py-3">
+          <GlassPanel
+            radiusClassName="rounded-xl"
+            paddingClassName="px-4 py-3"
+            className="flex items-center justify-between"
+          >
             <div className="space-y-1">
               <div className="font-medium text-foreground text-sm">启用花字</div>
               <div className="text-foreground/40 text-xs">根据关键词/标记生成强调字幕</div>
             </div>
             <Switch isSelected={emphEnable} onValueChange={setEmphEnable} isDisabled={busy} />
-          </div>
+          </GlassPanel>
         </div>
 
         <div className="grid grid-cols-1 gap-4">
@@ -375,7 +427,6 @@ export default function RenderTab() {
 
         <JobProgress pct={pct} stage={status} />
         <LogPanel lines={logs} />
-      </CardBody>
-    </Card>
+    </GlassPanel>
   )
 }

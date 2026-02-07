@@ -524,7 +524,7 @@ export function registerIpc(mainWindow: BrowserWindow, app: Electron.App) {
   ipcMain.handle(IpcChannel.File_StopWatcher, fileManager.stopFileWatcher.bind(fileManager))
 
   // gist-video
-  ipcMain.handle(IpcChannel.GistVideo_EnsureBackend, () => gistVideoService.ensureBackend())
+  ipcMain.handle(IpcChannel.GistVideo_EnsureBackend, (_event, runtimeConfig) => gistVideoService.ensureBackend(runtimeConfig))
   ipcMain.handle(IpcChannel.GistVideo_StopBackend, () => gistVideoService.stopBackend())
 
   // file service

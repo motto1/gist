@@ -11,6 +11,11 @@ from pydantic import BaseModel, Field
 
 from app.core.paths import default_paths
 from app.core.project_store import ProjectStore
+from app.core.runtime_config import (
+    clear_runtime_vision_credentials,
+    has_runtime_vision_credentials,
+    set_runtime_vision_credentials,
+)
 from app.core.settings import (
     AppSettings,
     EmbeddingSettings,
@@ -83,6 +88,11 @@ class SettingsPatch(BaseModel):
     render: RenderSettingsPatch | None = None
 
 
+class RuntimeVisionIn(BaseModel):
+    api_base: str = ""
+    api_key: str = ""
+
+
 class StartIndexJobIn(BaseModel):
     project_id: str
     videos_override: list[str] | None = None
@@ -147,8 +157,21 @@ def _settings_path_meta() -> dict[str, Any]:
 
 
 def _settings_to_public_dict(st: AppSettings) -> dict[str, Any]:
-    # dataclasses.asdict is stable + keeps the file layout close to settings.json.
-    return asdict(st)
+    """Settings for UI.
+
+    注意：当 API 凭据来自 env（由宿主进程注入）时，避免把密钥回显给前端。
+    """
+
+    data = asdict(st)
+    try:
+        # Always mask key in public response (defense in depth).
+        vis = data.get("vision") or {}
+        if isinstance(vis, dict) and vis.get("api_key"):
+            vis["api_key"] = "***"
+        data["vision"] = vis
+    except Exception:
+        pass
+    return data
 
 
 def create_app(*, job_manager: JobManager | None = None) -> FastAPI:
@@ -170,13 +193,34 @@ def create_app(*, job_manager: JobManager | None = None) -> FastAPI:
 
     @app.get("/api/settings")
     def get_settings() -> dict[str, Any]:
-        st = load_settings()
+        st = load_settings(apply_runtime=True)
         meta = _settings_path_meta()
         return {**meta, "settings": _settings_to_public_dict(st)}
 
+    @app.put("/api/runtime/vision")
+    def set_runtime_vision(inp: RuntimeVisionIn = Body(...)) -> dict[str, Any]:
+        """Set runtime-only vision credentials.
+
+        - Stored in memory only
+        - Used by load_settings(apply_runtime=True)
+        - Never persisted to settings.json
+        """
+        api_base = str(inp.api_base or "").strip()
+        api_key = str(inp.api_key or "").strip()
+        if not api_base or not api_key:
+            raise HTTPException(status_code=400, detail="缺少 api_base/api_key")
+        set_runtime_vision_credentials(api_base=api_base, api_key=api_key)
+        return {"ok": True}
+
+    @app.delete("/api/runtime/vision")
+    def clear_runtime_vision() -> dict[str, Any]:
+        clear_runtime_vision_credentials()
+        return {"ok": True}
+
     @app.put("/api/settings")
     def patch_settings(patch: SettingsPatch = Body(...)) -> dict[str, Any]:
-        cur = load_settings()
+        # Important: do NOT apply runtime overrides here, otherwise a PUT would persist secrets into settings.json.
+        cur = load_settings(apply_runtime=False)
 
         emb = cur.embedding
         if patch.embedding is not None:
@@ -188,10 +232,12 @@ def create_app(*, job_manager: JobManager | None = None) -> FastAPI:
         vis = cur.vision
         if patch.vision is not None:
             pv = patch.vision
+            runtime_locked = has_runtime_vision_credentials()
             vis = VisionSettings(
                 backend=pv.backend if pv.backend is not None else cur.vision.backend,
-                api_base=pv.api_base if pv.api_base is not None else cur.vision.api_base,
-                api_key=pv.api_key if pv.api_key is not None else cur.vision.api_key,
+                # When runtime creds are present, keep file values (avoid persisting secrets).
+                api_base=(cur.vision.api_base if runtime_locked else (pv.api_base if pv.api_base is not None else cur.vision.api_base)),
+                api_key=(cur.vision.api_key if runtime_locked else (pv.api_key if pv.api_key is not None else cur.vision.api_key)),
                 vision_model=pv.vision_model if pv.vision_model is not None else cur.vision.vision_model,
                 caption_workers=int(pv.caption_workers) if pv.caption_workers is not None else int(cur.vision.caption_workers),
                 caption_in_flight=int(pv.caption_in_flight) if pv.caption_in_flight is not None else int(cur.vision.caption_in_flight),

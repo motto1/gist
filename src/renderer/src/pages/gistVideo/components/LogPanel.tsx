@@ -14,7 +14,7 @@ export default function LogPanel(props: { lines: string[]; style?: CSSProperties
         wordBreak: 'break-word',
         ...props.style
       }}
-      className="rounded-xl border border-divider bg-content2/40 p-3 text-foreground/80"
+      className="rounded-2xl border border-white/5 bg-content2/30 backdrop-blur-sm p-3 text-foreground/80"
     >
       {text || <span className="text-foreground/40">暂无日志</span>}
     </pre>

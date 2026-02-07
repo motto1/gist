@@ -434,9 +434,22 @@ def run_index_job(req: IndexJobRequest, progress, log, pause_evt, cancel_evt) ->
 
     cap_is_null = type(cap).__name__.lower().startswith("null")
     if cap_is_null:
-        log("WARNING: caption backend is null; clip_text will be empty and matching quality will be poor.")
+        log(
+            "WARNING: caption backend is null；clip_text 将为空，匹配质量会很差。"
+            "请到 UI 的『图生文设置』选择模型，并确保主程序 Provider 已配置 apiHost/apiKey。"
+        )
 
     st = load_settings().vision
+    try:
+        log(
+            "Vision settings: "
+            f"backend={str(st.backend)}, "
+            f"api_base={'Y' if (st.api_base or '').strip() else 'N'}, "
+            f"api_key={'Y' if (st.api_key or '').strip() else 'N'}, "
+            f"vision_model={str(st.vision_model or '').strip() or 'EMPTY'}"
+        )
+    except Exception:
+        pass
 
     cap_workers = int(req.caption_workers if req.caption_workers is not None else st.caption_workers)
     cap_in_flight = int(req.caption_in_flight if req.caption_in_flight is not None else st.caption_in_flight)

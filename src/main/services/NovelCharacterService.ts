@@ -20,7 +20,7 @@ import type {
 } from '@shared/types'
 import type { Model, Provider } from '@types'
 import type { ModelMessage } from 'ai'
-import { app, BrowserWindow, ipcMain, Notification } from 'electron'
+import { BrowserWindow, ipcMain, Notification } from 'electron'
 import fs from 'fs/promises'
 import path from 'path'
 import { z } from 'zod'
@@ -6018,58 +6018,15 @@ type SecondaryPromptTemplates = {
   monologue: string
 }
 
+const SECONDARY_PROMPT_TEMPLATES: SecondaryPromptTemplates = {
+  bio: `根据以上文本，写一篇主题为“XXX人物志”的文案。请使用第三人称视角，以“XXX”的主观时间线为主线，描述 XXX 从出场到结局的完整经历，并自然体现其关键心态变化。可以在不违背原文设定与整体风格前提下，补充合理的成长经历与转折情节。文风要求幽默但不过度轻佻，逻辑清晰、通俗易懂，不要使用小标题和分节，适合短视频口播场景，目标长度约 1500 字。`,
+  monologue: `根据以上文本，请以“XXX”第一人称写一篇心理独白。要求围绕其关键经历与情绪变化展开，体现人物在重要节点的内心冲突、价值判断与情感转折。可在不违背原文设定与整体风格前提下进行合理补充，文风口语化、真诚、有画面感，适合短视频口播场景，目标长度约 1500 字，不要使用小标题和分节。`
+}
+
 function sanitizeSecondaryFileStem(raw: string): string {
   const trimmed = raw.trim()
   const safe = trimmed.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
   return safe.length > 0 ? safe : '未命名人物'
-}
-
-function parseSecondaryPromptTemplates(raw: string): SecondaryPromptTemplates {
-  const bioHeader = '一、生成人物志'
-  const monologueHeader = '二、生成心理独白'
-
-  const bioIndex = raw.indexOf(bioHeader)
-  const monoIndex = raw.indexOf(monologueHeader)
-  if (bioIndex === -1 || monoIndex === -1 || monoIndex <= bioIndex) {
-    throw new Error('prompt.txt 格式不符合预期：未找到“一、生成人物志/二、生成心理独白”分段')
-  }
-
-  const bioSection = raw.slice(bioIndex + bioHeader.length, monoIndex).trim()
-  const monologueSection = raw.slice(monoIndex + monologueHeader.length).trim()
-
-  const extractPrompt = (section: string) => {
-    const marker = '提示词“'
-    const start = section.indexOf(marker)
-    if (start === -1) return section.trim()
-    const after = section.slice(start + marker.length)
-    const end = after.lastIndexOf('”')
-    return (end === -1 ? after : after.slice(0, end)).trim()
-  }
-
-  return {
-    bio: extractPrompt(bioSection),
-    monologue: extractPrompt(monologueSection)
-  }
-}
-
-async function loadSecondaryPromptTemplates(): Promise<SecondaryPromptTemplates> {
-  const candidates = [
-    path.join(process.cwd(), 'prompt.txt'),
-    path.join(app.getAppPath(), 'prompt.txt'),
-    path.join(app.getAppPath(), '..', 'prompt.txt'),
-    path.join(app.getAppPath(), '..', '..', 'prompt.txt')
-  ]
-
-  for (const p of candidates) {
-    try {
-      const raw = await fs.readFile(p, 'utf-8')
-      return parseSecondaryPromptTemplates(raw)
-    } catch {
-      // try next
-    }
-  }
-
-  throw new Error(`未找到 prompt.txt（尝试路径：${candidates.join(' | ')}）`)
 }
 
 ipcMain.handle(
@@ -6089,8 +6046,7 @@ ipcMain.handle(
       throw new Error('人物剧情为空，无法生成二次总结')
     }
 
-    const prompts = await loadSecondaryPromptTemplates()
-    const basePrompt = kind === 'bio' ? prompts.bio : prompts.monologue
+    const basePrompt = kind === 'bio' ? SECONDARY_PROMPT_TEMPLATES.bio : SECONDARY_PROMPT_TEMPLATES.monologue
     const prompt = basePrompt.replace(/XXX/g, characterName)
 
     // 保护模型上下文：对超长人物剧情做上限截断（只影响生成，不影响源文件）

@@ -3,6 +3,7 @@ import net from 'node:net'
 import path from 'node:path'
 
 import { loggerService } from '@logger'
+import type { GistVideoRuntimeConfig } from '@shared/types'
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { app } from 'electron'
 
@@ -252,6 +253,13 @@ export class GistVideoService {
   private info: BackendInfo | null = null
   private starting: Promise<BackendInfo> | null = null
 
+  /**
+   * Runtime config (in-memory only) injected by Electron.
+   * This will be passed to the Python backend via env on (re)start.
+   */
+  private runtimeConfig: GistVideoRuntimeConfig | null = null
+  private appliedRuntimeConfig: GistVideoRuntimeConfig | null = null
+
   private constructor() {
     app.on('before-quit', () => {
       void this.stopBackend()
@@ -265,9 +273,58 @@ export class GistVideoService {
     return GistVideoService.instance
   }
 
-  public async ensureBackend(): Promise<BackendInfo> {
+  private normalizeRuntimeConfig(cfg?: GistVideoRuntimeConfig | null): GistVideoRuntimeConfig | null {
+    if (cfg === null) return null
+    const base = String(cfg?.visionApiBase || '').trim()
+    const key = String(cfg?.visionApiKey || '').trim()
+    if (!base || !key) return null
+    return { visionApiBase: base, visionApiKey: key }
+  }
+
+  private isSameRuntimeConfig(a: GistVideoRuntimeConfig | null, b: GistVideoRuntimeConfig | null): boolean {
+    const aBase = String(a?.visionApiBase || '').trim()
+    const aKey = String(a?.visionApiKey || '').trim()
+    const bBase = String(b?.visionApiBase || '').trim()
+    const bKey = String(b?.visionApiKey || '').trim()
+    return aBase === bBase && aKey === bKey
+  }
+
+  private async applyRuntimeConfigToBackend(baseUrl: string): Promise<void> {
+    const cfg = this.runtimeConfig
+    if (!cfg?.visionApiBase || !cfg?.visionApiKey) return
+
+    try {
+      const r = await fetch(`${baseUrl}/api/runtime/vision`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_base: cfg.visionApiBase, api_key: cfg.visionApiKey })
+      })
+      if (!r.ok) {
+        const text = await r.text().catch(() => '')
+        throw new Error(`${r.status} ${r.statusText}${text ? `: ${text.slice(0, 240)}` : ''}`)
+      }
+      this.appliedRuntimeConfig = cfg
+      logger.info('Applied runtime vision credentials to gist-video backend', {
+        baseUrl,
+        apiBase: cfg.visionApiBase,
+        apiKey: cfg.visionApiKey ? `${cfg.visionApiKey.slice(0, 4)}***${cfg.visionApiKey.slice(-4)}` : ''
+      })
+    } catch (e) {
+      logger.warn('Failed to apply runtime config to gist-video backend', e as Error)
+    }
+  }
+
+  public async ensureBackend(runtimeConfig?: GistVideoRuntimeConfig | null): Promise<BackendInfo> {
+    if (runtimeConfig !== undefined) {
+      this.runtimeConfig = this.normalizeRuntimeConfig(runtimeConfig)
+    }
+
     // Fast path: already started and still alive.
     if (this.child && this.info && this.child.exitCode === null) {
+      // If runtime config changed, push it via HTTP (no restart).
+      if (!this.isSameRuntimeConfig(this.appliedRuntimeConfig, this.runtimeConfig)) {
+        await this.applyRuntimeConfigToBackend(this.info.baseUrl)
+      }
       return this.info
     }
 
@@ -279,7 +336,11 @@ export class GistVideoService {
       const dataDir = path.join(app.getPath('userData'), 'gist-video')
       ensureDir(dataDir)
 
-      const exe = resolveBackendExe(backendRoot)
+      // Dev: prefer running the Python module so local code changes take effect.
+      // Packaged builds: prefer the bundled executable.
+      const forcedExe = (process.env.GIST_VIDEO_BACKEND_EXE || '').trim()
+      const canUsePythonModule = !app.isPackaged && isExistingFile(path.join(backendRoot, 'app', 'server', '__main__.py'))
+      const exe = canUsePythonModule && !forcedExe ? null : resolveBackendExe(backendRoot)
       const python = resolvePythonCommand(backendRoot)
 
       // Dev-only guard rails:
@@ -341,6 +402,7 @@ export class GistVideoService {
         // make python output predictable
         PYTHONUTF8: '1'
       }
+
 
       // Windows: avoid onnxruntime.dll conflicts from the parent process PATH.
       // The app bundles another onnxruntime.dll for TTS (sherpa-onnx). If that directory is on PATH,
@@ -479,6 +541,7 @@ export class GistVideoService {
         startedAt: Date.now()
       }
       this.info = info
+      await this.applyRuntimeConfigToBackend(info.baseUrl)
       return info
     })()
 

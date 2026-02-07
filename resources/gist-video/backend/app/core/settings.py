@@ -87,15 +87,58 @@ class AppSettings:
     render: RenderSettings = RenderSettings()
 
 
-def load_settings() -> AppSettings:
+from app.core.runtime_config import get_runtime_vision_credentials, has_runtime_vision_credentials
+
+
+def apply_runtime_overrides(st: AppSettings) -> AppSettings:
+    """Apply in-memory runtime overrides.
+
+    设计目标：
+    - 宿主（Electron）在运行时把 Provider 凭据传入后端（不落盘）。
+    - settings.json 仅存储非敏感参数。
+    """
+
+    cred = get_runtime_vision_credentials()
+    if not (cred.api_base and cred.api_key):
+        return st
+
+    vis = st.vision
+    vis2 = VisionSettings(
+        backend=vis.backend,
+        api_base=cred.api_base,
+        api_key=cred.api_key,
+        vision_model=vis.vision_model,
+        caption_workers=vis.caption_workers,
+        caption_in_flight=vis.caption_in_flight,
+        caption_batch_clips=vis.caption_batch_clips,
+        caption_batch_max_images=vis.caption_batch_max_images,
+        skip_head_sec=vis.skip_head_sec,
+        skip_tail_sec=vis.skip_tail_sec,
+        slice_mode=vis.slice_mode,
+        scene_threshold=vis.scene_threshold,
+        scene_fps=vis.scene_fps,
+        clip_min_sec=vis.clip_min_sec,
+        clip_target_sec=vis.clip_target_sec,
+        clip_max_sec=vis.clip_max_sec,
+    )
+
+    return AppSettings(embedding=st.embedding, vision=vis2, render=st.render)
+
+
+def load_settings(*, apply_runtime: bool = True) -> AppSettings:
     """
     Runtime settings live in ./data/settings.json (not checked in).
     Keep this file small and human-editable.
+
+    apply_runtime:
+      - True: 运行时使用宿主传入的凭据覆盖（不落盘）。
+      - False: 只读文件内容（用于保存 patch，避免把内存凭据写回 settings.json）。
     """
     paths = default_paths()
     path = os.path.join(paths.data_dir, "settings.json")
     if not os.path.isfile(path):
-        return AppSettings()
+        st = AppSettings()
+        return apply_runtime_overrides(st) if apply_runtime else st
     try:
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
@@ -119,7 +162,7 @@ def load_settings() -> AppSettings:
             emph = [str(s).strip() for s in emph if str(s).strip()]
         else:
             emph = None
-        return AppSettings(
+        st = AppSettings(
             embedding=EmbeddingSettings(
                 backend=str(emb.get("backend", "auto")),
                 model_id=str(emb.get("model_id", EmbeddingSettings().model_id)),
@@ -165,8 +208,10 @@ def load_settings() -> AppSettings:
                 output_fps=int(ren.get("output_fps", 25) or 25),
             ),
         )
+        return apply_runtime_overrides(st) if apply_runtime else st
     except Exception:
-        return AppSettings()
+        st = AppSettings()
+        return apply_runtime_overrides(st) if apply_runtime else st
 
 
 def save_settings(st: AppSettings) -> str:

@@ -1,7 +1,10 @@
-import { Button, Card, CardBody, Input } from '@heroui/react'
+import { Button, Input } from '@heroui/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { apiGet, apiPost, getWsBase } from './apiClient'
+import { useAppSelector } from '@renderer/store'
+
+import { GlassPanel } from '../workflow/components'
+import { apiGet, apiPost, apiPut, ensureEndpoint, getWsBase, setGistVideoRuntimeConfig } from './apiClient'
 import LogPanel from './components/LogPanel'
 import JobProgress from './components/JobProgress'
 import { pickVideos } from './dialog'
@@ -17,6 +20,7 @@ function ts(sec: number) {
 }
 
 export default function ProjectLibraryTab() {
+  const providers = useAppSelector((s) => s.llm.providers)
   const [projects, setProjects] = useState<Project[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
@@ -144,8 +148,54 @@ export default function ProjectLibraryTab() {
     pushLog(`已添加 ${paths.length} 个视频。`)
   }
 
+  const prepareVisionRuntime = async (): Promise<boolean> => {
+    // 1) Try to infer provider/model from last selection
+    let providerId = ''
+    let modelId = ''
+    try {
+      const raw = window.localStorage.getItem('gist-video.visionModelSelector.last.v1')
+      if (raw) {
+        const parsed = JSON.parse(raw) as any
+        providerId = String(parsed?.provider || '').trim()
+        modelId = String(parsed?.id || '').trim()
+      }
+    } catch {
+      // ignore
+    }
+
+    if (!providerId || !modelId) {
+      pushLog('ERROR: 未找到图生文模型选择。请先到「图生文设置」里选择模型并点击“应用配置”。')
+      return false
+    }
+
+    const provider = providers.find((p) => p.id === providerId) || null
+    if (!provider?.apiHost?.trim() || !provider?.apiKey?.trim()) {
+      pushLog('ERROR: Provider 未配置 apiHost/apiKey。请到主程序「设置 → Provider」补全后再建库。')
+      return false
+    }
+
+    // 2) Push runtime credentials to python backend
+    setGistVideoRuntimeConfig({ visionApiBase: provider.apiHost, visionApiKey: provider.apiKey })
+    await ensureEndpoint(true)
+
+    // 3) Persist non-sensitive settings (vision_model)
+    try {
+      await apiPut('/api/settings', { vision: { backend: 'auto', vision_model: modelId } })
+    } catch (e) {
+      pushLog(`WARNING: 写入 vision_model 失败：${String(e)}`)
+      // still allow index; backend may already have the model set
+    }
+
+    return true
+  }
+
   const startIndex = async () => {
     if (!selectedProject || busy) return
+
+    // Ensure captioning runtime is ready BEFORE starting the job.
+    const ok = await prepareVisionRuntime()
+    if (!ok) return
+
     setLogs([])
     setPct(0)
     setStatus('正在建立索引...')
@@ -173,8 +223,7 @@ export default function ProjectLibraryTab() {
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-      <Card className="bg-content1/50 border border-white/5 shadow-sm backdrop-blur-md">
-        <CardBody className="space-y-4 p-6">
+      <GlassPanel paddingClassName="p-6" className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <Input
               value={newName}
@@ -222,11 +271,9 @@ export default function ProjectLibraryTab() {
               </div>
             ) : null}
           </div>
-        </CardBody>
-      </Card>
+      </GlassPanel>
 
-      <Card className="bg-content1/50 border border-white/5 shadow-sm backdrop-blur-md">
-        <CardBody className="space-y-5 p-6">
+      <GlassPanel paddingClassName="p-6" className="space-y-5">
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="flat" onPress={() => void addVideos()} isDisabled={!selectedProject || busy}>
               添加视频...
@@ -264,8 +311,7 @@ export default function ProjectLibraryTab() {
           </div>
 
           <LogPanel lines={logs} />
-        </CardBody>
-      </Card>
+      </GlassPanel>
     </div>
   )
 }
