@@ -94,7 +94,9 @@ export default function BookCard({ book, isDragging = false, onTitleChange, onDe
       onClick={onRead}
       onKeyDown={handleKeyDown}
       style={{ ['--book-hue' as never]: hue }}
-      className={`group w-full max-w-[280px] rounded-[var(--list-item-border-radius)] border-[0.5px] border-[var(--color-border)] overflow-hidden cursor-pointer bg-[var(--color-background)] transition-all duration-200 shadow-[0_5px_7px_-3px_var(--color-border-soft),0_2px_3px_-4px_var(--color-border-soft)] hover:shadow-[0_10px_15px_-3px_var(--color-border-soft),0_4px_6px_-4px_var(--color-border-soft)] hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 ${isDragging ? 'opacity-60 scale-[1.02] shadow-2xl ring-2 ring-[var(--color-primary)]' : ''}`}
+      className={`group w-full max-w-[280px] cursor-pointer overflow-hidden rounded-2xl border border-divider bg-content1 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+        isDragging ? 'opacity-60 scale-[1.02] shadow-2xl ring-2 ring-primary' : ''
+      }`}
     >
       {/* Cover Area */}
       <div
@@ -117,7 +119,7 @@ export default function BookCard({ book, isDragging = false, onTitleChange, onDe
               isIconOnly
               size="sm"
               variant="flat"
-              className="[-webkit-app-region:no-drag] text-white/92 bg-black/[0.26] border border-white/[0.14] backdrop-blur-md hover:bg-black/[0.34]"
+              className="text-white/92 bg-black/[0.26] border border-white/[0.14] backdrop-blur-md hover:bg-black/[0.34]"
               aria-label={t('textEditor.clickToRead', '点击阅读')}
               onClick={(e) => {
                 e.stopPropagation()
@@ -133,7 +135,7 @@ export default function BookCard({ book, isDragging = false, onTitleChange, onDe
               isIconOnly
               size="sm"
               variant="flat"
-              className="[-webkit-app-region:no-drag] text-white/92 bg-black/[0.26] border border-white/[0.14] backdrop-blur-md hover:bg-black/[0.34]"
+              className="text-white/92 bg-black/[0.26] border border-white/[0.14] backdrop-blur-md hover:bg-black/[0.34]"
               aria-label={t('textEditor.editTitle', '修改标题')}
               onClick={(e) => {
                 e.stopPropagation()
@@ -155,7 +157,7 @@ export default function BookCard({ book, isDragging = false, onTitleChange, onDe
                 isIconOnly
                 size="sm"
                 variant="flat"
-                className="[-webkit-app-region:no-drag] text-white/92 bg-black/[0.26] border border-white/[0.14] backdrop-blur-md hover:bg-black/[0.34]"
+                className="text-white/92 bg-black/[0.26] border border-white/[0.14] backdrop-blur-md hover:bg-black/[0.34]"
                 aria-label="More actions"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -203,10 +205,7 @@ export default function BookCard({ book, isDragging = false, onTitleChange, onDe
 
         {/* Title */}
         <div className="relative mt-auto flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
-          <p
-            className="m-0 text-white/92 text-base font-semibold leading-tight line-clamp-2"
-            title={title}
-          >
+          <p className="m-0 text-white/92 text-base font-semibold leading-tight line-clamp-2" title={title}>
             {title}
           </p>
         </div>
@@ -215,7 +214,7 @@ export default function BookCard({ book, isDragging = false, onTitleChange, onDe
       {/* Meta Area */}
       <div className="p-[10px_12px_12px] flex flex-col gap-2">
         {/* Stats Row */}
-        <div className="flex items-center gap-3 text-[var(--color-text-3)] text-xs whitespace-nowrap overflow-hidden">
+        <div className="flex items-center gap-3 text-foreground/60 text-xs whitespace-nowrap overflow-hidden">
           <span className="inline-flex items-center gap-1.5 leading-tight" title={fileSizeLabel}>
             <FileText size={13} className="flex-none" />
             <span>{fileSizeLabel}</span>
@@ -233,7 +232,7 @@ export default function BookCard({ book, isDragging = false, onTitleChange, onDe
         </div>
 
         {/* Date Row */}
-        <div className="flex items-center text-[var(--color-text-3)] text-xs min-w-0">
+        <div className="flex items-center text-foreground/60 text-xs min-w-0">
           <span className="inline-flex items-center gap-1.5 leading-tight min-w-0" title={updatedAtLabel}>
             <Clock size={13} className="flex-none" />
             <span className="min-w-0 overflow-hidden text-ellipsis">{updatedAtLabel}</span>

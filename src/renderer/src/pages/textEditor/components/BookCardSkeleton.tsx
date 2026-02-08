@@ -6,7 +6,7 @@ import { Skeleton } from '@heroui/react'
  */
 export default function BookCardSkeleton() {
   return (
-    <div className="w-full max-w-[280px] rounded-[var(--list-item-border-radius)] border-[0.5px] border-[var(--color-border)] overflow-hidden bg-[var(--color-background)] shadow-[0_5px_7px_-3px_var(--color-border-soft),0_2px_3px_-4px_var(--color-border-soft)]">
+    <div className="w-full max-w-[280px] overflow-hidden rounded-2xl border border-divider bg-content1 shadow-sm">
       {/* Cover Area Skeleton */}
       <div className="relative aspect-[3/4] p-[14px_14px_12px_16px] flex flex-col gap-2.5 justify-between bg-gradient-to-br from-gray-300 to-gray-400 dark:from-gray-700 dark:to-gray-800">
         {/* Badge Skeleton */}

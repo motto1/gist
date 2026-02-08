@@ -2,10 +2,10 @@ import { Button, Card, CardBody, Tab, Tabs, Textarea } from '@heroui/react'
 import { isBasicEdition } from '@renderer/config/edition'
 import { useLocalStorageState } from '@renderer/hooks/useLocalStorageState'
 import { useRuntime } from '@renderer/hooks/useRuntime'
-import { ArrowLeft, Download, FileText, Mic, Play, Trash2 } from 'lucide-react'
+import { Download, FileText, Mic, Play, Trash2 } from 'lucide-react'
 import { type CSSProperties, FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 
 import DragBar from './components/DragBar'
 import { getLocaleLabelZh } from './components/ttsLabels'
@@ -137,7 +137,6 @@ const saveHistoryToStorage = (items: HistoryItem[]) => {
 
 const TTSGenerator: FC = () => {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const { hostRef: layoutHostRef, scaledStyle } = useAdaptiveScale(1380)
   const location = useLocation()
   const { edition } = useRuntime()
@@ -964,17 +963,14 @@ const TTSGenerator: FC = () => {
       <audio ref={previewAudioRef} className="hidden" preload="auto" />
       <div className="relative flex h-full w-full flex-col bg-background">
         <div
-          className="relative z-10 flex items-center gap-4 border-foreground/10 border-b px-6 py-4"
+          className="relative z-10 flex min-h-[72px] items-center gap-4 border-foreground/10 border-b px-6 py-4"
           style={{ WebkitAppRegion: 'drag' } as CSSProperties}>
-          <Button
-            isIconOnly
-            radius="full"
-            variant="light"
-            onPress={() => navigate(-1)}
-            aria-label={t('workflow.character.stage3.prev', '上一步')}
-            style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}>
-            <ArrowLeft size={18} />
-          </Button>
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-content2 text-foreground/60"
+            style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}
+          >
+            <Mic size={18} />
+          </div>
           <h1 className="font-semibold text-xl">{t('workflow.tts.title', '语音生成')}</h1>
         </div>
 

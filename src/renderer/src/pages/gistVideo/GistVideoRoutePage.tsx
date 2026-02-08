@@ -1,8 +1,7 @@
 import { Button, Card, CardBody, Chip, Tab, Tabs } from '@heroui/react'
 import { useAppSelector } from '@renderer/store'
-import { ArrowLeft, PlugZap, Square } from 'lucide-react'
+import { Clapperboard, PlugZap, Square } from 'lucide-react'
 import { type CSSProperties, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 
 import DragBar from '../workflow/components/DragBar'
 import { ensureEndpoint, setGistVideoRuntimeConfig } from './apiClient'
@@ -14,7 +13,6 @@ import type { GistVideoEndpoint } from './types'
 const noDragStyle = { WebkitAppRegion: 'no-drag' } as CSSProperties
 
 export default function GistVideoRoutePage() {
-  const navigate = useNavigate()
   const providers = useAppSelector((s) => s.llm.providers)
   const [endpoint, setEndpoint] = useState<GistVideoEndpoint | null>(null)
   const [error, setError] = useState<string>('')
@@ -61,11 +59,11 @@ export default function GistVideoRoutePage() {
     <>
       <DragBar />
       <div className="relative flex h-full w-full flex-col bg-background">
-        <div className="relative z-10 flex items-center gap-4 border-foreground/10 border-b px-6 py-4" style={{ WebkitAppRegion: 'drag' } as CSSProperties}>
+        <div className="relative z-10 flex min-h-[72px] items-center gap-4 border-foreground/10 border-b px-6 py-4" style={{ WebkitAppRegion: 'drag' } as CSSProperties}>
           <div className="flex items-center gap-3" style={noDragStyle}>
-            <Button isIconOnly radius="full" variant="light" onPress={() => navigate(-1)} aria-label="返回">
-              <ArrowLeft size={18} />
-            </Button>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-content2 text-foreground/60">
+              <Clapperboard size={18} />
+            </div>
             <h1 className="font-semibold text-xl">视频解说</h1>
           </div>
 
