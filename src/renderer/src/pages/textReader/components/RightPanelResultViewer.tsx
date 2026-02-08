@@ -1,6 +1,6 @@
 import { Button, Tooltip } from '@heroui/react'
 import { ArrowLeft, FolderOpen, Maximize2, Minimize2 } from 'lucide-react'
-import { memo, type ReactNode,useState } from 'react'
+import { memo, type ReactNode, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -52,7 +52,7 @@ function RightPanelResultViewer({ title, kind, content, rendered, openDirPath, o
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-[var(--color-border)] [&_button]:[-webkit-app-region:no-drag]">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" aria-label={title}>
           <Button
             size="sm"
             variant="flat"
@@ -65,7 +65,6 @@ function RightPanelResultViewer({ title, kind, content, rendered, openDirPath, o
           >
             返回
           </Button>
-          <span className="text-xs font-semibold">{title}</span>
         </div>
 
         <div className="flex items-center gap-2">
