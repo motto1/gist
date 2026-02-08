@@ -3,7 +3,7 @@ import { isBasicEdition } from '@renderer/config/edition'
 import { useLocalStorageState } from '@renderer/hooks/useLocalStorageState'
 import { useRuntime } from '@renderer/hooks/useRuntime'
 import { ArrowLeft, Download, FileText, Mic, Play, Trash2 } from 'lucide-react'
-import { type CSSProperties, FC, useCallback, useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -57,8 +57,17 @@ type HistoryItem = {
   mime: string
 }
 
+type PreviewCacheItem = {
+  filePath: string
+  mime: string
+  createdAt: number
+  signature: string
+}
+
 const HISTORY_STORAGE_KEY = 'tts.generator.history.v1'
 const PREF_KEY_PREFIX = 'tts.voicePrefs.v1'
+const PREVIEW_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const PREVIEW_CACHE_MAX_ITEMS = 20
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
 const isAdvancedProvider = (value: unknown): value is AdvancedTTSProvider => value === 'microsoft' || value === 'zai'
@@ -231,10 +240,17 @@ const TTSGenerator: FC = () => {
   )
 
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isPreviewing, setIsPreviewing] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [audioPath, setAudioPath] = useState<string | null>(null)
   const [audioMime, setAudioMime] = useState('audio/mpeg')
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([])
+
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null)
+  const previewAudioContextRef = useRef<AudioContext | null>(null)
+  const previewAudioSourceRef = useRef<AudioBufferSourceNode | null>(null)
+  const previewCacheRef = useRef<Map<string, PreviewCacheItem>>(new Map())
+  const previewInFlightRef = useRef<Map<string, Promise<PreviewCacheItem>>>(new Map())
 
   const activeVoice =
     ttsMode === 'advanced'
@@ -551,6 +567,183 @@ const TTSGenerator: FC = () => {
     return advancedProvider === 'zai' ? `ZAI - ${label}` : `Microsoft - ${label}`
   }, [activeVoice, advancedProvider, ttsMode, voiceMap])
 
+  const previewText = useMemo(() => {
+    const text = t('workflow.tts.previewSampleText', '你好，这是语音试听。').trim()
+    return text || '你好，这是语音试听。'
+  }, [t])
+
+  const prunePreviewCache = useCallback(() => {
+    const now = Date.now()
+    for (const [key, item] of previewCacheRef.current.entries()) {
+      if (now - item.createdAt > PREVIEW_CACHE_TTL_MS) {
+        previewCacheRef.current.delete(key)
+      }
+    }
+
+    if (previewCacheRef.current.size <= PREVIEW_CACHE_MAX_ITEMS) return
+
+    const sortedEntries = Array.from(previewCacheRef.current.entries()).sort((a, b) => a[1].createdAt - b[1].createdAt)
+    const overflow = sortedEntries.length - PREVIEW_CACHE_MAX_ITEMS
+    for (let index = 0; index < overflow; index += 1) {
+      previewCacheRef.current.delete(sortedEntries[index][0])
+    }
+  }, [])
+
+  const base64ToArrayBuffer = useCallback((base64: string) => {
+    const binary = window.atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index)
+    }
+    return bytes.buffer
+  }, [])
+
+  const unlockPreviewAudioContext = useCallback(() => {
+    try {
+      if (!previewAudioContextRef.current) {
+        previewAudioContextRef.current = new AudioContext()
+      }
+      const ctx = previewAudioContextRef.current
+      if (ctx && ctx.state === 'suspended') {
+        // 必须在用户手势（点击“试听”）触发时调用，才能解除浏览器的自动播放限制。
+        void ctx.resume()
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  const readAudioDataUrl = useCallback(async (filePath: string, mime: string) => {
+    const base64 = await window.api.fs.read(filePath, 'base64')
+    return `data:${mime};base64,${base64}`
+  }, [])
+
+  const loadAudioFromFile = useCallback(
+    async (filePath: string, mime: string) => {
+      const url = await readAudioDataUrl(filePath, mime)
+      setAudioPath(filePath)
+      setAudioMime(mime)
+      setAudioUrl(url)
+    },
+    [readAudioDataUrl]
+  )
+
+  const playPreviewFromFile = useCallback(
+    async (filePath: string, mime: string) => {
+      // 优先使用 WebAudio：只要在“点击”时 unlock 过 AudioContext，后续异步 decode/start 不会被自动播放策略拦截。
+      const ctx = previewAudioContextRef.current
+      if (ctx) {
+        try {
+          if (ctx.state === 'suspended') {
+            // 理论上这里不会发生（因为 handlePreview 开头会 unlock），但做个兜底。
+            await ctx.resume()
+          }
+
+          const base64 = await window.api.fs.read(filePath, 'base64')
+          const arrayBuffer = base64ToArrayBuffer(base64)
+          const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0))
+
+          if (previewAudioSourceRef.current) {
+            try {
+              previewAudioSourceRef.current.stop()
+            } catch {
+              // ignore
+            }
+            try {
+              previewAudioSourceRef.current.disconnect()
+            } catch {
+              // ignore
+            }
+            previewAudioSourceRef.current = null
+          }
+
+          const source = ctx.createBufferSource()
+          source.buffer = audioBuffer
+          source.connect(ctx.destination)
+          source.start(0)
+          previewAudioSourceRef.current = source
+          return
+        } catch (error) {
+          console.warn('Preview play via AudioContext failed, fallback to <audio>:', error)
+        }
+      }
+
+      // fallback：<audio> 播放（可能被自动播放策略拦截）
+      const audio = previewAudioRef.current
+      if (!audio) {
+        throw new Error('Preview audio element is not ready')
+      }
+
+      const url = await readAudioDataUrl(filePath, mime)
+      audio.src = url
+
+      try {
+        audio.pause()
+        audio.currentTime = 0
+        audio.load()
+        await audio.play()
+      } catch (error) {
+        console.warn('Preview autoplay blocked:', error)
+        window.toast?.warning?.(
+          t('workflow.tts.previewAutoplayBlocked', '系统阻止自动播放试听音频，请再次点击“试听”或检查系统声音设置')
+        )
+        throw error
+      }
+    },
+    [base64ToArrayBuffer, readAudioDataUrl, t]
+  )
+
+  const requestPreviewAudio = useCallback(
+    async (
+      cacheKey: string,
+      signature: string,
+      generate: () => Promise<{ filePath?: string }>
+    ): Promise<PreviewCacheItem> => {
+      const cached = previewCacheRef.current.get(cacheKey)
+      if (cached) {
+        if (cached.signature === signature && Date.now() - cached.createdAt <= PREVIEW_CACHE_TTL_MS) {
+          return cached
+        }
+        previewCacheRef.current.delete(cacheKey)
+      }
+
+      const inFlight = previewInFlightRef.current.get(cacheKey)
+      if (inFlight) {
+        return inFlight
+      }
+
+      const request = (async () => {
+        const result = await generate()
+
+        if (!result.filePath) {
+          throw new Error('Preview generation returned empty filePath.')
+        }
+
+        const mime = result.filePath.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg'
+        const item: PreviewCacheItem = {
+          filePath: result.filePath,
+          mime,
+          createdAt: Date.now(),
+          signature
+        }
+
+        previewCacheRef.current.set(cacheKey, item)
+        prunePreviewCache()
+        return item
+      })()
+
+      previewInFlightRef.current.set(cacheKey, request)
+
+      try {
+        return await request
+      } finally {
+        previewInFlightRef.current.delete(cacheKey)
+      }
+    },
+    [prunePreviewCache]
+  )
+
+
   const handleGenerate = useCallback(async () => {
     if (!currentText) return
     setIsGenerating(true)
@@ -600,11 +793,8 @@ const TTSGenerator: FC = () => {
             })
 
       if (result.filePath) {
-        setAudioPath(result.filePath)
         const mime = result.filePath.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg'
-        const base64 = await window.api.fs.read(result.filePath, 'base64')
-        setAudioUrl(`data:${mime};base64,${base64}`)
-        setAudioMime(mime)
+        await loadAudioFromFile(result.filePath, mime)
 
         const preview = currentText.length > 80 ? `${currentText.slice(0, 80)}...` : currentText
         const newItem: HistoryItem = {
@@ -639,12 +829,108 @@ const TTSGenerator: FC = () => {
     advancedZaiVoice,
     characterName,
     currentText,
+    loadAudioFromFile,
     outputDir,
     pitchValue,
     rateValue,
     sourceType,
     t,
     ttsMode,
+    voice
+  ])
+
+  const handlePreview = useCallback(async () => {
+    // 必须在用户点击事件的同步阶段 unlock，否则后续异步播放会被拦截。
+    unlockPreviewAudioContext()
+
+    setIsPreviewing(true)
+
+    const cacheKey =
+      ttsMode === 'normal'
+        ? `edge:${voice}`
+        : advancedProvider === 'zai'
+          ? `zai:${advancedZaiVoice}`
+          : `microsoft:${advancedVoice}`
+
+    const signature =
+      ttsMode === 'normal'
+        ? JSON.stringify({
+            text: previewText,
+            rate: formatSignedPercent(rateValue),
+            pitch: formatSignedPercent(pitchValue)
+          })
+        : advancedProvider === 'zai'
+          ? JSON.stringify({
+              text: previewText,
+              rate: formatSigned(advancedRateValue)
+            })
+          : JSON.stringify({
+              text: previewText,
+              style: advancedStyle || 'general',
+              rate: formatSigned(advancedRateValue),
+              pitch: formatSigned(advancedPitchValue)
+            })
+
+    const generate = async () => {
+      if (ttsMode === 'normal') {
+        return window.api.edgeTTS.generate({
+          text: previewText,
+          voice,
+          rate: formatSignedPercent(rateValue),
+          pitch: formatSignedPercent(pitchValue)
+        })
+      }
+
+      if (advancedProvider === 'zai') {
+        return window.api.advancedTTS.generate({
+          provider: 'zai',
+          text: previewText,
+          voice: advancedZaiVoice,
+          rate: formatSigned(advancedRateValue)
+        })
+      }
+
+      return window.api.advancedTTS.generate({
+        provider: 'microsoft',
+        text: previewText,
+        voice: advancedVoice,
+        style: advancedStyle || 'general',
+        rate: formatSigned(advancedRateValue),
+        pitch: formatSigned(advancedPitchValue)
+      })
+    }
+
+    try {
+      let previewItem = await requestPreviewAudio(cacheKey, signature, generate)
+
+      try {
+        await playPreviewFromFile(previewItem.filePath, previewItem.mime)
+      } catch {
+        previewCacheRef.current.delete(cacheKey)
+        previewItem = await requestPreviewAudio(cacheKey, signature, generate)
+        await playPreviewFromFile(previewItem.filePath, previewItem.mime)
+      }
+    } catch (error) {
+      console.error('TTS preview failed:', error)
+      window.toast?.error?.(t('workflow.tts.previewFailed', '试听失败'))
+    } finally {
+      setIsPreviewing(false)
+    }
+  }, [
+    advancedPitchValue,
+    advancedProvider,
+    advancedRateValue,
+    advancedStyle,
+    advancedVoice,
+    advancedZaiVoice,
+    pitchValue,
+    playPreviewFromFile,
+    previewText,
+    rateValue,
+    requestPreviewAudio,
+    t,
+    ttsMode,
+    unlockPreviewAudioContext,
     voice
   ])
 
@@ -657,25 +943,25 @@ const TTSGenerator: FC = () => {
   const handleSelectHistory = useCallback(
     async (item: HistoryItem) => {
       try {
-        setAudioPath(item.audioPath)
-        setAudioMime(item.mime)
-        const base64 = await window.api.fs.read(item.audioPath, 'base64')
-        setAudioUrl(`data:${item.mime};base64,${base64}`)
+        await loadAudioFromFile(item.audioPath, item.mime)
       } catch (error) {
         console.error('Failed to load history audio:', error)
         window.toast?.error?.(t('workflow.tts.failed', '生成失败'))
       }
     },
-    [t]
+    [loadAudioFromFile, t]
   )
 
   const handleClearHistory = useCallback(() => {
     setHistoryItems([])
   }, [])
 
+  const isBusy = isGenerating || isPreviewing
+
   return (
     <>
       <DragBar />
+      <audio ref={previewAudioRef} className="hidden" preload="auto" />
       <div className="relative flex h-full w-full flex-col bg-background">
         <div
           className="relative z-10 flex items-center gap-4 border-foreground/10 border-b px-6 py-4"
@@ -722,7 +1008,9 @@ const TTSGenerator: FC = () => {
                 </div>
 
                 <TtsVoiceConfigCard
-                  isGenerating={isGenerating}
+                  isGenerating={isBusy}
+                  isPreviewing={isPreviewing}
+                  onPreview={handlePreview}
                   ttsMode={ttsMode}
                   advancedProvider={advancedProvider}
                   setAdvancedProvider={setAdvancedProvider}
@@ -802,7 +1090,7 @@ const TTSGenerator: FC = () => {
                       color="primary"
                       startContent={<Mic size={16} />}
                       onPress={handleGenerate}
-                      isDisabled={!currentText || isGenerating}
+                      isDisabled={!currentText || isBusy}
                       isLoading={isGenerating}>
                       {isGenerating
                         ? t('workflow.tts.generating', '生成中...')

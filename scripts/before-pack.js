@@ -4,32 +4,6 @@ const path = require('path')
 const { Arch } = require('electron-builder')
 const { downloadNpmPackage } = require('./utils')
 
-function resolveBackendOutput() {
-  const backendRoot = path.join(__dirname, '..', 'resources', 'gist-video', 'backend')
-  const outDir = path.join(backendRoot, 'gist-video-backend')
-  const exeName = process.platform === 'win32' ? 'gist-video-backend.exe' : 'gist-video-backend'
-  return { backendRoot, outDir, exeName, outExe: path.join(outDir, exeName) }
-}
-
-function preparePrebuiltGistVideoBackend(prebuiltExePath) {
-  const { outDir, outExe } = resolveBackendOutput()
-  const sourceExe = path.resolve(prebuiltExePath)
-  if (!fs.existsSync(sourceExe)) {
-    throw new Error(`[before-pack] GIST_VIDEO_BACKEND_EXE not found: ${sourceExe}`)
-  }
-
-  const sourceDir = path.dirname(sourceExe)
-  fs.rmSync(outDir, { recursive: true, force: true })
-  fs.cpSync(sourceDir, outDir, { recursive: true, force: true })
-
-  if (!fs.existsSync(outExe)) {
-    throw new Error(
-      `[before-pack] Prebuilt backend copied from ${sourceDir}, but target exe is missing: ${outExe}`
-    )
-  }
-  console.log(`[before-pack] using prebuilt gist-video backend: ${sourceExe}`)
-}
-
 // if you want to add new prebuild binaries packages with different architectures, you can add them here
 // please add to allX64 and allArm64 from yarn.lock
 const allArm64 = {
@@ -137,25 +111,22 @@ exports.default = async function (context) {
   const platform = context.packager.platform.name
 
   // Build gist-video backend executable for packaged distributions.
-  // Without this, packaged apps may fall back to the user's system Python, which can miss deps (e.g. onnxruntime).
+  // NOTE: We intentionally don't support cross-arch packaging here.
+  // Reason: the backend is a native Python/PyInstaller build; providing external paths via env makes builds non-reproducible.
   if (platform === 'windows') {
     const hostArch = process.arch === 'arm64' ? 'arm64' : 'x64'
-    const prebuiltBackendExe = String(process.env.GIST_VIDEO_BACKEND_EXE || '').trim()
 
-    if (hostArch === archType) {
-      // Always rebuild in packaging to avoid shipping a stale backend executable after backend code changes.
-      process.env.GIST_VIDEO_FORCE_REBUILD = '1'
-      const buildGistVideoBackend = require('./build-gist-video-backend')
-      await buildGistVideoBackend()
-    } else if (prebuiltBackendExe) {
-      preparePrebuiltGistVideoBackend(prebuiltBackendExe)
-    } else {
+    if (hostArch !== archType) {
       throw new Error(
-        `[before-pack] Cannot build gist-video backend for ${archType} on a ${hostArch} host. ` +
-          `Please run the ${archType} build on a ${archType} machine, or set GIST_VIDEO_BACKEND_EXE ` +
-          `to a prebuilt ${archType} gist-video-backend executable path.`
+        `[before-pack] Cross-arch packaging is not supported for gist-video backend (target=${archType}, host=${hostArch}). ` +
+          `Please run the ${archType} build on a ${archType} machine.`
       )
     }
+
+    // Always rebuild in packaging to avoid shipping a stale backend executable after backend code changes.
+    process.env.GIST_VIDEO_FORCE_REBUILD = '1'
+    const buildGistVideoBackend = require('./build-gist-video-backend')
+    await buildGistVideoBackend()
   }
 
   const arm64Filters = Object.keys(allArm64).map((f) => '!node_modules/' + f + '/**')

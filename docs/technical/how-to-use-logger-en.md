@@ -155,7 +155,7 @@ const logger = loggerService.initWindowSource('Worker').withContext('LetsWork')
 
 In a development environment, you can define environment variables to filter displayed logs by level and module. This helps developers focus on their specific logs and improves development efficiency.
 
-Environment variables can be set in the terminal or defined in the `.env` file in the project's root directory. The available variables are as follows:
+Environment variables can be set in the terminal (or CI environment). The available variables are as follows:
 
 | Variable Name                    | Description                                                                                                                                                                 |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

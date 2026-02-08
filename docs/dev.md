@@ -33,10 +33,16 @@ corepack prepare yarn@4.6.0 --activate
 yarn install
 ```
 
-### ENV
+### Environment Variables（可选）
 
-```bash
-copy .env.example .env
+项目不再自动读取本地环境文件；如需配置环境变量，请直接在当前终端/CI 中设置。
+
+PowerShell 示例：
+
+```powershell
+$env:API_KEY="sk-xxx"
+$env:BASE_URL="https://api.siliconflow.cn/v1/"
+$env:MODEL="Qwen/Qwen3-235B-A22B-Instruct-2507"
 ```
 
 ### Start
@@ -47,20 +53,15 @@ yarn dev
 
 ### gist-video Backend（可选）
 
-如果你在开发环境中使用 gist-video（如视频切片/字幕/向量化等），并且发现 `yarn dev` 只有在手动激活某个 venv 后才可用，
-本质原因是：后端会回退到系统 `python`，导致缺少依赖（如 `onnxruntime`）或触发 Windows DLL 初始化失败。
+开发模式（`yarn dev`）下，应用默认通过 **Python 模块**启动 gist-video 后端（`python -m app.server`），因此需要开发机存在可用的 Python 环境与依赖。
 
-Windows 下建议先执行一次：
+推荐（Windows）执行一次脚本创建本地 `.venv` 并安装依赖（避免污染系统 Python、减少缺依赖/DLL 冲突）：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/setup-gist-video-backend.ps1
 ```
 
-或者在 `.env` 中显式指定：
-
-```env
-GIST_VIDEO_PYTHON="F:/gist/resources/gist-video/backend/.venv/Scripts/python.exe"
-```
+无需配置任何后端路径：应用会自动从固定相对路径 `resources/gist-video/backend` 解析后端资源。
 
 ### Debug
 

@@ -1,4 +1,5 @@
-import { Card, CardBody, Input, Select, SelectItem, Slider } from '@heroui/react'
+import { Button, Card, CardBody, Input, Select, SelectItem, Slider } from '@heroui/react'
+import { Play } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { getStyleLabelZh } from './ttsLabels'
@@ -34,6 +35,8 @@ const getGenderLabel = (gender?: string) => {
 
 type Props = {
   isGenerating: boolean
+  isPreviewing?: boolean
+  onPreview?: () => void
 
   ttsMode: TtsMode
   advancedProvider: AdvancedTTSProvider
@@ -77,6 +80,8 @@ export default function TtsVoiceConfigCard(props: Props) {
   const { t } = useTranslation()
   const {
     isGenerating,
+    isPreviewing,
+    onPreview,
     ttsMode,
     advancedProvider,
     setAdvancedProvider,
@@ -144,19 +149,43 @@ export default function TtsVoiceConfigCard(props: Props) {
 
         {isZaiAdvanced ? (
           <div className="space-y-2">
-            <Input
-              label={t('workflow.tts.voiceId', '音色ID')}
-              value={activeVoice}
-              onValueChange={setActiveVoice}
-              variant="flat"
-              labelPlacement="outside"
-              placeholder="system_001"
-              isDisabled={isGenerating}
-              classNames={{
-                inputWrapper: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12',
-                input: 'text-base'
-              }}
-            />
+            <div className="flex items-end gap-2">
+              <Input
+                label={t('workflow.tts.voiceId', '音色ID')}
+                value={activeVoice}
+                onValueChange={setActiveVoice}
+                variant="flat"
+                labelPlacement="outside"
+                placeholder="system_001"
+                isDisabled={isGenerating}
+                className="flex-1"
+                classNames={{
+                  inputWrapper: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12',
+                  input: 'text-base'
+                }}
+              />
+
+              {onPreview && (
+                <Button
+                  variant="flat"
+                  startContent={<Play size={16} />}
+                  onPress={onPreview}
+                  isDisabled={
+                    isGenerating ||
+                    Boolean(isPreviewing) ||
+                    typeof activeVoice !== 'string' ||
+                    activeVoice.trim().length === 0
+                  }
+                  isLoading={Boolean(isPreviewing)}
+                  className="h-12 shrink-0"
+                >
+                  {Boolean(isPreviewing)
+                    ? t('workflow.tts.previewGenerating', '试听中...')
+                    : t('workflow.tts.preview', '试听')}
+                </Button>
+              )}
+            </div>
+
             <p className="text-xs text-foreground/50">
               {t('workflow.tts.voiceIdHint', 'ZAI 模式下 voice 为 voice_id（如 system_001 或你的克隆音色 voice_id）')}
             </p>
@@ -216,26 +245,44 @@ export default function TtsVoiceConfigCard(props: Props) {
               </Select>
             </div>
 
-            <Select
-              label={t('workflow.tts.voice', '音色')}
-              selectedKeys={filteredVoices.some((item) => item.shortName === activeVoice) ? [activeVoice] : []}
-              onChange={(e) => setActiveVoice(e.target.value)}
-              variant="flat"
-              labelPlacement="outside"
-              placeholder={t('workflow.tts.voice', '音色')}
-              isDisabled={isGenerating || isLoadingVoices || filteredVoices.length === 0}
-              classNames={{
-                trigger: "bg-content2/50 hover:bg-content2/80 transition-colors h-12",
-                value: "text-base"
-              }}
-              popoverProps={popoverProps}
-            >
-              {filteredVoices.map((item) => (
-                <SelectItem key={item.shortName}>
-                  {`${item.localName || item.shortName} - ${getGenderLabel(item.gender)}`}
-                </SelectItem>
-              ))}
-            </Select>
+            <div className="flex items-end gap-2">
+              <Select
+                label={t('workflow.tts.voice', '音色')}
+                selectedKeys={filteredVoices.some((item) => item.shortName === activeVoice) ? [activeVoice] : []}
+                onChange={(e) => setActiveVoice(e.target.value)}
+                variant="flat"
+                labelPlacement="outside"
+                placeholder={t('workflow.tts.voice', '音色')}
+                isDisabled={isGenerating || isLoadingVoices || filteredVoices.length === 0}
+                className="flex-1"
+                classNames={{
+                  trigger: "bg-content2/50 hover:bg-content2/80 transition-colors h-12",
+                  value: "text-base"
+                }}
+                popoverProps={popoverProps}
+              >
+                {filteredVoices.map((item) => (
+                  <SelectItem key={item.shortName}>
+                    {`${item.localName || item.shortName} - ${getGenderLabel(item.gender)}`}
+                  </SelectItem>
+                ))}
+              </Select>
+
+              {onPreview && (
+                <Button
+                  variant="flat"
+                  startContent={<Play size={16} />}
+                  onPress={onPreview}
+                  isDisabled={isGenerating || Boolean(isPreviewing) || isLoadingVoices || filteredVoices.length === 0}
+                  isLoading={Boolean(isPreviewing)}
+                  className="h-12 shrink-0"
+                >
+                  {Boolean(isPreviewing)
+                    ? t('workflow.tts.previewGenerating', '试听中...')
+                    : t('workflow.tts.preview', '试听')}
+                </Button>
+              )}
+            </div>
 
             {ttsMode === 'advanced' && advancedProvider === 'microsoft' && (
               <Select

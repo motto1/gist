@@ -6,7 +6,7 @@
 - `tests` 聚合跨进程与集成脚本，`scripts` 保存自动化工具及其 `__tests__`，静态资源位于 `resources`，打包产物输出至 `build`，文档集中在 `docs`。
 
 ## 构建、测试与开发命令
-- 首次运行执行 `yarn install` 并复制 `.env.example` 到 `.env`，必要时补充 API Key。
+- 首次运行执行 `yarn install`，并在当前终端或 CI 中按需设置 API Key 等环境变量。
 - `yarn dev` 启动开发模式，`yarn start` 预览打包后的 Electron 客户端，调试可使用 `yarn debug` 后访问 `chrome://inspect`。
 - `yarn build:win`、`yarn build:mac`、`yarn build:linux` 负责各平台产物；发布前先运行 `yarn build:check`。
 - 质量检查使用 `yarn lint`、`yarn format:check` 与 `yarn typecheck`；需要更新 agents 元数据时执行 `yarn generate:agents`。
@@ -30,5 +30,5 @@
 - 合并前确认无未通过的 CI、冲突或临时注释，必要时邀请维护者 `/ok-to-test`。
 
 ## 配置与安全提示
-- `.env` 仅保存本地开发凭据，请勿提交真实密钥；共享参数可保留在 `.env.example` 并注明用途。
+- 本地开发凭据请通过终端环境变量或密钥管理工具注入，禁止提交真实密钥到仓库。
 - 使用 `resources` 中的图标或二进制需核对许可证，第三方补丁请同步 `yarn.lock` 与对应 `patch` 文件。

@@ -140,7 +140,7 @@ BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1/"
 MODEL="qwen-plus-latest"
 ```
 
-你也可以通过直接编辑`.env`文件来添加环境变量。
+你也可以直接在当前终端或 CI 中设置这些环境变量。
 
 ```bash
 yarn auto:i18n

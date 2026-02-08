@@ -85,100 +85,89 @@ function hasBackendMarker(candidate: string, exeName: string): boolean {
 }
 
 function resolveBackendRoot(): string {
-  const envRoot = (process.env.GIST_VIDEO_BACKEND_ROOT || '').trim()
-  if (envRoot) {
-    const resolved = path.resolve(envRoot)
-    const exeName = process.platform === 'win32' ? 'gist-video-backend.exe' : 'gist-video-backend'
-    if (!hasBackendMarker(resolved, exeName)) {
-      logger.warn('GIST_VIDEO_BACKEND_ROOT is set but marker files are missing', { backendRoot: resolved })
-    }
-    return resolved
-  }
-
   const appRoot = app.getAppPath()
   const unpackedRoot = path.join(path.dirname(appRoot), 'app.asar.unpacked')
-  const isAsarApp = /app\.asar($|[\\/])/.test(appRoot)
   const exeName = process.platform === 'win32' ? 'gist-video-backend.exe' : 'gist-video-backend'
 
-  const candidates = [
-    // dev: most common (repo root)
-    path.join(process.cwd(), 'resources', 'gist-video', 'backend'),
-    // dev: if cwd is `out/main` or similar
-    path.join(process.cwd(), '..', 'resources', 'gist-video', 'backend'),
-    path.join(process.cwd(), '..', '..', 'resources', 'gist-video', 'backend'),
+  const seen = new Set<string>()
+  const candidates: string[] = []
 
-    // packaged
-    path.join(unpackedRoot, 'resources', 'gist-video', 'backend'),
-    path.join(path.dirname(app.getPath('exe')), 'resources', 'gist-video', 'backend'),
-    path.join(unpackedRoot, 'gist-video', 'backend'),
-    path.join(path.dirname(app.getPath('exe')), 'gist-video', 'backend'),
+  const pushCandidate = (p: string) => {
+    if (!p) return
+    const resolved = path.resolve(p)
+    if (seen.has(resolved)) return
+    seen.add(resolved)
+    candidates.push(resolved)
+  }
 
-    // fallback
-    path.join(appRoot, 'resources', 'gist-video', 'backend'),
-    ...(isAsarApp
-      ? []
-      : [
-          path.join(appRoot, '..', 'resources', 'gist-video', 'backend'),
-          path.join(appRoot, '..', '..', 'resources', 'gist-video', 'backend')
-        ])
-  ]
+  const addCandidatesFromStart = (startDir: string) => {
+    if (!startDir) return
+    let cur = path.resolve(startDir)
 
-  const normalizedCandidates = Array.from(new Set(candidates.map((c) => path.resolve(c))))
+    // Walk up a few levels and try the fixed relative layout from each ancestor.
+    for (let i = 0; i < 8; i += 1) {
+      pushCandidate(path.join(cur, 'resources', 'gist-video', 'backend'))
+      pushCandidate(path.join(cur, 'gist-video', 'backend'))
 
-  for (const candidate of normalizedCandidates) {
+      const parent = path.dirname(cur)
+      if (parent === cur) break
+      cur = parent
+    }
+  }
+
+  // Packaged: prefer the unpacked directory first.
+  addCandidatesFromStart(unpackedRoot)
+
+  // Then try common anchors (without relying on process.cwd()).
+  addCandidatesFromStart(appRoot)
+  addCandidatesFromStart(path.dirname(app.getPath('exe')))
+
+  const resourcesPath = (process as any).resourcesPath as string | undefined
+  if (resourcesPath) {
+    addCandidatesFromStart(resourcesPath)
+  }
+
+  for (const candidate of candidates) {
     if (isAsarPath(candidate)) continue
     if (hasBackendMarker(candidate, exeName)) return candidate
   }
 
-  logger.warn('Failed to resolve gist-video backend root, falling back to first candidate', {
-    fallback: normalizedCandidates[0],
-    candidates: normalizedCandidates
+  logger.warn('Failed to resolve gist-video backend root; falling back to best-effort candidate', {
+    appRoot,
+    candidates
   })
 
-  return normalizedCandidates[0]
+  const fallback = candidates.find((c) => !isAsarPath(c)) || candidates[0] || path.join(path.dirname(appRoot), 'resources', 'gist-video', 'backend')
+  return fallback
+}
+
+function getVenvPythonPath(backendRoot: string): string {
+  return process.platform === 'win32'
+    ? path.join(backendRoot, '.venv', 'Scripts', 'python.exe')
+    : path.join(backendRoot, '.venv', 'bin', 'python')
 }
 
 function resolvePythonCommand(backendRoot: string): string {
-  const envPython = (process.env.GIST_VIDEO_PYTHON || '').trim()
-  if (envPython) {
-    const looksLikePath = /[\\/]/.test(envPython) || /^[a-zA-Z]:/.test(envPython)
-    if (looksLikePath && !isExistingFile(envPython)) {
-      logger.warn('GIST_VIDEO_PYTHON points to a missing file; ignoring it', { python: envPython })
-    } else {
-      return envPython
-    }
-  }
-
   // Prefer a local venv if present (dev-friendly; avoids polluting global Python).
-  const venvPython =
-    process.platform === 'win32'
-      ? path.join(backendRoot, '.venv', 'Scripts', 'python.exe')
-      : path.join(backendRoot, '.venv', 'bin', 'python')
+  const venvPython = getVenvPythonPath(backendRoot)
   if (isExistingFile(venvPython)) {
     return venvPython
   }
 
-  // On Windows we assume "python" exists; allow users to override via env.
+  // Fallback to system Python.
   return process.platform === 'win32' ? 'python' : 'python3'
 }
 
 function resolveBackendExe(backendRoot: string): string | null {
-  const envExe = (process.env.GIST_VIDEO_BACKEND_EXE || '').trim()
-  if (envExe) {
-    const resolved = path.resolve(envExe)
-    if (!isExistingFile(resolved)) {
-      logger.warn('GIST_VIDEO_BACKEND_EXE points to a missing file; ignoring it', { exe: resolved })
-    } else {
-      return resolved
-    }
-  }
-
   const exeName = process.platform === 'win32' ? 'gist-video-backend.exe' : 'gist-video-backend'
-  const direct = path.join(backendRoot, exeName)
-  if (isExistingFile(direct)) return direct
 
+  // Prefer the bundled onedir layout produced by build-gist-video-backend.js
   const onedir = path.join(backendRoot, 'gist-video-backend', exeName)
   if (isExistingFile(onedir)) return onedir
+
+  // Fallback: allow placing the executable directly under backendRoot.
+  const direct = path.join(backendRoot, exeName)
+  if (isExistingFile(direct)) return direct
 
   return null
 }
@@ -336,27 +325,38 @@ export class GistVideoService {
       const dataDir = path.join(app.getPath('userData'), 'gist-video')
       ensureDir(dataDir)
 
-      // Dev: prefer running the Python module so local code changes take effect.
-      // Packaged builds: prefer the bundled executable.
-      const forcedExe = (process.env.GIST_VIDEO_BACKEND_EXE || '').trim()
-      const canUsePythonModule = !app.isPackaged && isExistingFile(path.join(backendRoot, 'app', 'server', '__main__.py'))
-      const exe = canUsePythonModule && !forcedExe ? null : resolveBackendExe(backendRoot)
+      // Dev: assume the developer has a Python environment; always run the Python module
+      // so local code changes take effect.
+      // Packaged builds: always run the bundled executable.
+      const pythonModuleEntry = path.join(backendRoot, 'app', 'server', '__main__.py')
+      const hasPythonModule = isExistingFile(pythonModuleEntry)
+
+      const exe = app.isPackaged ? resolveBackendExe(backendRoot) : null
       const python = resolvePythonCommand(backendRoot)
 
-      // Dev-only guard rails:
-      // - If no bundled exe is found, and Python resolves to a venv path that doesn't exist,
-      //   fail fast with a clear instruction instead of a cryptic spawn ENOENT.
-      if (!exe && !app.isPackaged) {
+      if (!app.isPackaged && !hasPythonModule) {
+        throw new Error(
+          [
+            'gist-video 后端不可用：缺少 Python 模块入口文件。',
+            `backendRoot=${backendRoot}`,
+            `expected=${pythonModuleEntry}`,
+            '请确认仓库资源完整（resources/gist-video/backend 未被裁剪/删除）。'
+          ].join('\n')
+        )
+      }
+
+      // If python resolves to a venv path, ensure it exists; otherwise we expect "python/python3" in PATH.
+      {
         const looksLikePath = /[\\/]/.test(python) || /^[a-zA-Z]:/.test(python)
         if (looksLikePath && !isExistingFile(python)) {
           throw new Error(
             [
-              'gist-video 后端虚拟环境未安装（找不到 Python 可执行文件）。',
+              'gist-video 后端不可用：未找到 Python 可执行文件。',
               `backendRoot=${backendRoot}`,
               `python=${python}`,
-              '请在仓库根目录运行：',
-              '  .\\scripts\\setup-gist-video-backend.ps1',
-              '或在 .env 中移除/修正 GIST_VIDEO_PYTHON（并确保已安装 Python 3.11 x64）。'
+              '请执行以下任一操作：',
+              '1) 运行 .\\scripts\\setup-gist-video-backend.ps1 创建 .venv（推荐）',
+              '2) 确保系统 python 已安装并加入 PATH'
             ].join('\n')
           )
         }
@@ -383,7 +383,7 @@ export class GistVideoService {
 
       // In packaged builds we expect a bundled backend executable.
       // Falling back to system Python is brittle (users may not have deps like onnxruntime).
-      if (app.isPackaged && !exe && !(process.env.GIST_VIDEO_PYTHON || '').trim()) {
+      if (app.isPackaged && !exe) {
         throw new Error(
           [
             '安装包缺少内置 gist-video 后端可执行文件，无法启动后端。',

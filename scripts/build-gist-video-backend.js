@@ -117,7 +117,7 @@ async function buildGistVideoBackend() {
   if (!fs.existsSync(entry)) throw new Error(`[gist-video] entry not found: ${entry}`)
   if (!fs.existsSync(requirements)) throw new Error(`[gist-video] requirements not found: ${requirements}`)
 
-  const python = (process.env.GIST_VIDEO_PYTHON_BUILD || process.env.GIST_VIDEO_PYTHON || 'python').trim()
+  const python = process.platform === 'win32' ? 'python' : 'python3'
   console.log(`[gist-video] building backend exe via PyInstaller, python=${python}`)
   console.log(`[gist-video] backendRoot=${backendRoot}`)
 

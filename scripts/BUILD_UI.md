@@ -40,9 +40,4 @@
 
 ### Cross-arch note (Windows)
 
-When building `arm64` on an `x64` host, `before-pack` cannot locally compile `gist-video-backend`.
-You can provide a prebuilt backend by setting:
-
-- `GIST_VIDEO_BACKEND_EXE=<path-to-arm64-gist-video-backend.exe>`
-
-The script will copy the whole prebuilt backend directory (exe + `_internal`) into `resources/gist-video/backend/gist-video-backend`.
+目前不支持 cross-arch（例如在 x64 主机上打包 arm64）。请在目标架构机器上执行对应的 `yarn build:win:<arch>`。

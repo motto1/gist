@@ -31,13 +31,6 @@ jobs:
       - name: Install corepack (Yarn)
         run: corepack enable
 
-      - name: Ensure .env exists
-        shell: pwsh
-        run: |
-          if (-not (Test-Path ".env")) {
-            Copy-Item ".env.example" ".env"
-          }
-
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
         shell: pwsh

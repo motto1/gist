@@ -145,7 +145,7 @@ BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1/"
 MODEL="qwen-plus-latest"
 ```
 
-Alternatively, add these variables directly to your `.env` file.
+Alternatively, set these variables directly in your current shell session or CI environment.
 
 ```bash
 yarn auto:i18n

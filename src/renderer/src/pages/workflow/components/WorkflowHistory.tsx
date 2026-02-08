@@ -1,11 +1,20 @@
 import { Accordion, AccordionItem, Button, Chip } from '@heroui/react'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { modalConfirm } from '@renderer/utils'
-import { clearActiveSession, completeSession, updateSessionOutputDir, WorkflowSession, WorkflowType } from '@renderer/store/workflow'
+import {
+  clearActiveSession,
+  completeSession,
+  updateSessionOutputDir,
+  updateSessionProgress,
+  WorkflowSession,
+  WorkflowType
+} from '@renderer/store/workflow'
 import { BookOpen, ChevronRight, Clock, FileText, FolderOpen, RefreshCw, Trash2, Users, X } from 'lucide-react'
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
+
+import { estimateProgressPercent, estimateSecondsFromChars } from '../utils/estimateTime'
 
 const WORKFLOW_CONFIG: Record<WorkflowType, { icon: typeof BookOpen; color: string; route: string }> = {
   'speed-read': { icon: BookOpen, color: 'primary', route: '/workflow/speed-read' },
@@ -25,6 +34,39 @@ const formatDate = (iso: string) => {
     }).format(date)
   } catch {
     return iso
+  }
+}
+
+type CharacterPhase = 1 | 2 | 3
+
+const getCharacterPhaseFromStage = (stage?: string): CharacterPhase => {
+  const s = (stage || '').trim()
+  if (!s) return 1
+
+  // 明确的三阶段：语音
+  if (s.includes('语音') || s.toLowerCase().includes('tts')) return 3
+
+  // 二阶段：二次总结/人物志/心理独白
+  if (s.includes('二次') || s.includes('人物志') || s.includes('独白')) return 2
+
+  // 主进程 completed 表示“人物提取完成”，下一步应进入二次总结
+  if (s === 'completed') return 2
+
+  return 1
+}
+
+const normalizeMainStageLabel = (stage?: string) => {
+  switch ((stage || '').trim()) {
+    case 'compressing':
+      return '处理中'
+    case 'finalizing':
+      return '收尾中'
+    case 'completed':
+      return '已完成'
+    case 'failed':
+      return '失败自动重试中'
+    default:
+      return stage || ''
   }
 }
 
@@ -155,6 +197,10 @@ const HistoryRow: FC<HistoryRowProps> = ({ session, onOpenDir, onDelete, onViewR
 interface ActiveSessionRowProps {
   type: WorkflowType
   session: WorkflowSession
+  /** 主页“进行中”展示用的阶段文案（与工作流页面保持一致） */
+  displayStage: string
+  /** 主页“进行中”展示用的百分比（与工作流页面保持一致） */
+  displayPercentage?: number
   onContinue: () => void
   onCancel: () => void
 }
@@ -162,7 +208,14 @@ interface ActiveSessionRowProps {
 /**
  * 进行中的任务行
  */
-const ActiveSessionRow: FC<ActiveSessionRowProps> = ({ type, session, onContinue, onCancel }) => {
+const ActiveSessionRow: FC<ActiveSessionRowProps> = ({
+  type,
+  session,
+  displayStage,
+  displayPercentage,
+  onContinue,
+  onCancel
+}) => {
   const { t } = useTranslation()
   const config = WORKFLOW_CONFIG[type]
   const Icon = config.icon
@@ -188,11 +241,11 @@ const ActiveSessionRow: FC<ActiveSessionRowProps> = ({ type, session, onContinue
       {/* Progress */}
       <div className="flex items-center gap-2 flex-shrink-0">
         <Chip size="sm" variant="flat" color="warning">
-          {session.progress?.stage || t('workflow.status.processing', '处理中')}
+          {displayStage || t('workflow.status.processing', '处理中')}
         </Chip>
-        {session.progress?.percentage !== undefined && (
+        {displayPercentage !== undefined && (
           <span className="text-xs text-foreground/60 min-w-[36px] text-right">
-            {Math.round(session.progress.percentage)}%
+            {Math.round(displayPercentage)}%
           </span>
         )}
       </div>
@@ -481,6 +534,27 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
       .map(([type, session]) => ({ type: type as WorkflowType, session: session! }))
   }, [activeSessions])
 
+  // 用 ref 持有最新列表，避免“定时器 effect 依赖 activeSessionsList”导致频繁重建/立即重复执行
+  const activeSessionsListRef = useRef(activeSessionsList)
+  useEffect(() => {
+    activeSessionsListRef.current = activeSessionsList
+  }, [activeSessionsList])
+
+  // 用于“伪进度条”在主页也能像工作流页面一样每秒刷新
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    if (activeSessionsList.length === 0) return
+
+    setNowMs(Date.now())
+    const id = window.setInterval(() => {
+      setNowMs(Date.now())
+    }, 1000)
+
+    return () => {
+      window.clearInterval(id)
+    }
+  }, [activeSessionsList.length])
+
   // Track which sessions we've already tried to complete (prevent duplicate attempts)
   const completedSessionsRef = useRef<Set<string>>(new Set())
 
@@ -509,14 +583,15 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
         }
       }
 
-      for (const { type, session } of activeSessionsList) {
+      type MainProgress = { stage: string; percentage: number; current?: number; total?: number }
+      type MainState = { isProcessing?: boolean; progress?: MainProgress | null; outputPath?: string | null }
+
+      for (const { type, session } of activeSessionsListRef.current) {
         // Skip if we've already attempted to complete this session
         if (completedSessionsRef.current.has(session.id)) continue
 
         try {
-          let mainState:
-            | { isProcessing?: boolean; progress?: { stage: string; percentage: number } | null; outputPath?: string }
-            | null = null
+          let mainState: MainState | null = null
 
           // Get main process state based on workflow type
           if (type === 'speed-read') {
@@ -533,6 +608,46 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
           const actualOutputDir = await resolveDir(mainState.outputPath || session.outputDir)
           if (actualOutputDir && actualOutputDir !== session.outputDir) {
             dispatch(updateSessionOutputDir({ type, outputDir: actualOutputDir }))
+          }
+
+          // 同步主进程进度到 Redux：让 Launcher 的“进行中”阶段文案保持最新
+          if (mainState.progress) {
+            const phase = type === 'character' ? getCharacterPhaseFromStage(session.progress?.stage) : null
+            const shouldSyncFromMain = type !== 'character' || phase === 1
+
+            if (shouldSyncFromMain) {
+              dispatch(
+                updateSessionProgress({
+                  type,
+                  progress: {
+                    percentage: mainState.progress.percentage,
+                    stage: mainState.progress.stage,
+                    current: mainState.progress.current,
+                    total: mainState.progress.total
+                  }
+                })
+              )
+            }
+
+            // 人物志：若人物提取已完成但用户不在人物志页，推进到第二阶段
+            if (type === 'character' && !mainState.isProcessing && mainState.progress.stage === 'completed') {
+              const currentStage = (session.progress?.stage || '').trim()
+              const alreadyInUiStage =
+                currentStage.includes('二次') ||
+                currentStage.includes('人物志') ||
+                currentStage.includes('独白') ||
+                currentStage.includes('语音') ||
+                currentStage.toLowerCase().includes('tts')
+
+              if (!alreadyInUiStage) {
+                dispatch(
+                  updateSessionProgress({
+                    type: 'character',
+                    progress: { percentage: 60, stage: '等待二次总结' }
+                  })
+                )
+              }
+            }
           }
 
           // Character workflow: 音频落盘才算完成（主进程 completed 仅代表提取完成）
@@ -571,7 +686,83 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
     return () => {
       clearInterval(intervalId)
     }
-  }, [activeSessionsList, dispatch])
+  }, [activeSessionsList.length, dispatch])
+
+  const getPseudoPercentage = (session: WorkflowSession) => {
+    const startedAtMs = (() => {
+      try {
+        const ms = new Date(session.startedAt).getTime()
+        return Number.isNaN(ms) ? 0 : ms
+      } catch {
+        return 0
+      }
+    })()
+
+    const elapsedSeconds = startedAtMs ? Math.max(0, Math.floor((nowMs - startedAtMs) / 1000)) : 0
+    const totalSeconds = estimateSecondsFromChars(session.inputCharCount ?? 0)
+    return estimateProgressPercent(elapsedSeconds, totalSeconds)
+  }
+
+  const getActiveRowDisplay = (type: WorkflowType, session: WorkflowSession) => {
+    const stage = (session.progress?.stage || '').trim()
+
+    if (type === 'outline') {
+      const base = t('workflow.outline.processingBadge', '大纲生成中')
+      if (stage === 'failed') {
+        return { stage: `${base} · ${normalizeMainStageLabel(stage)}`, percentage: session.progress?.percentage ?? 0 }
+      }
+      const suffix = stage && stage !== 'compressing' ? normalizeMainStageLabel(stage) : ''
+      return { stage: suffix ? `${base} · ${suffix}` : base, percentage: getPseudoPercentage(session) }
+    }
+
+    if (type === 'speed-read') {
+      const base = t('workflow.speedRead.processingBadge', '速读生成中')
+      if (stage === 'failed') {
+        return { stage: `${base} · ${normalizeMainStageLabel(stage)}`, percentage: session.progress?.percentage ?? 0 }
+      }
+      const suffix = stage && stage !== 'compressing' ? normalizeMainStageLabel(stage) : ''
+      return { stage: suffix ? `${base} · ${suffix}` : base, percentage: getPseudoPercentage(session) }
+    }
+
+    // character
+    const phase = getCharacterPhaseFromStage(stage)
+
+    if (phase === 1) {
+      const base = t('workflow.character.stage1.title', '第一阶段：人物提取')
+      if (stage === 'failed') {
+        return { stage: `${base} · ${normalizeMainStageLabel(stage)}`, percentage: session.progress?.percentage ?? 0 }
+      }
+      const suffix = stage && stage !== 'compressing' ? normalizeMainStageLabel(stage) : ''
+      return { stage: suffix ? `${base} · ${suffix}` : base, percentage: getPseudoPercentage(session) }
+    }
+
+    if (phase === 2) {
+      const base = t('workflow.character.stage2.title', '第二阶段：二次总结')
+      const suffix = (() => {
+        if (!stage) return ''
+        if (stage === 'completed') return '等待二次总结'
+        if (stage === 'finalizing' || stage === 'compressing' || stage === 'failed') return normalizeMainStageLabel(stage)
+        return stage
+      })()
+
+      return {
+        stage: suffix ? `${base} · ${suffix}` : base,
+        percentage: stage === 'completed' ? 60 : (session.progress?.percentage ?? 60)
+      }
+    }
+
+    // phase === 3
+    {
+      const base = t('workflow.character.stage3.title', '第三阶段：生成语音')
+      const suffix = (() => {
+        if (!stage) return ''
+        if (stage === 'finalizing' || stage === 'compressing' || stage === 'failed') return normalizeMainStageLabel(stage)
+        return stage
+      })()
+
+      return { stage: suffix ? `${base} · ${suffix}` : base, percentage: session.progress?.percentage ?? 85 }
+    }
+  }
 
   const handleOpenDir = useCallback((outputDir: string) => {
     window.api.file.openPath(outputDir)
@@ -666,15 +857,20 @@ const WorkflowHistory: FC<WorkflowHistoryProps> = ({ maxItems = 10, showEmpty = 
             }
           >
             <div className="flex flex-col gap-1">
-              {activeSessionsList.map(({ type, session }) => (
-                <ActiveSessionRow
-                  key={session.id}
-                  type={type}
-                  session={session}
-                  onContinue={() => handleContinueSession(type)}
-                  onCancel={() => void handleCancelSession(type)}
-                />
-              ))}
+              {activeSessionsList.map(({ type, session }) => {
+                const display = getActiveRowDisplay(type, session)
+                return (
+                  <ActiveSessionRow
+                    key={session.id}
+                    type={type}
+                    session={session}
+                    displayStage={display.stage}
+                    displayPercentage={display.percentage}
+                    onContinue={() => handleContinueSession(type)}
+                    onCancel={() => void handleCancelSession(type)}
+                  />
+                )
+              })}
             </div>
           </AccordionItem>
         ) : null}

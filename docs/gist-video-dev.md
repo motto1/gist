@@ -19,24 +19,13 @@
 ## 2. 拉取与安装依赖
 
 ```powershell
-Set-Location "F:/gist"
+Set-Location "<repo-root>"
 yarn install
-copy .env.example .env
 ```
 
-如需明确指定视频后端路径（推荐）：
+无需配置任何后端路径类环境变量：应用会自动使用仓库内固定相对路径 `resources/gist-video/backend`。
 
-```dotenv
-# .env（示例）
-GIST_VIDEO_BACKEND_ROOT="F:/gist/resources/gist-video/backend"
-# 推荐：优先使用仓库已提交的后端 exe（不依赖本机 Python 环境）
-GIST_VIDEO_BACKEND_EXE="F:/gist/resources/gist-video/backend/gist-video-backend/gist-video-backend.exe"
-# 可选：仅当你要用 Python 调试时再打开（前提：已运行 setup 脚本创建 .venv）
-#GIST_VIDEO_PYTHON="F:/gist/resources/gist-video/backend/.venv/Scripts/python.exe"
-#GIST_VIDEO_PORT=37123
-```
-
-注意：`.venv/` **不应提交**到仓库（体积大且机器相关）。同事首次开发必须先运行 `setup-gist-video-backend.ps1` 创建虚拟环境，否则如果你在 `.env` 中写死了 `GIST_VIDEO_PYTHON`，他们会遇到 `spawn ...\.venv\\Scripts\\python.exe ENOENT`。
+注意：`.venv/` **不应提交**到仓库（体积大且机器相关）。同事首次开发必须先运行 `setup-gist-video-backend.ps1` 创建虚拟环境，否则会遇到 `spawn ...\.venv\\Scripts\\python.exe ENOENT`。
 ## 3. 后端资源目录确认（必做）
 
 最低要求：`resources/gist-video/backend/` 内必须存在以下“标记文件/目录”，否则主进程无法识别后端根目录：
@@ -69,26 +58,16 @@ resources/gist-video/backend/bin/ffprobe.exe
 - “向量化/检索”可能会降级（例如回退到轻量 local_hash），召回效果会变差
 - 某些功能可能直接不可用（取决于后端实现）
 
-## 6. 后端启动方式（二选一）
+## 6. 后端启动方式（开发 vs 打包）
 
-### 6.1 推荐：直接使用已提交的后端 exe
-
-仓库已包含 `resources/gist-video/backend/gist-video-backend/gist-video-backend.exe` 时，你可以**不安装** Python 依赖，直接在 `.env` 里设置：
-
-```dotenv
-GIST_VIDEO_BACKEND_ROOT="F:/gist/resources/gist-video/backend"
-GIST_VIDEO_BACKEND_EXE="F:/gist/resources/gist-video/backend/gist-video-backend/gist-video-backend.exe"
-```
-
-### 6.2 需要 Python 调试时：创建 venv 并安装依赖
-
-在确认 `resources/gist-video/backend/` 已就绪后，运行：
+- 开发（`yarn dev`）：默认通过 **Python 模块**启动后端（`python -m app.server`），要求开发机具备 Python 环境与依赖。
+  - 推荐先运行一次脚本创建本地 `.venv` 并安装依赖（更稳定，也避免污染系统 Python）：
 
 ```powershell
 .\scripts\setup-gist-video-backend.ps1
 ```
 
-该脚本会在 `resources/gist-video/backend/.venv/` 创建虚拟环境并安装 `requirements-dev.txt` 依赖。随后你才可以启用 `.env` 的 `GIST_VIDEO_PYTHON`。
+- 打包（`yarn build:*`）：面向最终用户，使用安装包内自带的 `gist-video-backend` 可执行文件（用户无需安装 Python 依赖）。
 
 ## 7. 启动开发模式
 
@@ -106,8 +85,11 @@ yarn dev
 后端在开发模式下默认通过 Python 启动（`-m app.server`）。你可以手动启动以便在终端里直接看输出：
 
 ```powershell
-Set-Location "F:/gist/resources/gist-video/backend"
+Set-Location "<repo-root>/resources/gist-video/backend"
+# 优先使用本地 .venv（若已创建）
 .\.venv\Scripts\python.exe -m app.server --host 127.0.0.1 --port 37123 --log-level info
+# 或使用系统 python（需已安装依赖并加入 PATH）
+python -m app.server --host 127.0.0.1 --port 37123 --log-level info
 ```
 
 ## 9. 日志位置（排障必看）
@@ -125,13 +107,14 @@ Set-Location "F:/gist/resources/gist-video/backend"
 
 按优先级排查：
 1) `resources/gist-video/backend/app/server/__main__.py` 是否存在  
-2) 优先确认你走的是哪种启动方式：
-   - `GIST_VIDEO_BACKEND_EXE`：确保 exe 文件存在
-   - `GIST_VIDEO_PYTHON`：确保 `.venv/Scripts/python.exe` 存在（必须先跑 `setup-gist-video-backend.ps1`）
-3) `bin/ffmpeg.exe` 与 `bin/ffprobe.exe` 是否存在  
-4) 端口是否被占用（可通过设置 `GIST_VIDEO_PORT` 固定端口排查）
+2) 开发模式（`yarn dev`）：确认 Python 与依赖是否就绪：
+   - 推荐先运行 `.\scripts\setup-gist-video-backend.ps1` 创建 `.venv` 并安装依赖
+   - 或确保系统 `python` 在 PATH 且已安装 `resources/gist-video/backend/requirements-dev.txt` 的依赖
+3) 打包/安装包模式：确认 `resources/gist-video/backend/gist-video-backend/gist-video-backend.exe` 是否存在
+4) `bin/ffmpeg.exe` 与 `bin/ffprobe.exe` 是否存在  
+5) 端口是否被占用（可通过设置 `GIST_VIDEO_PORT` 固定端口排查）
 
-如果看到 `spawn ...\.venv\\Scripts\\python.exe ENOENT`：说明你配置了 `GIST_VIDEO_PYTHON` 但本机还没创建 venv。请先运行 `.\scripts\setup-gist-video-backend.ps1`，或直接改用 `GIST_VIDEO_BACKEND_EXE`。
+如果看到 `spawn ...\.venv\\Scripts\\python.exe ENOENT`：说明 `.venv` 尚未创建（且你当前环境下找不到可用 Python）。请先运行 `.\scripts\setup-gist-video-backend.ps1`。
 
 ### 10.2 `pip install` 失败
 
