@@ -13,7 +13,7 @@ import { runAsyncFunction } from '@renderer/utils'
 import { UpgradeChannel } from '@shared/config/constant'
 import { Avatar, Button, Progress, Radio, Row, Switch, Tag, Tooltip } from 'antd'
 import { debounce } from 'lodash'
-import { Bug, FileCheck, Github, Globe, Mail, Rss } from 'lucide-react'
+import { Bug, FileCheck, Globe, Mail, Rss } from 'lucide-react'
 import { BadgeQuestionMark } from 'lucide-react'
 import { FC, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -302,16 +302,6 @@ const AboutSettings: FC = () => {
           </SettingRowTitle>
           <Button onClick={() => onOpenWebsite('https://github.com/motto1/Read-No-More')}>
             {t('settings.about.website.button')}
-          </Button>
-        </SettingRow>
-        <SettingDivider />
-        <SettingRow>
-          <SettingRowTitle>
-            <Github size={18} />
-            {t('settings.about.feedback.title')}
-          </SettingRowTitle>
-          <Button onClick={() => onOpenWebsite('https://github.com/motto1/Read-No-More/issues/new/choose')}>
-            {t('settings.about.feedback.button')}
           </Button>
         </SettingRow>
         <SettingDivider />
