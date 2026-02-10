@@ -96,10 +96,19 @@ type VoiceItem = {
   styleList?: string[]
 }
 
+type TtsPreviewCacheItem = {
+  filePath: string
+  mime: string
+  createdAt: number
+  signature: string
+}
+
 const formatSigned = (value: number) => `${value >= 0 ? '+' : ''}${value}`
 const formatSignedPercent = (value: number) => `${value >= 0 ? '+' : ''}${value}%`
 
 const PREF_KEY_PREFIX = 'tts.voicePrefs.v1'
+const PREVIEW_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const PREVIEW_CACHE_MAX_ITEMS = 20
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
 const isAdvancedProvider = (value: unknown): value is AdvancedTTSProvider => value === 'microsoft' || value === 'zai'
@@ -222,7 +231,7 @@ const CharacterWorkflow: FC = () => {
   const [historyBookTitle, setHistoryBookTitle] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false) // 防重复提交
 
-  // 人物 TXT 合集（用于“非指定人物模式”的结果展示）
+  // 人物 TXT 合集（用于"非指定人物模式"的结果展示）
   const [characterTxtFiles, setCharacterTxtFiles] = useState<FsEntry[]>([])
   const [selectedCharacterPath, setSelectedCharacterPath] = useState<string | null>(null)
   const [isCharacterListLoading, setIsCharacterListLoading] = useState(false)
@@ -254,7 +263,7 @@ const CharacterWorkflow: FC = () => {
   const [secondaryBioDraft, setSecondaryBioDraft] = useState<string>('')
   const [secondaryMonologueDraft, setSecondaryMonologueDraft] = useState<string>('')
 
-  // 二次总结编辑的“脏状态”：避免切换 Tab/步骤时被磁盘内容覆盖
+  // 二次总结编辑的"脏状态"：避免切换 Tab/步骤时被磁盘内容覆盖
   const secondaryDraftKeyRef = useRef<string | null>(null)
   const secondaryDraftDirtyRef = useRef<{ bio: boolean; monologue: boolean }>({ bio: false, monologue: false })
 
@@ -342,10 +351,20 @@ const CharacterWorkflow: FC = () => {
     isNonEmptyString
   )
   const [isTtsGenerating, setIsTtsGenerating] = useState(false)
+  const [isTtsPreviewing, setIsTtsPreviewing] = useState(false)
   const [ttsAudioPath, setTtsAudioPath] = useState<string | null>(null)
   const [ttsAudioUrl, setTtsAudioUrl] = useState<string | null>(null)
   const [ttsAudioMime, setTtsAudioMime] = useState('audio/mpeg')
   const ttsGenerationTokenRef = useRef(0)
+
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null)
+  const previewAudioContextRef = useRef<AudioContext | null>(null)
+  const previewAudioSourceRef = useRef<AudioBufferSourceNode | null>(null)
+  const previewCacheRef = useRef<Map<string, TtsPreviewCacheItem>>(new Map())
+  const previewInFlightRef = useRef<Map<string, Promise<TtsPreviewCacheItem>>>(new Map())
+  const previewTokenRef = useRef(0)
+
+  const isTtsBusy = isTtsGenerating || isTtsPreviewing
 
   const activeVoice =
     ttsMode === 'advanced'
@@ -494,7 +513,7 @@ const CharacterWorkflow: FC = () => {
   }, [advancedTtsVoice, advancedVoices, normalVoices, ttsVoice])
 
   useEffect(() => {
-    // 当语言筛选变化后，如果当前“区域”不再匹配语言，则自动回退为“全部”，避免出现空列表/跳动。
+    // 当语言筛选变化后，如果当前"区域"不再匹配语言，则自动回退为"全部"，避免出现空列表/跳动。
     if (languageFilter === 'all') return
     if (regionFilter === 'all') return
     if (!regionFilter.toLowerCase().startsWith(`${languageFilter.toLowerCase()}-`)) {
@@ -503,7 +522,7 @@ const CharacterWorkflow: FC = () => {
   }, [languageFilter, regionFilter])
 
   useEffect(() => {
-    // 如果先选了“区域”，则同步语言筛选（仅在语言为“全部”时），保证筛选条件一致。
+    // 如果先选了"区域"，则同步语言筛选（仅在语言为"全部"时），保证筛选条件一致。
     if (regionFilter === 'all') return
     if (languageFilter !== 'all') return
     const nextLanguage = regionFilter.split('-')[0]
@@ -749,7 +768,7 @@ const CharacterWorkflow: FC = () => {
           const audioDir = await window.api.path.join(dir, 'audio')
           if (await hasMatchingFile(audioDir, /\.(mp3|wav)$/i)) return 'done'
 
-          // 若已有“二次总结”落盘（哪怕未生成音频），说明已过第一阶段
+          // 若已有"二次总结"落盘（哪怕未生成音频），说明已过第一阶段
           const bioDir = await window.api.path.join(dir, '二次总结', '人物志')
           const monologueDir = await window.api.path.join(dir, '二次总结', '心理独白')
           if ((await hasMatchingFile(bioDir, /\.txt$/i)) || (await hasMatchingFile(monologueDir, /\.txt$/i))) {
@@ -760,7 +779,7 @@ const CharacterWorkflow: FC = () => {
           const charactersDir = await window.api.path.join(dir, '人物TXT合集')
           if (await hasMatchingFile(charactersDir, /\.txt$/i)) return 'secondary'
 
-          // 默认回到“少女祈祷中”：避免空目录/临时目录导致误跳二次总结
+          // 默认回到"少女祈祷中"：避免空目录/临时目录导致误跳二次总结
           return 'extracting'
         }
 
@@ -777,7 +796,11 @@ const CharacterWorkflow: FC = () => {
           const markerIndex = parts.lastIndexOf('character')
           const guessedBookTitle = markerIndex > 0 ? parts[markerIndex - 1] : null
           setOutputDir(historyOutputDir)
-          setStep(await detectStepByOutputDir(historyOutputDir))
+          const detectedStep = await detectStepByOutputDir(historyOutputDir)
+          setStep(detectedStep)
+          if (detectedStep === 'secondary' || detectedStep === 'tts' || detectedStep === 'done') {
+            setIsCharacterListLoading(true)
+          }
           setHistoryBookTitle(guessedBookTitle)
           setIsRestoring(false)
           return
@@ -795,7 +818,11 @@ const CharacterWorkflow: FC = () => {
               if (content) {
                 setResult(content)
                 setOutputDir(historySession.outputDir)
-                setStep(await detectStepByOutputDir(historySession.outputDir))
+                const detectedStep = await detectStepByOutputDir(historySession.outputDir)
+                setStep(detectedStep)
+                if (detectedStep === 'secondary' || detectedStep === 'tts' || detectedStep === 'done') {
+                  setIsCharacterListLoading(true)
+                }
                 setHistoryBookTitle(historySession.bookTitle)
                 setIsRestoring(false)
                 return
@@ -803,7 +830,11 @@ const CharacterWorkflow: FC = () => {
             }
             // Even if file not found, still show complete state with no result
             setOutputDir(historySession.outputDir)
-            setStep(await detectStepByOutputDir(historySession.outputDir))
+            const detectedStep = await detectStepByOutputDir(historySession.outputDir)
+            setStep(detectedStep)
+            if (detectedStep === 'secondary' || detectedStep === 'tts' || detectedStep === 'done') {
+              setIsCharacterListLoading(true)
+            }
             setHistoryBookTitle(historySession.bookTitle)
             setIsRestoring(false)
             return
@@ -817,14 +848,30 @@ const CharacterWorkflow: FC = () => {
           hasResult: !!state?.result?.merged
         })
 
-        // 若存在 Redux active session（从主页“进行中”进入），优先使用主进程 state.outputPath
+        // 若存在 Redux active session（从主页"进行中"进入），优先使用主进程 state.outputPath
         // 避免 Redux 中 outputDir 仍是旧的 bookDir/character，导致二次总结/音频落盘目录对不上。
         if (activeSession && state?.outputPath) {
           const looksLikeFile = /\.[a-z0-9]+$/i.test(state.outputPath)
           const dir = looksLikeFile ? await window.api.path.dirname(state.outputPath) : state.outputPath
 
           setOutputDir(dir)
-          setStep(await detectStepByOutputDir(dir))
+          const detectedStep = await detectStepByOutputDir(dir)
+          setStep(detectedStep)
+
+          // 当恢复到二次总结/语音/完成阶段时，预设 isCharacterListLoading = true
+          // 防止 isRestoring 解除后、characterTxtFiles 异步加载完成前，页面闪现"初始视图"
+          if (detectedStep === 'secondary' || detectedStep === 'tts' || detectedStep === 'done') {
+            setIsCharacterListLoading(true)
+          }
+
+          // 恢复二次总结阶段的进度条：若 Redux stage 表明正在生成，重新启动进度条。
+          // 生成完成后 Redux stage 会被清理为 '等待二次总结'，所以此处匹配意味着确实在生成中。
+          if (detectedStep === 'secondary') {
+            const reduxStage = activeSession.progress?.stage || ''
+            if (reduxStage === '生成人物志' || reduxStage === '生成心理独白') {
+              startStageProgress(reduxStage, activeSession.progress?.stageStartedAt)
+            }
+          }
 
           if (state.progress) {
             setProgress({
@@ -852,7 +899,7 @@ const CharacterWorkflow: FC = () => {
           // Task is running - restore to extracting step
           setStep('extracting')
           if (state.outputPath) {
-            // outputPath 可能是“任务目录”或“文件路径”，做一次启发式兼容
+            // outputPath 可能是"任务目录"或"文件路径"，做一次启发式兼容
             const looksLikeFile = /\.[a-z0-9]+$/i.test(state.outputPath)
             const dir = looksLikeFile ? await window.api.path.dirname(state.outputPath) : state.outputPath
             setOutputDir(dir)
@@ -879,13 +926,26 @@ const CharacterWorkflow: FC = () => {
           if (activeSession.status === 'processing') {
             const dir = activeSession.outputDir || null
             setOutputDir(dir)
-            setStep(dir ? await detectStepByOutputDir(dir) : 'config')
+            const detectedStep = dir ? await detectStepByOutputDir(dir) : 'config'
+            setStep(detectedStep)
+            // 同上：预设加载状态，防止闪现初始视图
+            if (detectedStep === 'secondary' || detectedStep === 'tts' || detectedStep === 'done') {
+              setIsCharacterListLoading(true)
+            }
+            // 恢复二次总结阶段的进度条（同上）
+            if (detectedStep === 'secondary' && dir) {
+              const reduxStage = activeSession.progress?.stage || ''
+              if (reduxStage === '生成人物志' || reduxStage === '生成心理独白') {
+                startStageProgress(reduxStage, activeSession.progress?.stageStartedAt)
+              }
+              }
+            }
             if (activeSession.progress) {
               setProgress(activeSession.progress)
             }
           } else if (activeSession.status === 'complete') {
             // 已完成任务：从 Launcher 再进入时应当开始新任务；旧结果请通过历史记录访问。
-            // （人物志整体以 mp3 落盘为完成标志，避免在这里恢复旧目录导致“查看页/新任务”语义混乱。）
+            // （人物志整体以 mp3 落盘为完成标志，避免在这里恢复旧目录导致"查看页/新任务"语义混乱。）
             dispatch(clearActiveSession('character'))
           }
         }
@@ -906,7 +966,11 @@ const CharacterWorkflow: FC = () => {
   const selectedCharacterFile = characterTxtFiles.find((f) => f.path === selectedCharacterPath) ?? null
   const selectedCharacterName = selectedCharacterFile?.name?.replace(/\.txt$/i, '') ?? null
 
-  // 二次总结/语音阶段：从“人物TXT合集”读取人物列表（文件系统即真相）
+  // stageProgressRef 用于轮询 effect 中避免 stageProgress 频繁更新导致 effect 重运行
+  const stageProgressRef = useRef(stageProgress)
+  stageProgressRef.current = stageProgress
+
+  // 二次总结/语音阶段：从"人物TXT合集"读取人物列表（文件系统即真相）
   const shouldUseCharacterTxtFolder = (step === 'secondary' || step === 'tts' || step === 'done') && !!outputDir
   const hasSecondaryOutput = Boolean(secondaryBioDraft.trim()) || Boolean(secondaryMonologueDraft.trim())
 
@@ -1005,6 +1069,12 @@ const CharacterWorkflow: FC = () => {
 
   const loadSecondaryFromDisk = useCallback(
     async (kind: SecondaryKind) => {
+      const setLoading = kind === 'bio' ? setIsSecondaryBioLoading : setIsSecondaryMonologueLoading
+
+      // 立即设置 loading 标志（同步，在任何 await 之前），
+      // 保证 isSecondaryInitial 在同一渲染帧中为 false，避免"初始视图"闪现。
+      setLoading(true)
+
       const key = outputDir && selectedCharacterPath ? `${outputDir}::${selectedCharacterPath}` : null
       if (key && secondaryDraftKeyRef.current !== key) {
         secondaryDraftKeyRef.current = key
@@ -1013,6 +1083,7 @@ const CharacterWorkflow: FC = () => {
 
       // 若用户正在编辑当前 kind，则不要用磁盘内容覆盖编辑中的草稿
       if (secondaryDraftDirtyRef.current[kind]) {
+        setLoading(false)
         return
       }
 
@@ -1023,14 +1094,13 @@ const CharacterWorkflow: FC = () => {
         if (kind === 'bio') setSecondaryBioDraft('')
         else setSecondaryMonologueDraft('')
         secondaryDraftDirtyRef.current[kind] = false
+        setLoading(false)
         return
       }
 
-      const setLoading = kind === 'bio' ? setIsSecondaryBioLoading : setIsSecondaryMonologueLoading
       const setText = kind === 'bio' ? setSecondaryBioText : setSecondaryMonologueText
       const setDraft = kind === 'bio' ? setSecondaryBioDraft : setSecondaryMonologueDraft
 
-      setLoading(true)
       try {
         const content = await window.api.fs.readText(filePath)
         const normalized = content?.trim() ? content : null
@@ -1070,7 +1140,7 @@ const CharacterWorkflow: FC = () => {
     const isCharacterChanged = secondaryAutoLoadKeyRef.current !== key
     secondaryAutoLoadKeyRef.current = key
 
-    // 仅在“人物/任务目录”变化时清空，避免从第三阶段返回时闪白
+    // 仅在"人物/任务目录"变化时清空，避免从第三阶段返回时闪白
     if (isCharacterChanged) {
       setSecondaryBioText(null)
       setSecondaryMonologueText(null)
@@ -1093,7 +1163,7 @@ const CharacterWorkflow: FC = () => {
     // 避免在二次总结阶段频繁探测 audio 目录（ENOENT 会在 main 侧刷红）；仅在语音阶段兜底探测。
     if (step !== 'tts') return
     if (!outputDir) return
-    if (isTtsGenerating) return
+    if (isTtsBusy) return
 
     // 用户从最终结果页返回到语音页时，应允许停留在语音页调整参数/重新生成。
     // 此时通常已经有 ttsAudioPath（以及可选的 ttsAudioUrl），不应再次自动跳回 done。
@@ -1119,7 +1189,7 @@ const CharacterWorkflow: FC = () => {
     activeSession?.status,
     dispatch,
     findAnyAudioFile,
-    isTtsGenerating,
+    isTtsBusy,
     loadAudioByPath,
     outputDir,
     step,
@@ -1143,7 +1213,7 @@ const CharacterWorkflow: FC = () => {
     }
   }, [findAnyAudioFile, loadAudioByPath, outputDir, step, ttsAudioUrl])
 
-  // 完成页：自动读取 人物TXT合集 作为“人物列表 + 单人展示”的数据源（无缓存，文件系统即真相）
+  // 完成页：自动读取 人物TXT合集 作为"人物列表 + 单人展示"的数据源（无缓存，文件系统即真相）
   useEffect(() => {
     if (!shouldUseCharacterTxtFolder || !outputDir) return
 
@@ -1160,7 +1230,7 @@ const CharacterWorkflow: FC = () => {
 
         if (cancelled) return
 
-        // 优先自动选中“已经生成过二次总结”的人物（文件系统即真相；避免用户误以为需要重新生成）
+        // 优先自动选中"已经生成过二次总结"的人物（文件系统即真相；避免用户误以为需要重新生成）
         let preferredPath: string | null = null
         try {
           const bioDir = await window.api.path.join(outputDir, '二次总结', '人物志')
@@ -1224,19 +1294,34 @@ const CharacterWorkflow: FC = () => {
   }, [])
 
   const stageProgressTimerRef = useRef<number | null>(null)
+  const stageProgressStartRef = useRef<number>(0)
 
-  const startStageProgress = useCallback((stage: string) => {
+  /**
+   * 基于已过去的秒数计算模拟百分比（确定性函数，不含随机）。
+   * 曲线：前 30 秒快速增长到 ~60%，之后缓慢爬升，最高 92%。
+   */
+  const calcStagePercentage = useCallback((elapsedMs: number) => {
+    const t = elapsedMs / 1000
+    // 1 - e^(-0.05t) 在 t=30 约 0.78, t=60 约 0.95
+    return Math.min(92, Math.round(8 + 84 * (1 - Math.exp(-0.05 * t))))
+  }, [])
+
+  const startStageProgress = useCallback((stage: string, startedAt?: number) => {
     if (stageProgressTimerRef.current) {
       window.clearInterval(stageProgressTimerRef.current)
       stageProgressTimerRef.current = null
     }
-    let pct = 8
+    const origin = startedAt ?? Date.now()
+    stageProgressStartRef.current = origin
+
+    const pct = calcStagePercentage(Date.now() - origin)
     setStageProgress({ stage, percentage: pct })
+
     stageProgressTimerRef.current = window.setInterval(() => {
-      pct = Math.min(92, pct + Math.max(1, Math.round(Math.random() * 7)))
-      setStageProgress((prev) => (prev ? { ...prev, stage, percentage: pct } : { stage, percentage: pct }))
+      const p = calcStagePercentage(Date.now() - origin)
+      setStageProgress((prev) => (prev ? { ...prev, stage, percentage: p } : { stage, percentage: p }))
     }, 450)
-  }, [])
+  }, [calcStagePercentage])
 
   const stopStageProgress = useCallback((opts?: { finalPercentage?: number; keepMs?: number }) => {
     if (stageProgressTimerRef.current) {
@@ -1254,6 +1339,67 @@ const CharacterWorkflow: FC = () => {
       setStageProgress(null)
     }
   }, [])
+
+  // 恢复进度条后的文件轮询：当 stageProgress 存在且处于 secondary 步骤时，
+  // 定期检查磁盘上是否已出现二次总结文件。一旦检测到，停止进度条并重新加载内容。
+  // 这覆盖了以下场景：用户在生成中离开，IPC 在后台完成并落盘，前端重新进入后需要检测到。
+  useEffect(() => {
+    if (step !== 'secondary' || !stageProgressRef.current || !outputDir || !selectedCharacterName) return
+    // 仅在"恢复的进度条"场景下轮询（正常生成流程由 handleGenerateSecondary 的 await 处理）
+    if (isSecondaryBioGenerating || isSecondaryMonologueGenerating) return
+
+    const kind: SecondaryKind = (stageProgressRef.current.stage || '').includes('人物志') ? 'bio' : 'monologue'
+    const kindDirName = kind === 'bio' ? '人物志' : '心理独白'
+    // 距阶段开始至少 10 秒后才开始轮询，避免"重新生成"场景中误检到旧文件
+    const startedAt = stageProgressStartRef.current || Date.now()
+    const graceMs = Math.max(0, 10_000 - (Date.now() - startedAt))
+
+    let cancelled = false
+
+    const poll = async () => {
+      // 如果进度条已被其他逻辑停止，不再轮询
+      if (!stageProgressRef.current) return
+
+      try {
+        const safeStem = sanitizeSecondaryFileStem(selectedCharacterName)
+        const filePath = await window.api.path.join(outputDir, '二次总结', kindDirName, `${safeStem}.txt`)
+        const exists = await window.api.fs.exists(filePath)
+        if (exists && !cancelled) {
+          // 文件已落盘：停止进度条并重新加载内容
+          stopStageProgress({ finalPercentage: 100 })
+          secondaryDraftDirtyRef.current[kind] = false
+          loadSecondaryFromDisk(kind)
+
+          // 更新 Redux 进度
+          dispatch(
+            updateSessionProgress({
+              type: 'character',
+              progress: { percentage: 80, stage: '等待二次总结' },
+              status: 'processing'
+            })
+          )
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // grace period 后开始首次轮询，之后每 3 秒一次
+    const startTimer = window.setTimeout(() => {
+      if (cancelled) return
+      poll()
+      const interval = window.setInterval(poll, 3000)
+      // 保存 interval id 以便 cleanup
+      timerRef = interval
+    }, graceMs)
+    let timerRef: number | null = null
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(startTimer)
+      if (timerRef !== null) window.clearInterval(timerRef)
+    }
+  }, [step, outputDir, selectedCharacterName, sanitizeSecondaryFileStem, stopStageProgress, loadSecondaryFromDisk, dispatch, isSecondaryBioGenerating, isSecondaryMonologueGenerating])
 
   const formatElapsed = (totalSeconds: number) => {
     const minutes = Math.floor(totalSeconds / 60)
@@ -1299,7 +1445,7 @@ const CharacterWorkflow: FC = () => {
       return
     }
 
-    // 已进入“收尾→切页”的过渡窗口时，不要重新启动伪进度
+    // 已进入"收尾→切页"的过渡窗口时，不要重新启动伪进度
     if (extractCompleteTimeoutRef.current) {
       return
     }
@@ -1320,7 +1466,7 @@ const CharacterWorkflow: FC = () => {
       }
     })()
 
-    // 初始化计时（尽量复用 Redux 的 startedAt，用于“返回进行中”时恢复计时）
+    // 初始化计时（尽量复用 Redux 的 startedAt，用于"返回进行中"时恢复计时）
     extractStartMsRef.current = extractStartMsRef.current || startedAtMs || Date.now()
     const initialElapsedSeconds = Math.max(0, Math.floor((Date.now() - extractStartMsRef.current) / 1000))
     setExtractElapsedSeconds(initialElapsedSeconds)
@@ -1574,8 +1720,8 @@ const CharacterWorkflow: FC = () => {
     const currentOutputDir = outputDirRef.current
 
     // 同步处理状态
-    // 仅在用户仍处于“配置/提取”阶段时，才自动切换到提取进度页。
-    // 避免用户在二次总结/语音/完成阶段手动浏览时被主进程状态强制拉回，导致“无法回退/闪烁/内容重叠”。
+    // 仅在用户仍处于"配置/提取"阶段时，才自动切换到提取进度页。
+    // 避免用户在二次总结/语音/完成阶段手动浏览时被主进程状态强制拉回，导致"无法回退/闪烁/内容重叠"。
     if (
       mainProcessState.isProcessing &&
       (currentStep === 'config' || currentStep === 'extracting') &&
@@ -1648,7 +1794,7 @@ const CharacterWorkflow: FC = () => {
           dispatch(updateSessionOutputDir({ type: 'character', outputDir: mainProcessState.outputPath }))
         }
 
-        // 转换步骤：人物提取完成后直接进入二次总结阶段（不显示“提取完成”）
+        // 转换步骤：人物提取完成后直接进入二次总结阶段（不显示"提取完成"）
         if (currentStep === 'extracting') {
           // 让提取阶段的伪进度条自然收尾：先跳到 100%，短暂停留后再切换页面。
           if (!extractCompleteTimeoutRef.current) {
@@ -1730,11 +1876,12 @@ const CharacterWorkflow: FC = () => {
 
       setGenerating(true)
       const stageLabel = kind === 'bio' ? '生成人物志' : '生成心理独白'
-      startStageProgress(stageLabel)
+      const stageStartedAt = Date.now()
+      startStageProgress(stageLabel, stageStartedAt)
       dispatch(
         updateSessionProgress({
           type: 'character',
-          progress: { percentage: 70, stage: stageLabel },
+          progress: { percentage: 70, stage: stageLabel, stageStartedAt },
           status: 'processing'
         })
       )
@@ -1760,7 +1907,7 @@ const CharacterWorkflow: FC = () => {
           kind
         })
 
-        // 重新生成属于“覆盖落盘结果”的操作，允许覆盖当前编辑草稿
+        // 重新生成属于"覆盖落盘结果"的操作，允许覆盖当前编辑草稿
         secondaryDraftDirtyRef.current[kind] = false
         await loadSecondaryFromDisk(kind)
         stopStageProgress({ finalPercentage: 100 })
@@ -1777,6 +1924,14 @@ const CharacterWorkflow: FC = () => {
       } finally {
         stopStageProgress()
         setGenerating(false)
+        // 清理 Redux 中的"生成中"stage，避免恢复时误判为仍在生成
+        dispatch(
+          updateSessionProgress({
+            type: 'character',
+            progress: { percentage: 80, stage: '等待二次总结' },
+            status: 'processing'
+          })
+        )
       }
     },
     [
@@ -1844,9 +1999,259 @@ const CharacterWorkflow: FC = () => {
     setStep('secondary')
   }, [stopStageProgress])
 
+  const previewText = useMemo(() => {
+    const text = t('workflow.tts.previewSampleText', '你好，这是语音试听。').trim()
+    return text || '你好，这是语音试听。'
+  }, [t])
+
+  const prunePreviewCache = useCallback(() => {
+    const now = Date.now()
+    for (const [key, item] of previewCacheRef.current.entries()) {
+      if (now - item.createdAt > PREVIEW_CACHE_TTL_MS) {
+        previewCacheRef.current.delete(key)
+      }
+    }
+
+    if (previewCacheRef.current.size <= PREVIEW_CACHE_MAX_ITEMS) return
+
+    const sortedEntries = Array.from(previewCacheRef.current.entries()).sort((a, b) => a[1].createdAt - b[1].createdAt)
+    const overflow = sortedEntries.length - PREVIEW_CACHE_MAX_ITEMS
+    for (let index = 0; index < overflow; index += 1) {
+      previewCacheRef.current.delete(sortedEntries[index][0])
+    }
+  }, [])
+
+  const base64ToArrayBuffer = useCallback((base64: string) => {
+    const binary = window.atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index)
+    }
+    return bytes.buffer
+  }, [])
+
+  const unlockPreviewAudioContext = useCallback(() => {
+    try {
+      if (!previewAudioContextRef.current) {
+        previewAudioContextRef.current = new AudioContext()
+      }
+      const ctx = previewAudioContextRef.current
+      if (ctx && ctx.state === 'suspended') {
+        void ctx.resume()
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  const playPreviewFromFile = useCallback(
+    async (filePath: string, mime: string) => {
+      const ctx = previewAudioContextRef.current
+      if (ctx) {
+        try {
+          if (ctx.state === 'suspended') {
+            await ctx.resume()
+          }
+
+          const base64 = await window.api.fs.read(filePath, 'base64')
+          const arrayBuffer = base64ToArrayBuffer(base64)
+          const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0))
+
+          if (previewAudioSourceRef.current) {
+            try {
+              previewAudioSourceRef.current.stop()
+            } catch {
+              // ignore
+            }
+            try {
+              previewAudioSourceRef.current.disconnect()
+            } catch {
+              // ignore
+            }
+            previewAudioSourceRef.current = null
+          }
+
+          const source = ctx.createBufferSource()
+          source.buffer = audioBuffer
+          source.connect(ctx.destination)
+          source.start(0)
+          previewAudioSourceRef.current = source
+          return
+        } catch (error) {
+          console.warn('[CharacterWorkflow] Preview play via AudioContext failed, fallback to <audio>:', error)
+        }
+      }
+
+      const audio = previewAudioRef.current
+      if (!audio) {
+        throw new Error('Preview audio element is not ready')
+      }
+
+      const base64 = await window.api.fs.read(filePath, 'base64')
+      audio.src = `data:${mime};base64,${base64}`
+
+      try {
+        audio.pause()
+        audio.currentTime = 0
+        audio.load()
+        await audio.play()
+      } catch (error) {
+        console.warn('[CharacterWorkflow] Preview autoplay blocked:', error)
+        window.toast?.warning?.(
+          t('workflow.tts.previewAutoplayBlocked', '系统阻止自动播放试听音频，请再次点击"试听"或检查系统声音设置')
+        )
+        throw error
+      }
+    },
+    [base64ToArrayBuffer, t]
+  )
+
+  const requestPreviewAudio = useCallback(
+    async (
+      cacheKey: string,
+      signature: string,
+      generate: () => Promise<{ filePath?: string }>
+    ): Promise<TtsPreviewCacheItem> => {
+      const cached = previewCacheRef.current.get(cacheKey)
+      if (cached) {
+        if (cached.signature === signature && Date.now() - cached.createdAt <= PREVIEW_CACHE_TTL_MS) {
+          return cached
+        }
+        previewCacheRef.current.delete(cacheKey)
+      }
+
+      const inFlight = previewInFlightRef.current.get(cacheKey)
+      if (inFlight) {
+        return inFlight
+      }
+
+      const request = (async () => {
+        const result = await generate()
+
+        if (!result.filePath) {
+          throw new Error('Preview generation returned empty filePath.')
+        }
+
+        const mime = result.filePath.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg'
+        const item: TtsPreviewCacheItem = {
+          filePath: result.filePath,
+          mime,
+          createdAt: Date.now(),
+          signature
+        }
+
+        previewCacheRef.current.set(cacheKey, item)
+        prunePreviewCache()
+        return item
+      })()
+
+      previewInFlightRef.current.set(cacheKey, request)
+
+      try {
+        return await request
+      } finally {
+        previewInFlightRef.current.delete(cacheKey)
+      }
+    },
+    [prunePreviewCache]
+  )
+
+  const handlePreviewTts = useCallback(async () => {
+    unlockPreviewAudioContext()
+    if (isTtsBusy) return
+
+    setIsTtsPreviewing(true)
+    const token = ++previewTokenRef.current
+
+    const cacheKey =
+      ttsMode === 'normal'
+        ? `edge:${ttsVoice}`
+        : advancedProvider === 'zai'
+          ? `zai:${advancedZaiVoice}`
+          : `microsoft:${advancedTtsVoice}`
+
+    const signature =
+      ttsMode === 'normal'
+        ? JSON.stringify({
+            text: previewText,
+            rate: formatSignedPercent(ttsRateValue),
+            pitch: formatSignedPercent(ttsPitchValue)
+          })
+        : advancedProvider === 'zai'
+          ? JSON.stringify({
+              text: previewText,
+              rate: formatSigned(advancedTtsRateValue)
+            })
+          : JSON.stringify({
+              text: previewText,
+              style: advancedTtsStyle || 'general',
+              rate: formatSigned(advancedTtsRateValue),
+              pitch: formatSigned(advancedTtsPitchValue)
+            })
+
+    const generate = async () => {
+      if (ttsMode === 'normal') {
+        return window.api.edgeTTS.generate({
+          text: previewText,
+          voice: ttsVoice,
+          rate: formatSignedPercent(ttsRateValue),
+          pitch: formatSignedPercent(ttsPitchValue)
+        })
+      }
+
+      if (advancedProvider === 'zai') {
+        return window.api.advancedTTS.generate({
+          provider: 'zai',
+          text: previewText,
+          voice: advancedZaiVoice,
+          rate: formatSigned(advancedTtsRateValue)
+        })
+      }
+
+      return window.api.advancedTTS.generate({
+        provider: 'microsoft',
+        text: previewText,
+        voice: advancedTtsVoice,
+        style: advancedTtsStyle || 'general',
+        rate: formatSigned(advancedTtsRateValue),
+        pitch: formatSigned(advancedTtsPitchValue)
+      })
+    }
+
+    try {
+      const previewItem = await requestPreviewAudio(cacheKey, signature, generate)
+      if (token !== previewTokenRef.current) return
+      await playPreviewFromFile(previewItem.filePath, previewItem.mime)
+    } catch (error) {
+      console.error('[CharacterWorkflow] TTS preview failed:', error)
+      window.toast?.error?.(t('workflow.tts.previewFailed', '试听失败'))
+    } finally {
+      if (token === previewTokenRef.current) {
+        setIsTtsPreviewing(false)
+      }
+    }
+  }, [
+    advancedProvider,
+    advancedTtsPitchValue,
+    advancedTtsRateValue,
+    advancedTtsStyle,
+    advancedTtsVoice,
+    advancedZaiVoice,
+    isTtsBusy,
+    playPreviewFromFile,
+    previewText,
+    requestPreviewAudio,
+    t,
+    ttsMode,
+    ttsPitchValue,
+    ttsRateValue,
+    ttsVoice,
+    unlockPreviewAudioContext
+  ])
+
   const handleGenerateTts = useCallback(async () => {
     if (!outputDir || !selectedCharacterName) return
-    if (isTtsGenerating) return
+    if (isTtsBusy) return
 
     const kind = ttsSourceKind
     const text = kind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft
@@ -1857,11 +2262,12 @@ const CharacterWorkflow: FC = () => {
     }
 
     setIsTtsGenerating(true)
-    startStageProgress('生成语音')
+    const ttsStageStartedAt = Date.now()
+    startStageProgress('生成语音', ttsStageStartedAt)
     dispatch(
       updateSessionProgress({
         type: 'character',
-        progress: { percentage: 92, stage: '生成语音' },
+        progress: { percentage: 92, stage: '生成语音', stageStartedAt: ttsStageStartedAt },
         status: 'processing'
       })
     )
@@ -1869,7 +2275,7 @@ const CharacterWorkflow: FC = () => {
     const generationToken = ++ttsGenerationTokenRef.current
 
     try {
-      // 生成前先把编辑内容写回落盘文件，确保“音频对应当前编辑内容”且回退不丢失
+      // 生成前先把编辑内容写回落盘文件，确保"音频对应当前编辑内容"且回退不丢失
       await persistSecondaryDraftToDisk(kind, text)
       if (generationToken !== ttsGenerationTokenRef.current) return
 
@@ -1949,7 +2355,7 @@ const CharacterWorkflow: FC = () => {
     completeSession,
     dispatch,
     getSecondaryFilePath,
-    isTtsGenerating,
+    isTtsBusy,
     outputDir,
     sanitizeSecondaryFileStem,
     selectedCharacterName,
@@ -2092,7 +2498,20 @@ const CharacterWorkflow: FC = () => {
     const showCharacterPicker = shouldUseCharacterTxtFolder
     const fullscreenBaseTitle = historyBookTitle ?? selectedFile?.origin_name ?? selectedFile?.name ?? '人物志'
 
+    // 判断二次总结是否处于"初始视图"（只有人物选择 + 两个生成按钮）：
+    // 1. 必须在 secondary 步骤
+    // 2. 没有阶段进度条（stageProgress）
+    // 3. 没有任何已生成内容
+    // 4. 人物列表不在加载中（避免恢复时异步加载期间闪现初始视图）
+    // 5. 二次总结内容不在加载中（避免磁盘读取期间闪现初始视图）
+    // 6. Redux session 的 stage 未表明正在生成二次总结（避免从"进行中"返回时闪回初始视图）
+    const reduxSecondaryStage = activeSession?.progress?.stage || ''
+    const isReduxGeneratingSecondary = reduxSecondaryStage === '生成人物志'
+      || reduxSecondaryStage === '生成心理独白'
     const isSecondaryInitial = step === 'secondary' && !stageProgress && !hasSecondaryOutput
+      && !isCharacterListLoading
+      && !isSecondaryBioLoading && !isSecondaryMonologueLoading
+      && !isReduxGeneratingSecondary
 
     const navButtons = (
       <>
@@ -2144,14 +2563,14 @@ const CharacterWorkflow: FC = () => {
               direction="left"
               tooltip={t('workflow.character.stage3.prev', '上一步')}
               onPress={handleBackToSecondaryStep}
-              isDisabled={isTtsGenerating}
+              isDisabled={isTtsBusy}
             />
             <CircularNavButton
               direction="right"
               tooltip={t('workflow.tts.generate', '开始生成')}
               onPress={handleGenerateTts}
               isDisabled={
-                isTtsGenerating ||
+                isTtsBusy ||
                 (ttsSourceKind === 'bio'
                   ? isSecondaryBioLoading || !secondaryBioDraft.trim()
                   : isSecondaryMonologueLoading || !secondaryMonologueDraft.trim())
@@ -2331,7 +2750,7 @@ const CharacterWorkflow: FC = () => {
                         maxRows={25}
                         value={secondaryKind === 'bio' ? secondaryBioDraft : secondaryMonologueDraft}
                         onValueChange={(v) => setSecondaryDraft(secondaryKind, v)}
-                        placeholder={t('workflow.character.secondary.empty', '尚未生成，点击“生成”即可')}
+                        placeholder={t('workflow.character.secondary.empty', '尚未生成，点击"生成"即可')}
                         classNames={{
                           base: 'w-full h-full',
                           inputWrapper:
@@ -2375,7 +2794,7 @@ const CharacterWorkflow: FC = () => {
 
             {/* Controls: Tabs & Character Select */}
             <div
-              className={`flex flex-col items-center gap-4 ${isTtsGenerating ? 'pointer-events-none opacity-60' : ''}`}>
+              className={`flex flex-col items-center gap-4 ${isTtsBusy ? 'pointer-events-none opacity-60' : ''}`}>
               {/* Tabs for Mode */}
               <div className="rounded-2xl border border-white/5 bg-content2/30 p-1.5 backdrop-blur-sm">
                 <Tabs
@@ -2384,7 +2803,7 @@ const CharacterWorkflow: FC = () => {
                   onSelectionChange={(key) => {
                     if (!allowAdvanced && key === 'advanced') return
                     setTtsMode(key as 'normal' | 'advanced')
-                    // 切换模式时重置筛选，避免沿用上一个模式的筛选导致“区域/音色”跳动
+                    // 切换模式时重置筛选，避免沿用上一个模式的筛选导致"区域/音色"跳动
                     setLanguageFilter('zh')
                     setRegionFilter('all')
                     setGenderFilter('all')
@@ -2429,7 +2848,7 @@ const CharacterWorkflow: FC = () => {
                   variant="flat"
                   size="sm"
                   className="w-[200px]"
-                  isDisabled={isTtsGenerating || isCharacterListLoading || characterTxtFiles.length === 0}
+                  isDisabled={isTtsBusy || isCharacterListLoading || characterTxtFiles.length === 0}
                   popoverProps={{ classNames: { content: 'z-[200]' } }}
                   classNames={{
                     trigger: 'bg-transparent shadow-none hover:bg-content2/50 min-h-unit-8 h-8',
@@ -2449,7 +2868,9 @@ const CharacterWorkflow: FC = () => {
 
             {/* Configuration Card */}
             <TtsVoiceConfigCard
-              isGenerating={isTtsGenerating}
+              isGenerating={isTtsBusy}
+              isPreviewing={isTtsPreviewing}
+              onPreview={handlePreviewTts}
               ttsMode={ttsMode}
               advancedProvider={advancedProvider}
               setAdvancedProvider={setAdvancedProvider}
@@ -2649,6 +3070,7 @@ const CharacterWorkflow: FC = () => {
   return (
     <>
       <DragBar />
+      <audio ref={previewAudioRef} className="hidden" preload="auto" />
       <WorkflowStepMotion motionKey={step} direction={stepDirection}>
         {stepContent}
       </WorkflowStepMotion>

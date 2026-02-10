@@ -29,6 +29,8 @@ export interface WorkflowSession {
     stage: string
     current?: number
     total?: number
+    /** 阶段开始时间戳（ms），用于恢复时计算已过去的时间以续接进度条 */
+    stageStartedAt?: number
   }
 }
 
