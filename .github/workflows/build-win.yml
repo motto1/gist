@@ -55,7 +55,8 @@ jobs:
 
       - name: Build Windows
         # 仅构建 x64，避免同时生成 x64+arm64 导致产物体积翻倍
-        run: yarn build:win:x64
+        # 显式禁用 electron-builder 的自动发布，避免在 CI 构建任务中因仓库权限/发布目标不匹配导致失败
+        run: yarn build:win:x64 --publish never
 
       - name: Prepare artifacts (exclude unpacked)
         shell: pwsh
