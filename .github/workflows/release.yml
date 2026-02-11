@@ -144,38 +144,46 @@ jobs:
       - name: Package Pro edition (with voice)
         shell: pwsh
         run: |
+          $outDir = Join-Path $env:RUNNER_TEMP "release-pro"
+          Remove-Item -Recurse -Force -Path $outDir -ErrorAction SilentlyContinue
+
           $env:APP_EDITION = "pro"
           $env:BUILD_VOICE = "full"
           Remove-Item Env:BUILD_SUFFIX -ErrorAction SilentlyContinue
-          yarn run electron-builder --win --x64 --publish never
+          yarn run electron-builder --win --x64 --publish never --config.directories.output="$outDir"
 
       - name: Collect Pro installer
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.version }}"
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          $setup = "dist/gist-$version-x64-setup.exe"
+          $setup = Join-Path (Join-Path $env:RUNNER_TEMP "release-pro") "gist-$version-x64-setup.exe"
           if (-not (Test-Path $setup)) {
             throw "Pro installer not found: $setup"
           }
+          Get-Item $setup | Select-Object Name, Length | Format-Table -AutoSize
           Copy-Item -Path $setup -Destination "artifacts/gist-$version-x64-setup-pro.exe" -Force
 
       - name: Package Basic edition (no voice)
         shell: pwsh
         run: |
+          $outDir = Join-Path $env:RUNNER_TEMP "release-basic"
+          Remove-Item -Recurse -Force -Path $outDir -ErrorAction SilentlyContinue
+
           $env:APP_EDITION = "basic"
           $env:BUILD_VOICE = "none"
           Remove-Item Env:BUILD_SUFFIX -ErrorAction SilentlyContinue
-          yarn run electron-builder --win --x64 --publish never
+          yarn run electron-builder --win --x64 --publish never --config.directories.output="$outDir"
 
       - name: Collect Basic installer
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.version }}"
-          $setup = "dist/gist-$version-x64-setup.exe"
+          $setup = Join-Path (Join-Path $env:RUNNER_TEMP "release-basic") "gist-$version-x64-setup.exe"
           if (-not (Test-Path $setup)) {
             throw "Basic installer not found: $setup"
           }
+          Get-Item $setup | Select-Object Name, Length | Format-Table -AutoSize
           Copy-Item -Path $setup -Destination "artifacts/gist-$version-x64-setup-basic.exe" -Force
 
       - name: Commit version and push tag
