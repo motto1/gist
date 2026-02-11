@@ -4,11 +4,10 @@ import path from 'node:path'
 import { loggerService } from '@logger'
 import { isLinux, isMac, isWin } from '@main/constant'
 import { locales } from '@main/utils/locales'
-import { app, Menu, MenuItemConstructorOptions, nativeImage, nativeTheme, Tray } from 'electron'
+import { app, Menu, MenuItemConstructorOptions, nativeImage, Tray } from 'electron'
 
-import icon from '../../../build/tray_icon.png?asset'
-import iconDark from '../../../build/tray_icon_dark.png?asset'
-import iconLight from '../../../build/tray_icon_light.png?asset'
+import iconIco from '../../../build/icon.ico?asset'
+import iconIcns from '../../../build/icon.icns?asset'
 import { ConfigKeys, configManager } from './ConfigManager'
 import selectionService from './SelectionService'
 import { windowService } from './WindowService'
@@ -68,7 +67,7 @@ export class TrayService {
   private createTray() {
     this.destroyTray()
 
-    const iconCandidate = isMac ? (nativeTheme.shouldUseDarkColors ? iconLight : iconDark) : icon
+    const iconCandidate = isMac ? iconIcns : iconIco
     const iconPath = resolveIconPath(iconCandidate)
     if (!iconPath) {
       logger.warn('Tray icon file missing, skip creating tray', {

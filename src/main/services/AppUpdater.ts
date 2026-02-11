@@ -7,7 +7,7 @@ import { app, BrowserWindow, dialog } from 'electron'
 import { AppUpdater as _AppUpdater, autoUpdater, Logger, NsisUpdater, UpdateCheckResult, UpdateInfo } from 'electron-updater'
 import path from 'path'
 
-import icon from '../../../build/icon.png?asset'
+import icon from '../../../build/icon.ico?asset'
 import { configManager } from './ConfigManager'
 import { windowService } from './WindowService'
 
