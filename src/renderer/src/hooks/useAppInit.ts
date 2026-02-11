@@ -29,16 +29,7 @@ const logger = loggerService.withContext('useAppInit')
 
 export function useAppInit() {
   const dispatch = useAppDispatch()
-  const {
-    proxyUrl,
-    proxyBypassRules,
-    language,
-    windowStyle,
-    autoCheckUpdate,
-    proxyMode,
-    customCss,
-    enableDataCollection
-  } = useSettings()
+  const { proxyUrl, proxyBypassRules, language, windowStyle, proxyMode, customCss, enableDataCollection } = useSettings()
   const { isLeftNavbar } = useNavbarPosition()
   const { minappShow } = useRuntime()
   const { setDefaultModel, setQuickModel, setTranslateModel } = useDefaultModel()
@@ -78,14 +69,27 @@ export function useAppInit() {
 
   useEffect(() => {
     runAsyncFunction(async () => {
-      const { isPackaged } = await window.api.getAppInfo()
-      if (isPackaged && autoCheckUpdate) {
+      try {
+        const { isPackaged } = await window.api.getAppInfo()
+        if (!isPackaged) {
+          return
+        }
+
+        // 启动时总是检查更新：只要发现新版本就主动弹窗提示
         await delay(2)
         const { updateInfo } = await window.api.checkForUpdate()
         dispatch(setUpdateState({ info: updateInfo }))
+
+        if (updateInfo) {
+          // 等待状态事件更新后再弹窗，避免竞态
+          await delay(0.2)
+          await window.api.showUpdateDialog()
+        }
+      } catch (error) {
+        logger.error('Auto update check on launch failed', error as Error)
       }
     })
-  }, [dispatch, autoCheckUpdate])
+  }, [dispatch])
 
   useEffect(() => {
     if (proxyMode === 'system') {
