@@ -226,16 +226,39 @@ jobs:
           git push origin "HEAD:${{ github.ref_name }}"
           git push origin "${{ steps.version.outputs.tag }}"
 
-      - name: Create GitHub Release
-        uses: ncipollo/release-action@v1
-        with:
-          name: Release ${{ steps.version.outputs.tag }}
-          tag: ${{ steps.version.outputs.tag }}
-          draft: false
-          prerelease: false
-          generateReleaseNotes: false
-          body: ${{ steps.notes.outputs.body }}
-          allowUpdates: true
-          replacesArtifacts: true
-          artifacts: 'artifacts/*.exe'
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Validate public release token
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${{ secrets.DOWNLOADS_REPO_TOKEN }}" ]; then
+            echo "::error::Missing secret DOWNLOADS_REPO_TOKEN."
+            echo "Please add a fine-grained PAT with access to motto1/gist-downloads (Contents: Read and write)."
+            exit 1
+          fi
+
+      - name: Publish assets to public downloads repository
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.DOWNLOADS_REPO_TOKEN }}
+          TARGET_REPO: motto1/gist-downloads
+        run: |
+          set -euo pipefail
+
+          TAG="${{ steps.version.outputs.tag }}"
+          TITLE="Release ${TAG}"
+
+          if gh release view "$TAG" --repo "$TARGET_REPO" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --repo "$TARGET_REPO" \
+              --title "$TITLE" \
+              --notes-file release-notes.md
+          else
+            gh release create "$TAG" \
+              --repo "$TARGET_REPO" \
+              --title "$TITLE" \
+              --notes-file release-notes.md
+          fi
+
+          gh release upload "$TAG" artifacts/*.exe \
+            --repo "$TARGET_REPO" \
+            --clobber
