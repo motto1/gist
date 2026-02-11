@@ -26,14 +26,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  release-windows:
+  prepare:
     if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message || '', '[skip ci]') }}
-    runs-on: windows-latest
-    timeout-minutes: 150
-
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      NODE_OPTIONS: --max-old-space-size=8192
+    runs-on: ubuntu-latest
+    outputs:
+      base: ${{ steps.version.outputs.base }}
+      bump: ${{ steps.version.outputs.bump }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
 
     steps:
       - name: Check out Git repository
@@ -45,9 +45,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Install corepack
-        run: corepack enable && corepack prepare yarn@4.6.0 --activate
 
       - name: Resolve release version
         id: version
@@ -115,10 +112,39 @@ jobs:
 
           echo "Resolved release: base=${BASE_VERSION}, bump=${BUMP}, next=${NEXT_VERSION}"
 
+  package-windows:
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - edition: pro
+            voice: full
+          - edition: basic
+            voice: none
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NODE_OPTIONS: --max-old-space-size=8192
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v5
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install corepack
+        run: corepack enable && corepack prepare yarn@4.6.0 --activate
+
       - name: Set package.json version
         shell: bash
         run: |
-          npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
+          npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version --allow-same-version
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
@@ -141,56 +167,69 @@ jobs:
       - name: Build app bundles
         run: yarn build
 
-      - name: Package Pro edition (with voice)
+      - name: Package ${{ matrix.edition }} edition
         shell: pwsh
         run: |
-          $outDir = Join-Path $env:RUNNER_TEMP "release-pro"
+          $outDir = Join-Path $env:RUNNER_TEMP "release-${{ matrix.edition }}"
           Remove-Item -Recurse -Force -Path $outDir -ErrorAction SilentlyContinue
 
-          $env:APP_EDITION = "pro"
-          $env:BUILD_VOICE = "full"
+          $env:APP_EDITION = "${{ matrix.edition }}"
+          $env:BUILD_VOICE = "${{ matrix.voice }}"
           Remove-Item Env:BUILD_SUFFIX -ErrorAction SilentlyContinue
           yarn run electron-builder --win --x64 --publish never --config.directories.output="$outDir"
 
-      - name: Package Basic edition (no voice)
+      - name: Collect ${{ matrix.edition }} installer
         shell: pwsh
         run: |
-          $outDir = Join-Path $env:RUNNER_TEMP "release-basic"
-          Remove-Item -Recurse -Force -Path $outDir -ErrorAction SilentlyContinue
-
-          $env:APP_EDITION = "basic"
-          $env:BUILD_VOICE = "none"
-          Remove-Item Env:BUILD_SUFFIX -ErrorAction SilentlyContinue
-          yarn run electron-builder --win --x64 --publish never --config.directories.output="$outDir"
-
-      - name: Collect Pro & Basic installers
-        shell: pwsh
-        run: |
-          $version = "${{ steps.version.outputs.version }}"
+          $version = "${{ needs.prepare.outputs.version }}"
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
 
-          $proSetup = Join-Path (Join-Path $env:RUNNER_TEMP "release-pro") "gist-$version-x64-setup.exe"
-          $basicSetup = Join-Path (Join-Path $env:RUNNER_TEMP "release-basic") "gist-$version-x64-setup.exe"
-
-          if (-not (Test-Path $proSetup)) {
-            throw "Pro installer not found: $proSetup"
-          }
-          if (-not (Test-Path $basicSetup)) {
-            throw "Basic installer not found: $basicSetup"
+          $setup = Join-Path (Join-Path $env:RUNNER_TEMP "release-${{ matrix.edition }}") "gist-$version-x64-setup.exe"
+          if (-not (Test-Path $setup)) {
+            throw "Installer not found: $setup"
           }
 
-          Get-Item $proSetup, $basicSetup | Select-Object Name, Length | Format-Table -AutoSize
+          Get-Item $setup | Select-Object Name, Length | Format-Table -AutoSize
 
-          Copy-Item -Path $proSetup -Destination "artifacts/gist-$version-x64-setup-pro.exe" -Force
-          Copy-Item -Path $basicSetup -Destination "artifacts/gist-$version-x64-setup-basic.exe" -Force
+          Copy-Item -Path $setup -Destination "artifacts/gist-$version-x64-setup-${{ matrix.edition }}.exe" -Force
+
+      - name: Upload ${{ matrix.edition }} installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.edition }}
+          path: artifacts/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs:
+      - prepare
+      - package-windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set package.json version
+        shell: bash
+        run: |
+          npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version --allow-same-version
 
       - name: Generate release notes
-        id: notes
         shell: bash
         run: |
           set -euo pipefail
 
-          PREV_TAG="v${{ steps.version.outputs.base }}"
+          PREV_TAG="v${{ needs.prepare.outputs.base }}"
           FROM_ARG=()
           if git rev-parse -q --verify "refs/tags/${PREV_TAG}" >/dev/null; then
             FROM_ARG=(--from "${PREV_TAG}")
@@ -199,32 +238,56 @@ jobs:
           node scripts/generate-release-notes.js \
             "${FROM_ARG[@]}" \
             --to HEAD \
-            --version "${{ steps.version.outputs.tag }}" \
+            --version "${{ needs.prepare.outputs.tag }}" \
             --repo "${{ github.repository }}" > release-notes.md
 
           echo "Generated release notes:"
           cat release-notes.md
 
-          {
-            echo 'body<<EOF'
-            cat release-notes.md
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
+      - name: Download pro installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-pro
+          path: artifacts
+
+      - name: Download basic installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-basic
+          path: artifacts
+
+      - name: List artifacts
+        shell: bash
+        run: |
+          ls -lah artifacts
 
       - name: Commit version and push tag
         shell: bash
         run: |
           set -euo pipefail
 
+          TAG="${{ needs.prepare.outputs.tag }}"
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add package.json
-          git commit --signoff -m "ci(release): bump version to ${{ steps.version.outputs.tag }} [skip ci]"
+          if ! git diff --cached --quiet; then
+            git commit --signoff -m "ci(release): bump version to ${TAG} [skip ci]"
+            git push origin "HEAD:${{ github.ref_name }}"
+          else
+            echo "No package.json version change to commit."
+          fi
 
-          git tag "${{ steps.version.outputs.tag }}"
-          git push origin "HEAD:${{ github.ref_name }}"
-          git push origin "${{ steps.version.outputs.tag }}"
+          if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            git tag "${TAG}"
+          fi
+
+          if ! git ls-remote --exit-code --tags origin "${TAG}" >/dev/null 2>&1; then
+            git push origin "${TAG}"
+          else
+            echo "Tag ${TAG} already exists on origin."
+          fi
 
       - name: Validate public release token
         shell: bash
@@ -244,7 +307,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          TAG="${{ steps.version.outputs.tag }}"
+          TAG="${{ needs.prepare.outputs.tag }}"
           TITLE="Release ${TAG}"
 
           if gh release view "$TAG" --repo "$TARGET_REPO" >/dev/null 2>&1; then
