@@ -1363,7 +1363,7 @@ const CharacterWorkflow: FC = () => {
       try {
         const safeStem = sanitizeSecondaryFileStem(selectedCharacterName)
         const filePath = await window.api.path.join(outputDir, '二次总结', kindDirName, `${safeStem}.txt`)
-        const exists = await window.api.fs.exists(filePath)
+        const exists = Boolean(await window.api.file.get(filePath))
         if (exists && !cancelled) {
           // 文件已落盘：停止进度条并重新加载内容
           stopStageProgress({ finalPercentage: 100 })
