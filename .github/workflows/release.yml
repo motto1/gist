@@ -3,72 +3,43 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Release tag (e.g. v1.0.0)'
+      bump:
+        description: 'Version bump type (auto|patch|minor|major)'
         required: false
-        default: ''
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - patch
+          - minor
+          - major
   push:
     branches:
       - main
       - master
-    tags:
-      - v*.*.*
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   release-windows:
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message || '', '[skip ci]') }}
     runs-on: windows-latest
+    timeout-minutes: 150
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NODE_OPTIONS: --max-old-space-size=8192
+
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-
-      - name: Resolve release metadata
-        id: meta
-        shell: bash
-        run: |
-          INPUT_TAG="${{ github.event.inputs.tag }}"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "$INPUT_TAG" ]; then
-            TAG="$INPUT_TAG"
-          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            TAG="${GITHUB_REF#refs/tags/}"
-          else
-            TAG="nightly"
-          fi
-
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
-            echo "is_version=true" >> "$GITHUB_OUTPUT"
-            echo "draft=false" >> "$GITHUB_OUTPUT"
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
-            echo "make_latest=true" >> "$GITHUB_OUTPUT"
-            echo "release_name=Release $TAG" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_version=false" >> "$GITHUB_OUTPUT"
-            echo "draft=false" >> "$GITHUB_OUTPUT"
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
-            echo "make_latest=false" >> "$GITHUB_OUTPUT"
-            echo "release_name=Nightly ${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Update rolling tag
-        if: steps.meta.outputs.is_version != 'true'
-        shell: bash
-        run: |
-          git tag -f "${{ steps.meta.outputs.tag }}"
-          git push -f origin "${{ steps.meta.outputs.tag }}"
-
-      - name: Set package.json version
-        if: steps.meta.outputs.is_version == 'true'
-        shell: bash
-        run: |
-          TAG="${{ steps.meta.outputs.tag }}"
-          VERSION="${TAG#v}"
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
 
       - name: Install Node.js
         uses: actions/setup-node@v4
@@ -78,8 +49,80 @@ jobs:
       - name: Install corepack
         run: corepack enable && corepack prepare yarn@4.6.0 --activate
 
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          INPUT_BUMP="${{ github.event.inputs.bump }}"
+          if [ -z "${INPUT_BUMP}" ]; then
+            INPUT_BUMP="auto"
+          fi
+
+          LAST_TAG=$(git tag --list "v[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | head -n1 || true)
+          if [ -n "${LAST_TAG}" ]; then
+            BASE_VERSION="${LAST_TAG#v}"
+            RANGE="${LAST_TAG}..HEAD"
+          else
+            BASE_VERSION=$(node -p "require('./package.json').version")
+            RANGE="HEAD"
+          fi
+
+          COMMIT_MESSAGES=$(git log --format=%B ${RANGE} || true)
+
+          BUMP="${INPUT_BUMP}"
+          if [ "${BUMP}" = "auto" ]; then
+            BUMP="patch"
+            if printf "%s\n" "${COMMIT_MESSAGES}" | grep -Eqi 'BREAKING CHANGE|^[a-z]+(\([^)]+\))?!:'; then
+              BUMP="major"
+            elif printf "%s\n" "${COMMIT_MESSAGES}" | grep -Eq '^feat(\([^)]+\))?:'; then
+              BUMP="minor"
+            fi
+          fi
+
+          NEXT_VERSION=$(BASE_VERSION="${BASE_VERSION}" BUMP="${BUMP}" node <<'NODE'
+          const base = process.env.BASE_VERSION || '0.0.0'
+          const bump = process.env.BUMP || 'patch'
+          const [major0, minor0, patch0] = base
+            .split('-')[0]
+            .split('.')
+            .map((x) => Number.parseInt(x, 10))
+
+          let major = Number.isFinite(major0) ? major0 : 0
+          let minor = Number.isFinite(minor0) ? minor0 : 0
+          let patch = Number.isFinite(patch0) ? patch0 : 0
+
+          if (bump === 'major') {
+            major += 1
+            minor = 0
+            patch = 0
+          } else if (bump === 'minor') {
+            minor += 1
+            patch = 0
+          } else {
+            patch += 1
+          }
+
+          process.stdout.write(`${major}.${minor}.${patch}`)
+          NODE
+          )
+
+          echo "base=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "bump=${BUMP}" >> "$GITHUB_OUTPUT"
+          echo "version=${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
+
+          echo "Resolved release: base=${BASE_VERSION}, bump=${BUMP}, next=${NEXT_VERSION}"
+
+      - name: Set package.json version
+        shell: bash
+        run: |
+          npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
+
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
+        shell: bash
         run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
 
       - name: Cache yarn dependencies
@@ -95,22 +138,70 @@ jobs:
       - name: Install Dependencies
         run: yarn install
 
-      - name: Build Windows
-        run: |
-          yarn build:win:x64 --publish never
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: --max-old-space-size=8192
+      - name: Build app bundles
+        run: yarn build
 
-      - name: Release
+      - name: Package Pro edition (with voice)
+        shell: pwsh
+        run: |
+          $env:APP_EDITION = "pro"
+          $env:BUILD_VOICE = "full"
+          Remove-Item Env:BUILD_SUFFIX -ErrorAction SilentlyContinue
+          yarn run electron-builder --win --x64 --publish never
+
+      - name: Collect Pro installer
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $setup = "dist/gist-$version-x64-setup.exe"
+          if (-not (Test-Path $setup)) {
+            throw "Pro installer not found: $setup"
+          }
+          Copy-Item -Path $setup -Destination "artifacts/gist-$version-x64-setup-pro.exe" -Force
+
+      - name: Package Basic edition (no voice)
+        shell: pwsh
+        run: |
+          $env:APP_EDITION = "basic"
+          $env:BUILD_VOICE = "none"
+          Remove-Item Env:BUILD_SUFFIX -ErrorAction SilentlyContinue
+          yarn run electron-builder --win --x64 --publish never
+
+      - name: Collect Basic installer
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $setup = "dist/gist-$version-x64-setup.exe"
+          if (-not (Test-Path $setup)) {
+            throw "Basic installer not found: $setup"
+          }
+          Copy-Item -Path $setup -Destination "artifacts/gist-$version-x64-setup-basic.exe" -Force
+
+      - name: Commit version and push tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add package.json
+          git commit --signoff -m "ci(release): bump version to ${{ steps.version.outputs.tag }} [skip ci]"
+
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "HEAD:${{ github.ref_name }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
-          name: ${{ steps.meta.outputs.release_name }}
-          draft: ${{ steps.meta.outputs.draft }}
-          prerelease: ${{ steps.meta.outputs.prerelease }}
+          name: Release ${{ steps.version.outputs.tag }}
+          tag: ${{ steps.version.outputs.tag }}
+          draft: false
+          prerelease: false
+          generateReleaseNotes: true
           allowUpdates: true
           replacesArtifacts: true
-          makeLatest: ${{ steps.meta.outputs.make_latest }}
-          tag: ${{ steps.meta.outputs.tag }}
-          artifacts: 'dist/*-x64-setup.exe'
+          artifacts: 'artifacts/*.exe'
           token: ${{ secrets.GITHUB_TOKEN }}
