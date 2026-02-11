@@ -13,6 +13,7 @@ import { type CSSProperties, FC, useCallback, useEffect, useMemo, useState } fro
 import { useTranslation } from 'react-i18next'
 
 import DragBar from '../workflow/components/DragBar'
+import { useAdaptiveScale } from '../workflow/components/useAdaptiveScale'
 import BookCard from './components/BookCard'
 import BookCardSkeleton from './components/BookCardSkeleton'
 
@@ -63,6 +64,7 @@ const TextEditorPage: FC = () => {
 
   const gridConfig = GRID_CONFIGS[gridSize]
   const gridStyle = useMemo(() => getGridStyle(gridConfig), [gridConfig])
+  const { hostRef: layoutHostRef, scaledStyle } = useAdaptiveScale(1280)
 
   useEffect(() => {
     localStorage.setItem(GRID_SIZE_STORAGE_KEY, gridSize)
@@ -157,83 +159,78 @@ const TextEditorPage: FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2" style={noDragStyle}>
-            <Button color="primary" startContent={<Upload size={14} />} onPress={handleImport}>
-              {t('textEditor.import', '导入TXT')}
-            </Button>
-          </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-8">
-          <div className="mx-auto w-full max-w-6xl space-y-6">
-            {/* Controls (match 视频页面的 glass/blur 风格) */}
-            <Card className="border border-white/5 bg-content2/30 backdrop-blur-sm">
-              <CardBody className="space-y-4 p-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex-1 min-w-[260px] lg:max-w-[560px]">
-                    <Input
-                      isClearable
-                      size="sm"
-                      value={searchText}
-                      placeholder={t('textEditor.searchPlaceholder', '搜索书名或文件名')}
-                      startContent={<Search size={14} />}
-                      onValueChange={setSearchText}
-                      aria-label={t('textEditor.searchPlaceholder', '搜索书名或文件名')}
-                    />
-                  </div>
+        <div ref={layoutHostRef} className="flex-1 overflow-y-auto px-6 pt-3 pb-8">
+          <div className="mx-auto w-full max-w-6xl space-y-6 overflow-visible" style={scaledStyle}>
+            {/* Controls */}
+            <div className="border-foreground/10 border-b pb-3" style={noDragStyle}>
+              <div className="flex items-center gap-3 overflow-x-auto">
+                <Input
+                  isClearable
+                  size="sm"
+                  value={searchText}
+                  placeholder={t('textEditor.searchPlaceholder', '搜索书名或文件名')}
+                  startContent={<Search size={14} />}
+                  onValueChange={setSearchText}
+                  aria-label={t('textEditor.searchPlaceholder', '搜索书名或文件名')}
+                  className="min-w-[280px] max-w-[560px] flex-1 shrink-0"
+                />
 
-                  <div className="flex flex-wrap items-center justify-end gap-3">
-                    <Select
-                      size="sm"
-                      selectedKeys={[sortKey]}
-                      className="w-36"
-                      isDisabled={isLibraryEmpty}
-                      onSelectionChange={(keys) => {
-                        const selected = Array.from(keys)[0] as SortKey
-                        setSortKey(selected)
-                      }}
-                      aria-label="Sort by"
-                    >
-                      <SelectItem key="custom">{t('textEditor.sort.custom', '自定义排序')}</SelectItem>
-                      <SelectItem key="updatedDesc">
-                        {t('textEditor.sort.updatedDesc', '最近更新')}
-                      </SelectItem>
-                      <SelectItem key="createdDesc">
-                        {t('textEditor.sort.createdDesc', '最近导入')}
-                      </SelectItem>
-                      <SelectItem key="titleAsc">{t('textEditor.sort.titleAsc', '书名 A-Z')}</SelectItem>
-                      <SelectItem key="sizeDesc">{t('textEditor.sort.sizeDesc', '文件大小')}</SelectItem>
-                    </Select>
+                <Button
+                  size="sm"
+                  color="primary"
+                  startContent={<Upload size={14} />}
+                  onPress={handleImport}
+                  className="shrink-0"
+                >
+                  {t('textEditor.import', '导入TXT')}
+                </Button>
 
-                    <div className="rounded-2xl border border-white/5 bg-content2/30 p-1.5 backdrop-blur-sm">
-                      <Tabs
-                        size="sm"
-                        selectedKey={gridSize}
-                        onSelectionChange={(key) => setGridSize(key as GridSize)}
-                        variant="light"
-                        classNames={{
-                          tabList: 'gap-2',
-                          cursor: 'bg-background shadow-sm',
-                          tab: 'h-8 px-5',
-                          tabContent: 'group-data-[selected=true]:text-primary font-medium'
-                        }}
-                      >
-                        <Tab key="large" title={t('textEditor.size.large', '大')} isDisabled={isLibraryEmpty} />
-                        <Tab key="medium" title={t('textEditor.size.medium', '中')} isDisabled={isLibraryEmpty} />
-                        <Tab key="small" title={t('textEditor.size.small', '小')} isDisabled={isLibraryEmpty} />
-                      </Tabs>
-                    </div>
-                  </div>
-                </div>
+                <Select
+                  size="sm"
+                  selectedKeys={[sortKey]}
+                  className="w-36 shrink-0"
+                  isDisabled={isLibraryEmpty}
+                  onSelectionChange={(keys) => {
+                    const selected = Array.from(keys)[0] as SortKey
+                    setSortKey(selected)
+                  }}
+                  aria-label="Sort by"
+                >
+                  <SelectItem key="custom">{t('textEditor.sort.custom', '自定义排序')}</SelectItem>
+                  <SelectItem key="updatedDesc">{t('textEditor.sort.updatedDesc', '最近更新')}</SelectItem>
+                  <SelectItem key="createdDesc">{t('textEditor.sort.createdDesc', '最近导入')}</SelectItem>
+                  <SelectItem key="titleAsc">{t('textEditor.sort.titleAsc', '书名 A-Z')}</SelectItem>
+                  <SelectItem key="sizeDesc">{t('textEditor.sort.sizeDesc', '文件大小')}</SelectItem>
+                </Select>
+
+                <Tabs
+                  size="sm"
+                  selectedKey={gridSize}
+                  onSelectionChange={(key) => setGridSize(key as GridSize)}
+                  variant="light"
+                  className="shrink-0"
+                  classNames={{
+                    tabList: 'gap-2',
+                    cursor: 'bg-content2 shadow-sm',
+                    tab: 'h-8 px-5',
+                    tabContent: 'group-data-[selected=true]:text-primary font-medium'
+                  }}
+                >
+                  <Tab key="large" title={t('textEditor.size.large', '大')} isDisabled={isLibraryEmpty} />
+                  <Tab key="medium" title={t('textEditor.size.medium', '中')} isDisabled={isLibraryEmpty} />
+                  <Tab key="small" title={t('textEditor.size.small', '小')} isDisabled={isLibraryEmpty} />
+                </Tabs>
 
                 {sortKey === 'custom' ? (
-                  <div className="text-foreground/40 text-xs">
+                  <span className="shrink-0 text-foreground/40 text-xs">
                     {t('textEditor.sort.customHint', '当前为自定义排序：可拖拽卡片调整顺序')}
-                  </div>
+                  </span>
                 ) : null}
-              </CardBody>
-            </Card>
+              </div>
+            </div>
 
             {/* Main area */}
             {isLoading ? (

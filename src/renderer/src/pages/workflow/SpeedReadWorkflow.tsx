@@ -114,6 +114,7 @@ const SpeedReadWorkflow: FC = () => {
   const [isRestoring, setIsRestoring] = useState(true)
   const [historyBookTitle, setHistoryBookTitle] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)  // 防重复提交
+  const startRequestTokenRef = useRef(0)
 
   // processing 阶段：伪进度 + 计时 + dots 动画
   const [processPseudoPercentage, setProcessPseudoPercentage] = useState(0)
@@ -311,6 +312,8 @@ const SpeedReadWorkflow: FC = () => {
   const handleStart = useCallback(async () => {
     if (!canStart || !selectedModel || !selectedFile || isStarting) return
 
+    const startToken = ++startRequestTokenRef.current
+    const isStartCanceled = () => startToken !== startRequestTokenRef.current
     setIsStarting(true)  // 防重复提交
     try {
       // 重置本地状态，防止显示旧任务的结果
@@ -347,9 +350,11 @@ const SpeedReadWorkflow: FC = () => {
         console.error('Failed to read file content')
         return
       }
+      if (isStartCanceled()) return
 
       // Parse chapters first - this is required for chapter-aware compression
       const chapterParseResult = await window.api.novelCompress.parseChapters(fileContent)
+      if (isStartCanceled()) return
       console.log('[SpeedReadWorkflow] Chapter parse result:', chapterParseResult)
 
       // Calculate chaptersPerChunk based on target chunk size (~150,000 chars)
@@ -375,6 +380,7 @@ const SpeedReadWorkflow: FC = () => {
       // Ensure compression directory exists
       const compressionDir = await window.api.path.join(bookDir, 'compression')
       await window.api.file.mkdir(compressionDir)
+      if (isStartCanceled()) return
 
       // Save output directory for later use
       setOutputDir(compressionDir)
@@ -398,12 +404,14 @@ const SpeedReadWorkflow: FC = () => {
           progress: { percentage: 0, stage: 'initializing' }
         }
       }))
+      if (isStartCanceled()) return
 
       const compressionOutputPath = await window.api.path.join(compressionDir, 'compressed.txt')
 
       // Reset state first to clear any previous completed state, then set new task config
       // This ensures we start fresh and don't carry over old progress/result
       await window.api.novelCompress.resetState()
+      if (isStartCanceled()) return
 
       // Set file, model and fixed settings for speed read workflow
       await window.api.novelCompress.setState({
@@ -415,7 +423,7 @@ const SpeedReadWorkflow: FC = () => {
         chunkSize: 150000, // 150,000 chars per chunk
         overlap: 0,
         temperature: 0.7,
-        maxConcurrency: 3,
+        maxConcurrency: 30,
         chunkMode: 'byChapter', // Chapter-based chunking
         chaptersPerChunk: chaptersPerChunk, // Auto-calculated based on ~150k chars target
         continueLatestTask: false,
@@ -423,9 +431,11 @@ const SpeedReadWorkflow: FC = () => {
         // Pass chapter parse result to enable chapter-aware prompts
         chapterParseResult: chapterParseResult
       })
+      if (isStartCanceled()) return
 
       // Now transition to processing step after state is properly set
       setStep('processing')
+      if (isStartCanceled()) return
 
       // Start compression
       await window.api.novelCompress.startCompression(providerConfigs, undefined, { autoRetry: true })
@@ -433,7 +443,9 @@ const SpeedReadWorkflow: FC = () => {
       console.error('Failed to start compression:', error)
       setStep('config') // Revert to config on error
     } finally {
-      setIsStarting(false)  // 重置防重复提交状态
+      if (!isStartCanceled()) {
+        setIsStarting(false) // 重置防重复提交状态
+      }
     }
   }, [canStart, selectedModel, selectedFile, dispatch, isStarting])
 
@@ -726,7 +738,10 @@ const SpeedReadWorkflow: FC = () => {
 
   // Handle cancel processing
   const handleCancel = useCallback(() => {
+    startRequestTokenRef.current += 1
+    setIsStarting(false)
     window.api.novelCompress.cancel()
+    window.api.novelCompress.resetState()
     dispatch(clearActiveSession('speed-read'))
     setStep('config')
     setProgress({ stage: 'initializing', percentage: 0 })
@@ -877,13 +892,22 @@ const SpeedReadWorkflow: FC = () => {
   } else {
     // Config step (default)
     const navButtons = (
-      <CircularNavButton
-        direction="right"
-        tooltip={t('workflow.config.start', '确认开始')}
-        onPress={handleStart}
-        isDisabled={!canStart || isStarting}
-        isLoading={isStarting}
-      />
+      <>
+        {isStarting && (
+          <CircularNavButton
+            direction="left"
+            tooltip={t('workflow.processing.cancel', '取消任务')}
+            onPress={handleCancel}
+          />
+        )}
+        <CircularNavButton
+          direction="right"
+          tooltip={t('workflow.config.start', '确认开始')}
+          onPress={handleStart}
+          isDisabled={!canStart || isStarting}
+          isLoading={isStarting}
+        />
+      </>
     )
 
     stepContent = (

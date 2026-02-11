@@ -116,6 +116,7 @@ const OutlineWorkflow: FC = () => {
   const [isRestoring, setIsRestoring] = useState(true)
   const [historyBookTitle, setHistoryBookTitle] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)  // 防重复提交
+  const startRequestTokenRef = useRef(0)
 
   // processing 阶段：伪进度 + 计时 + dots 动画
   const [processPseudoPercentage, setProcessPseudoPercentage] = useState(0)
@@ -366,6 +367,8 @@ const OutlineWorkflow: FC = () => {
   const handleStart = useCallback(async () => {
     if (!canStart || !selectedModel || !selectedFile || isStarting) return
 
+    const startToken = ++startRequestTokenRef.current
+    const isStartCanceled = () => startToken !== startRequestTokenRef.current
     setIsStarting(true)  // 防重复提交
     try {
       // 重置本地状态，防止显示旧任务的结果
@@ -401,6 +404,7 @@ const OutlineWorkflow: FC = () => {
         console.error('Failed to read file content')
         return
       }
+      if (isStartCanceled()) return
 
       // Get book folder (parent of content.txt)
       const bookDir = await window.api.path.dirname(selectedFile.path)
@@ -408,6 +412,7 @@ const OutlineWorkflow: FC = () => {
       // Ensure outline directory exists
       const outlineDir = await window.api.path.join(bookDir, 'outline')
       await window.api.file.mkdir(outlineDir)
+      if (isStartCanceled()) return
 
       // Save output directory for later use
       setOutputDir(outlineDir)
@@ -431,10 +436,12 @@ const OutlineWorkflow: FC = () => {
           progress: { percentage: 0, stage: 'initializing' }
         }
       }))
+      if (isStartCanceled()) return
 
       // Reset state first to clear any previous completed state, then set new task config
       // This ensures we start fresh and don't carry over old progress/result
       await window.api.novelOutline.resetState()
+      if (isStartCanceled()) return
 
       // Set file, model and fixed settings for outline workflow
       // Force word-count based chunking (ignore chapters)
@@ -445,13 +452,15 @@ const OutlineWorkflow: FC = () => {
         // Fixed settings for outline workflow
         chunkSize: 150000, // Fixed 150,000 chars per chunk
         overlap: 0,
-        maxConcurrency: 3,
+        maxConcurrency: 30,
         continueLatestTask: false,
         enableAutoResume: true
       })
+      if (isStartCanceled()) return
 
       // Now transition to processing step after state is properly set
       setStep('processing')
+      if (isStartCanceled()) return
 
       // Start outline extraction
       await window.api.novelOutline.startCompression(providerConfigs, undefined, { autoRetry: true })
@@ -459,7 +468,9 @@ const OutlineWorkflow: FC = () => {
       console.error('Failed to start outline extraction:', error)
       setStep('config') // Revert to config on error
     } finally {
-      setIsStarting(false)  // 重置防重复提交状态
+      if (!isStartCanceled()) {
+        setIsStarting(false) // 重置防重复提交状态
+      }
     }
   }, [canStart, selectedModel, selectedFile, dispatch, isStarting])
 
@@ -751,7 +762,10 @@ const OutlineWorkflow: FC = () => {
 
   // Handle cancel processing
   const handleCancel = useCallback(() => {
+    startRequestTokenRef.current += 1
+    setIsStarting(false)
     window.api.novelOutline.cancel()
+    window.api.novelOutline.resetState()
     dispatch(clearActiveSession('outline'))
     setStep('config')
     setProgress({ stage: 'initializing', percentage: 0 })
@@ -909,13 +923,22 @@ const OutlineWorkflow: FC = () => {
   } else {
     // Config step (default)
     const navButtons = (
-      <CircularNavButton
-        direction="right"
-        tooltip={t('workflow.config.start', '确认开始')}
-        onPress={handleStart}
-        isDisabled={!canStart || isStarting}
-        isLoading={isStarting}
-      />
+      <>
+        {isStarting && (
+          <CircularNavButton
+            direction="left"
+            tooltip={t('workflow.processing.cancel', '取消任务')}
+            onPress={handleCancel}
+          />
+        )}
+        <CircularNavButton
+          direction="right"
+          tooltip={t('workflow.config.start', '确认开始')}
+          onPress={handleStart}
+          isDisabled={!canStart || isStarting}
+          isLoading={isStarting}
+        />
+      </>
     )
 
     stepContent = (

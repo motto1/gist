@@ -230,6 +230,7 @@ const CharacterWorkflow: FC = () => {
   const [isRestoring, setIsRestoring] = useState(true)
   const [historyBookTitle, setHistoryBookTitle] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false) // 防重复提交
+  const startRequestTokenRef = useRef(0)
 
   // 人物 TXT 合集（用于"非指定人物模式"的结果展示）
   const [characterTxtFiles, setCharacterTxtFiles] = useState<FsEntry[]>([])
@@ -938,7 +939,6 @@ const CharacterWorkflow: FC = () => {
               if (reduxStage === '生成人物志' || reduxStage === '生成心理独白') {
                 startStageProgress(reduxStage, activeSession.progress?.stageStartedAt)
               }
-              }
             }
             if (activeSession.progress) {
               setProgress(activeSession.progress)
@@ -1499,6 +1499,8 @@ const CharacterWorkflow: FC = () => {
   const handleStart = useCallback(async () => {
     if (!canStart || !selectedModel || !selectedFile || isStarting) return
 
+    const startToken = ++startRequestTokenRef.current
+    const isStartCanceled = () => startToken !== startRequestTokenRef.current
     setIsStarting(true) // 防重复提交
     try {
       // 重置本地状态，防止显示旧任务的结果
@@ -1546,9 +1548,11 @@ const CharacterWorkflow: FC = () => {
         console.error('Failed to read file content')
         return
       }
+      if (isStartCanceled()) return
 
       // Parse chapters first - this is required for chapter-aware analysis
       const chapterParseResult = await window.api.novelCharacter.parseChapters(selectedFile.path)
+      if (isStartCanceled()) return
       console.log('[CharacterWorkflow] Chapter parse result:', chapterParseResult)
 
       // Calculate chaptersPerChunk based on target chunk size (~150,000 chars)
@@ -1578,11 +1582,13 @@ const CharacterWorkflow: FC = () => {
       // Ensure character directory exists
       const characterDir = await window.api.path.join(bookDir, 'character')
       await window.api.file.mkdir(characterDir)
+      if (isStartCanceled()) return
 
       // Save output directory for later use
       setOutputDir(characterDir)
 
       const characterOutputPath = await window.api.path.join(characterDir, `${baseName}.txt`)
+      if (isStartCanceled()) return
 
       // Save session to Redux
       const sessionId = crypto.randomUUID()
@@ -1605,10 +1611,12 @@ const CharacterWorkflow: FC = () => {
           }
         })
       )
+      if (isStartCanceled()) return
 
       // Reset state first to clear any previous completed state, then set new task config
       // This ensures we start fresh and don't carry over old progress/result
       await window.api.novelCharacter.resetState()
+      if (isStartCanceled()) return
 
       // Set file, model and fixed settings for character workflow
       // Use byChapter mode with auto-calculated chaptersPerChunk targeting ~150k chars per chunk
@@ -1623,7 +1631,7 @@ const CharacterWorkflow: FC = () => {
         },
         chunkSize: 150000, // Fallback for bySize mode
         overlap: 0,
-        maxConcurrency: 3,
+        maxConcurrency: 30,
         chunkMode: 'byChapter', // Chapter-based chunking (required for character extraction)
         chaptersPerChunk: chaptersPerChunk, // Auto-calculated based on ~150k chars target
         continueLatestTask: false,
@@ -1631,10 +1639,12 @@ const CharacterWorkflow: FC = () => {
         // Pass chapter parse result to enable chapter-aware prompts
         chapterParseResult: chapterParseResult
       })
+      if (isStartCanceled()) return
 
       // Now transition to extracting step after state is properly set
       setStepDirection(1)
       setStep('extracting')
+      if (isStartCanceled()) return
 
       // Start character extraction
       await window.api.novelCharacter.startCompression(providerConfigs, undefined, { autoRetry: true })
@@ -1643,7 +1653,9 @@ const CharacterWorkflow: FC = () => {
       setStepDirection(-1)
       setStep('config') // Revert to config on error
     } finally {
-      setIsStarting(false) // 重置防重复提交状态
+      if (!isStartCanceled()) {
+        setIsStarting(false) // 重置防重复提交状态
+      }
     }
   }, [canStart, selectedModel, selectedFile, dispatch, isStarting])
 
@@ -2383,10 +2395,13 @@ const CharacterWorkflow: FC = () => {
 
   // Handle cancel processing
   const handleCancel = useCallback(() => {
+    startRequestTokenRef.current += 1
+    setIsStarting(false)
     ttsGenerationTokenRef.current += 1
     stopStageProgress()
     setIsTtsGenerating(false)
     window.api.novelCharacter.cancel()
+    window.api.novelCharacter.resetState()
     dispatch(clearActiveSession('character'))
     setStep('config')
     setProgress({ stage: 'initializing', percentage: 0 })
@@ -2953,13 +2968,22 @@ const CharacterWorkflow: FC = () => {
   } else {
     // Config step (default)
     const navButtons = (
-      <CircularNavButton
-        direction="right"
-        tooltip={t('workflow.config.start', '确认开始')}
-        onPress={handleStart}
-        isDisabled={!canStart || isStarting}
-        isLoading={isStarting}
-      />
+      <>
+        {isStarting && (
+          <CircularNavButton
+            direction="left"
+            tooltip={t('workflow.processing.cancel', '取消任务')}
+            onPress={handleCancel}
+          />
+        )}
+        <CircularNavButton
+          direction="right"
+          tooltip={t('workflow.config.start', '确认开始')}
+          onPress={handleStart}
+          isDisabled={!canStart || isStarting}
+          isLoading={isStarting}
+        />
+      </>
     )
 
     stepContent = (
