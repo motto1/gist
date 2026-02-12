@@ -1,5 +1,5 @@
 /**
- * Read-No-More AI Core - 统一入口点
+ * gist AI Core - 统一入口点
  *
  * 这是新的统一入口，保持向后兼容性
  * 默认导出legacy AiProvider以保持现有代码的兼容性

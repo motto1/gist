@@ -171,7 +171,7 @@ const AboutSettings: FC = () => {
   }, [autoCheckUpdate, setAutoCheckUpdate])
 
   const onOpenDocs = () => {
-    window.api.openWebsite('https://github.com/motto1/Read-No-More')
+    window.api.openWebsite('https://github.com/motto1/gist-downloads')
   }
 
   return (
@@ -180,7 +180,7 @@ const AboutSettings: FC = () => {
         <SettingTitle>
           {t('settings.about.title')}
           <HStack alignItems="center">
-            <Link to="https://github.com/motto1/Read-No-More">
+            <Link to="https://github.com/motto1/gist-downloads">
               <GithubOutlined style={{ marginRight: 4, color: 'var(--color-text)', fontSize: 20 }} />
             </Link>
           </HStack>
@@ -188,7 +188,7 @@ const AboutSettings: FC = () => {
         <SettingDivider />
         <AboutHeader>
           <Row align="middle">
-            <AvatarWrapper onClick={() => onOpenWebsite('https://github.com/motto1/Read-No-More')}>
+            <AvatarWrapper onClick={() => onOpenWebsite('https://github.com/motto1/gist-downloads')}>
               {update.downloadProgress > 0 && (
                 <ProgressCircle
                   type="circle"
@@ -205,7 +205,7 @@ const AboutSettings: FC = () => {
               <Title>{APP_NAME}</Title>
               <Description>{t('settings.about.description')}</Description>
               <Tag
-                onClick={() => onOpenWebsite('https://github.com/motto1/Read-No-More/releases')}
+                onClick={() => onOpenWebsite('https://github.com/motto1/gist-downloads/releases')}
                 color="cyan"
                 style={{ marginTop: 8, cursor: 'pointer' }}>
                 v{version}
@@ -300,7 +300,7 @@ const AboutSettings: FC = () => {
             <Globe size={18} />
             {t('settings.about.website.title')}
           </SettingRowTitle>
-          <Button onClick={() => onOpenWebsite('https://github.com/motto1/Read-No-More')}>
+          <Button onClick={() => onOpenWebsite('https://github.com/motto1/gist-downloads')}>
             {t('settings.about.website.button')}
           </Button>
         </SettingRow>

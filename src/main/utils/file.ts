@@ -143,7 +143,7 @@ export function getAllFiles(dirPath: string, arrayOfFiles: FileMetadata[] = []):
 }
 
 export function getTempDir() {
-  return path.join(app.getPath('temp'), 'Read-No-More')
+  return path.join(app.getPath('temp'), 'gist')
 }
 
 export function getFilesDir() {

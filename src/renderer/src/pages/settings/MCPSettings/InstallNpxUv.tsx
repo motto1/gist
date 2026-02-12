@@ -101,7 +101,7 @@ const InstallNpxUv: FC<Props> = ({ mini = false }) => {
   }
 
   const onHelp = () => {
-    window.open('https://github.com/motto1/Read-No-More', '_blank')
+    window.open('https://github.com/motto1/gist-downloads', '_blank')
   }
 
   return (

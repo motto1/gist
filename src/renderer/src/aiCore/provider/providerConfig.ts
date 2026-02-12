@@ -137,8 +137,8 @@ export function providerToAiSdkConfig(
     if (aiSdkProviderId === 'openai') {
       extraOptions.headers = {
         ...extraOptions.headers,
-        'HTTP-Referer': 'https://github.com/motto1/Read-No-More',
-        'X-Title': 'Read-No-More',
+        'HTTP-Referer': 'https://github.com/motto1/gist-downloads',
+        'X-Title': 'gist',
         'X-Api-Key': baseConfig.apiKey
       }
     }

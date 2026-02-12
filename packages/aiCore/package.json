@@ -1,7 +1,7 @@
 {
   "name": "@readnomore/ai-core",
   "version": "1.0.0-alpha.18",
-  "description": "Read-No-More AI Core - Unified AI Provider Interface Based on Vercel AI SDK",
+  "description": "gist AI Core - Unified AI Provider Interface Based on Vercel AI SDK",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -22,16 +22,16 @@
     "read-no-more",
     "vercel-ai-sdk"
   ],
-  "author": "Read-No-More",
+  "author": "gist",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/motto1/Read-No-More.git"
+    "url": "git+https://github.com/motto1/gist-downloads.git"
   },
   "bugs": {
-    "url": "https://github.com/motto1/Read-No-More/issues"
+    "url": "https://github.com/motto1/gist-downloads/issues"
   },
-  "homepage": "https://github.com/motto1/Read-No-More#readme",
+  "homepage": "https://github.com/motto1/gist-downloads#readme",
   "peerDependencies": {
     "ai": "^5.0.26"
   },

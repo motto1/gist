@@ -97,7 +97,7 @@ const SelectionAssistantSettings: FC = () => {
           <Spacer />
           <Button
             type="link"
-            onClick={() => window.api.openWebsite('https://github.com/motto1/Read-No-More/issues')}
+            onClick={() => window.api.openWebsite('https://github.com/motto1/gist-downloads/issues')}
             style={{ fontSize: 12 }}>
             {'FAQ & ' + t('settings.about.feedback.button')}
           </Button>

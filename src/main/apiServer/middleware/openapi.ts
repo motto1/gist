@@ -12,10 +12,10 @@ const swaggerOptions: swaggerJSDoc.Options = {
     info: {
       title: '封笔 API',
       version: '1.0.0',
-      description: 'OpenAI-compatible API for 封笔 (Read No More) with additional Cherry-specific endpoints',
+      description: 'OpenAI-compatible API for 封笔 (gist) with additional Cherry-specific endpoints',
       contact: {
         name: '封笔',
-        url: 'https://github.com/motto1/Read-No-More'
+        url: 'https://github.com/motto1/gist-downloads'
       }
     },
     servers: [

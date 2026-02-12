@@ -147,7 +147,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
     title,
     tags: obsidianTags || '',
     createdAt: new Date().toISOString().split('T')[0],
-    source: 'Read-No-More',
+    source: 'gist',
     processingMethod: processingMethod,
     folder: ''
   })

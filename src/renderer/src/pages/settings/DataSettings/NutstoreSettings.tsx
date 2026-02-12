@@ -78,8 +78,8 @@ const NutstoreSettings: FC = () => {
           setNutstoreUsername(decrypted.username)
           setNutstorePass(decrypted.access_token)
           if (!nutstorePath) {
-            dispatch(setNutstorePath('/read-no-more'))
-            setStoragePath('/read-no-more')
+            dispatch(setNutstorePath('/gist'))
+            setStoragePath('/gist')
           }
         }
       }

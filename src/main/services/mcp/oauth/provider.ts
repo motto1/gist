@@ -23,8 +23,8 @@ export class McpOAuthClientProvider implements OAuthClientProvider {
       callbackPort: options.callbackPort || 12346,
       callbackPath: options.callbackPath || '/oauth/callback',
       configDir: options.configDir || configDir,
-      clientName: options.clientName || 'Read-No-More',
-      clientUri: options.clientUri || 'https://github.com/motto1/Read-No-More'
+      clientName: options.clientName || 'gist',
+      clientUri: options.clientUri || 'https://github.com/motto1/gist-downloads'
     }
     this.storage = new JsonFileStorage(this.config.serverUrlHash, this.config.configDir)
   }

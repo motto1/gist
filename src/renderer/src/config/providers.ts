@@ -67,7 +67,7 @@ import { SYSTEM_MODELS } from './models'
 export const SYSTEM_PROVIDERS_CONFIG: Record<SystemProviderId, SystemProvider> = {
   readnomore: {
     id: 'readnomore',
-    name: 'Read-No-More',
+    name: 'gist',
     type: 'openai',
     apiKey: '',
     apiHost: 'https://api.read-no-more.app/',
@@ -701,9 +701,9 @@ export const PROVIDER_URLS: Record<SystemProviderId, ProviderUrls> = {
       url: 'https://api.read-no-more.app'
     },
     websites: {
-      official: 'https://github.com/motto1/Read-No-More',
-      docs: 'https://github.com/motto1/Read-No-More',
-      models: 'https://github.com/motto1/Read-No-More'
+      official: 'https://github.com/motto1/gist-downloads',
+      docs: 'https://github.com/motto1/gist-downloads',
+      models: 'https://github.com/motto1/gist-downloads'
     }
   },
   ph8: {

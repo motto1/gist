@@ -193,8 +193,8 @@ export const GB = 1024 * MB
 export const defaultLanguage = 'en-US'
 
 export enum FeedUrl {
-  PRODUCTION = 'https://github.com/motto1/Read-No-More/releases/download',
-  GITHUB_LATEST = 'https://github.com/motto1/Read-No-More/releases/latest/download'
+  PRODUCTION = 'https://github.com/motto1/gist-downloads/releases/download',
+  GITHUB_LATEST = 'https://github.com/motto1/gist-downloads/releases/latest/download'
 }
 
 export enum UpgradeChannel {

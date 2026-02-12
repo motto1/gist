@@ -1,6 +1,6 @@
 # @readnomore/ai-core
 
-Read-No-More AI Core 是一个基于 Vercel AI SDK 的统一 AI Provider 接口包，为 AI 应用提供强大的抽象层和插件化架构。
+gist AI Core 是一个基于 Vercel AI SDK 的统一 AI Provider 接口包，为 AI 应用提供强大的抽象层和插件化架构。
 
 ## ✨ 核心亮点
 
@@ -414,7 +414,7 @@ await client.streamObject({
 ## 📚 相关资源
 
 - [Vercel AI SDK 文档](https://ai-sdk.dev/)
-- [Read-No-More 项目](https://github.com/motto1/Read-No-More)
+- [gist 项目](https://github.com/motto1/gist-downloads)
 - [AI SDK Providers](https://ai-sdk.dev/providers/ai-sdk-providers)
 
 ## 未来版本
@@ -426,8 +426,8 @@ await client.streamObject({
 
 ## 📄 License
 
-MIT License - 详见 [LICENSE](https://github.com/motto1/Read-No-More/blob/main/LICENSE) 文件
+MIT License - 详见 [LICENSE](https://github.com/motto1/gist-downloads/blob/main/LICENSE) 文件
 
 ---
 
-**Read-No-More AI Core** - 让 AI 开发更简单、更强大、更灵活 🚀
+**gist AI Core** - 让 AI 开发更简单、更强大、更灵活 🚀

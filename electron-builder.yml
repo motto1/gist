@@ -163,7 +163,7 @@ rpm:
 publish:
   provider: github
   owner: motto1
-  repo: Read-No-More
+  repo: gist-downloads
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
 beforePack: scripts/before-pack.js

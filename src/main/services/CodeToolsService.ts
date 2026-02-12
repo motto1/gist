@@ -695,9 +695,9 @@ class CodeToolsService {
         // Build bat file content, including debug information
         const batContent = [
           '@echo off',
-          `title ${cliTool} - Read-No-More`, // Set window title in bat file
+          `title ${cliTool} - gist`, // Set window title in bat file
           'echo ================================================',
-          'echo Read-No-More CLI Tool Launcher',
+          'echo gist CLI Tool Launcher',
           `echo Tool: ${cliTool}`,
           `echo Directory: ${directory}`,
           `echo Time: ${new Date().toLocaleString()}`,

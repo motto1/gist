@@ -205,7 +205,11 @@ export default function RenderTab() {
     setPct(0)
     setStatus('正在生成视频...')
     const size = aspect === 'h' ? { w: 1920, h: 1080 } : { w: 1080, h: 1920 }
-    const emphList = emph.replace(/，/g, ',').split(',').map((s) => s.trim()).filter(Boolean)
+    const emphList = emph
+      .replace(/，/g, ',')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
 
     const data = await apiPost<StartJobResp>('/api/jobs/render', {
       project_id: selectedProject.project_id,
@@ -246,7 +250,7 @@ export default function RenderTab() {
           <CardBody className="space-y-5 p-4">
             <div className="text-center">
               <h3 className="font-semibold text-lg">渲染配置</h3>
-              <p className="text-foreground/55 text-sm">样式和语音生成页面保持一致。</p>
+              <p className="text-foreground/55 text-sm">与助手页面使用一致的页面骨架与视觉层级。</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -257,8 +261,10 @@ export default function RenderTab() {
                 onChange={(e) => setProjectId(String(e.target.value))}
                 variant="flat"
                 isDisabled={busy}
-                classNames={{ trigger: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12', value: 'text-base' }}
-              >
+                classNames={{
+                  trigger: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12',
+                  value: 'text-base'
+                }}>
                 {projects.map((p) => (
                   <SelectItem key={p.project_id}>{p.name}</SelectItem>
                 ))}
@@ -271,8 +277,10 @@ export default function RenderTab() {
                 onChange={(e) => setAspect(e.target.value as 'h' | 'v')}
                 variant="flat"
                 isDisabled={busy}
-                classNames={{ trigger: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12', value: 'text-base' }}
-              >
+                classNames={{
+                  trigger: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12',
+                  value: 'text-base'
+                }}>
                 <SelectItem key="h">横屏 16:9（1920x1080）</SelectItem>
                 <SelectItem key="v">竖屏 9:16（1080x1920）</SelectItem>
               </Select>
@@ -310,7 +318,9 @@ export default function RenderTab() {
                     variant="flat"
                     classNames={{ inputWrapper: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12' }}
                   />
-                  <Button variant="flat" onPress={() => void pickAudio()} isDisabled={busy}>浏览...</Button>
+                  <Button variant="flat" onPress={() => void pickAudio()} isDisabled={busy}>
+                    浏览...
+                  </Button>
                 </div>
               </div>
 
@@ -325,7 +335,9 @@ export default function RenderTab() {
                     variant="flat"
                     classNames={{ inputWrapper: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12' }}
                   />
-                  <Button variant="flat" onPress={() => void pickTts()} isDisabled={busy}>浏览...</Button>
+                  <Button variant="flat" onPress={() => void pickTts()} isDisabled={busy}>
+                    浏览...
+                  </Button>
                 </div>
               </div>
 
@@ -340,7 +352,9 @@ export default function RenderTab() {
                     variant="flat"
                     classNames={{ inputWrapper: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12' }}
                   />
-                  <Button variant="flat" onPress={() => void pickBgm()} isDisabled={busy}>浏览...</Button>
+                  <Button variant="flat" onPress={() => void pickBgm()} isDisabled={busy}>
+                    浏览...
+                  </Button>
                 </div>
               </div>
 
@@ -355,7 +369,9 @@ export default function RenderTab() {
                     variant="flat"
                     classNames={{ inputWrapper: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12' }}
                   />
-                  <Button variant="flat" onPress={() => void pickOut()} isDisabled={busy}>另存为...</Button>
+                  <Button variant="flat" onPress={() => void pickOut()} isDisabled={busy}>
+                    另存为...
+                  </Button>
                 </div>
               </div>
             </div>
@@ -411,8 +427,7 @@ export default function RenderTab() {
               <Button
                 color="primary"
                 onPress={() => void startRender()}
-                isDisabled={!selectedProject || busy || !audio.trim() || !script.trim() || !out.trim()}
-              >
+                isDisabled={!selectedProject || busy || !audio.trim() || !script.trim() || !out.trim()}>
                 开始生成 MP4
               </Button>
               <Button variant="flat" onPress={() => void pauseOrResume()} isDisabled={!jobId}>

@@ -92,7 +92,7 @@
     },
     "authHeaderText": "Использовать в заголовке авторизации:",
     "configuration": "Конфигурация",
-    "description": "Предоставляет возможности ИИ 封笔 (Read No More) через HTTP API, совместимые с OpenAI",
+    "description": "Предоставляет возможности ИИ 封笔 (gist) через HTTP API, совместимые с OpenAI",
     "documentation": {
       "title": "Документация API"
     },
@@ -2283,7 +2283,7 @@
     "ppio": "PPIO",
     "qiniu": "Qiniu AI",
     "qwenlm": "QwenLM",
-    "readnomore": "Read-No-More",
+    "readnomore": "gist",
     "silicon": "SiliconFlow",
     "stepfun": "StepFun",
     "tencent-cloud-ti": "Tencent Cloud TI",
@@ -2595,7 +2595,7 @@
           },
           "description": {
             "0": "Помощник выбора требует <strong>Права доступа</strong> для правильной работы.",
-            "1": "Пожалуйста, перейдите в \"<strong>Настройки</strong>\" и нажмите \"<strong>Открыть системные настройки</strong>\" в запросе разрешения, который появится позже. Затем найдите \"<strong>封笔 (Read No More)</strong>\" в списке приложений, который появится позже, и включите переключатель разрешения.",
+            "1": "Пожалуйста, перейдите в \"<strong>Настройки</strong>\" и нажмите \"<strong>Открыть системные настройки</strong>\" в запросе разрешения, который появится позже. Затем найдите \"<strong>封笔 (gist)</strong>\" в списке приложений, который появится позже, и включите переключатель разрешения.",
             "2": "После завершения настроек, пожалуйста, перезапустите помощник выбора."
           },
           "title": "Права доступа"
@@ -3178,7 +3178,7 @@
         },
         "root": {
           "label": "Каталог резервных копий (необязательно)",
-          "placeholder": "например: /read-no-more"
+          "placeholder": "например: /gist"
         },
         "secretAccessKey": {
           "label": "Secret Access Key",
@@ -3214,7 +3214,7 @@
           "title": "Проверка соединения"
         },
         "root_path": "Корневой путь документа",
-        "root_path_placeholder": "Например: /ReadNoMore",
+        "root_path_placeholder": "Например: /gist",
         "title": "Конфигурация SiYuan Note",
         "token": {
           "help": "Получите в SiYuan Note -> Настройки -> О программе",

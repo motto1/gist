@@ -211,7 +211,7 @@ class McpService {
     const initPromise = (async () => {
       try {
         // Create new client instance for each connection
-        const client = new Client({ name: 'Read-No-More', version: app.getVersion() }, { capabilities: {} })
+        const client = new Client({ name: 'gist', version: app.getVersion() }, { capabilities: {} })
 
         let args = [...(server.args || [])]
 

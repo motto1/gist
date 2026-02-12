@@ -1,18 +1,22 @@
 import { Button, Card, CardBody, Chip, Tab, Tabs } from '@heroui/react'
+import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
+import { useNavbarPosition } from '@renderer/hooks/useSettings'
 import { useAppSelector } from '@renderer/store'
-import { Clapperboard, PlugZap, Square } from 'lucide-react'
-import { type CSSProperties, useEffect, useMemo, useState } from 'react'
+import { PlugZap, Square, Video } from 'lucide-react'
+import { CSSProperties, useEffect, useMemo, useState } from 'react'
+import styled from 'styled-components'
 
-import DragBar from '../workflow/components/DragBar'
 import { ensureEndpoint, setGistVideoRuntimeConfig } from './apiClient'
 import ApiSettingsTab from './ApiSettingsTab'
 import ProjectLibraryTab from './ProjectLibraryTab'
 import RenderTab from './RenderTab'
 import type { GistVideoEndpoint } from './types'
 
+const dragStyle = { WebkitAppRegion: 'drag' } as CSSProperties
 const noDragStyle = { WebkitAppRegion: 'no-drag' } as CSSProperties
 
 export default function GistVideoRoutePage() {
+  const { isTopNavbar } = useNavbarPosition()
   const providers = useAppSelector((s) => s.llm.providers)
   const [endpoint, setEndpoint] = useState<GistVideoEndpoint | null>(null)
   const [error, setError] = useState<string>('')
@@ -55,49 +59,56 @@ export default function GistVideoRoutePage() {
 
   const connected = !!endpoint
 
-  return (
-    <>
-      <DragBar />
-      <div className="relative flex h-full w-full flex-col bg-background">
-        <div className="relative z-10 flex min-h-[72px] items-center gap-4 border-foreground/10 border-b px-6 py-4" style={{ WebkitAppRegion: 'drag' } as CSSProperties}>
-          <div className="flex items-center gap-3" style={noDragStyle}>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-content2 text-foreground/60">
-              <Clapperboard size={18} />
-            </div>
-            <h1 className="font-semibold text-xl">视频解说</h1>
-          </div>
+  const headerContent = (
+    <HeaderBar style={dragStyle}>
+      <LeftGroup>
+        <TitleGroup>
+          <TitleIcon>
+            <Video size={18} className="icon" />
+          </TitleIcon>
+          <PageTitle>视频解说</PageTitle>
+        </TitleGroup>
 
+        <BackendActions style={noDragStyle}>
           <Chip
             color={connected ? 'success' : 'danger'}
             variant="flat"
             startContent={connected ? <PlugZap size={14} /> : <Square size={14} />}
-            className="h-auto"
-            style={noDragStyle}
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium text-sm">{connected ? '已连接' : '后端未连接'}</span>
-              <span className="h-5 w-px bg-foreground/15" />
-              <Button size="sm" variant="light" className="h-7 min-w-0 px-2" onPress={() => void connect(true)}>
-                重新连接
-              </Button>
-              <Button
-                size="sm"
-                variant="light"
-                color="danger"
-                className="h-7 min-w-0 px-2"
-                onPress={() => {
-                  setEndpoint(null)
-                  void window.api.gistVideo.stopBackend()
-                }}
-              >
-                停止后端
-              </Button>
-            </div>
+            className="h-auto">
+            {connected ? '已连接' : '后端未连接'}
           </Chip>
-        </div>
+          <Button size="sm" variant="light" className="h-8 px-3" onPress={() => void connect(true)}>
+            重新连接
+          </Button>
+          <Button
+            size="sm"
+            variant="light"
+            color="danger"
+            className="h-8 px-3"
+            onPress={() => {
+              setEndpoint(null)
+              void window.api.gistVideo.stopBackend()
+            }}>
+            停止后端
+          </Button>
+        </BackendActions>
+      </LeftGroup>
+    </HeaderBar>
+  )
 
-        <div className="flex-1 overflow-y-auto px-6 py-8">
-          <div className="mx-auto w-full max-w-6xl space-y-6">
+  return (
+    <Container id="gist-video-page">
+      {isTopNavbar ? (
+        <TopNavbarHeader>{headerContent}</TopNavbarHeader>
+      ) : (
+        <Navbar>
+          <NavbarCenter style={{ borderRight: 'none', padding: 0 }}>{headerContent}</NavbarCenter>
+        </Navbar>
+      )}
+
+      <ContentContainer id="content-container">
+        <MainScrollArea>
+          <MainInner>
             {error ? (
               <Card className="border-danger-200 bg-danger-50">
                 <CardBody className="space-y-2 p-4">
@@ -107,39 +118,146 @@ export default function GistVideoRoutePage() {
               </Card>
             ) : null}
 
-            <div className="flex justify-center">
-              <div className="rounded-2xl border border-white/5 bg-content2/30 p-1.5 backdrop-blur-sm">
-                <Tabs
-                  size="lg"
-                  selectedKey={activeTab}
-                  onSelectionChange={(key) => setActiveTab(key as 'library' | 'render' | 'settings')}
-                  variant="light"
-                  classNames={{
-                    tabList: 'gap-2',
-                    cursor: 'bg-background shadow-sm',
-                    tab: 'h-9 px-6',
-                    tabContent: 'group-data-[selected=true]:text-primary font-medium'
-                  }}
-                >
-                  <Tab key="library" title="1. 素材库" />
-                  <Tab key="settings" title="2. 图生文设置" />
-                  <Tab key="render" title="3. 一键成片" />
-                </Tabs>
-              </div>
-            </div>
+            <TabsContainer>
+              <Tabs
+                size="lg"
+                selectedKey={activeTab}
+                onSelectionChange={(key) => setActiveTab(key as 'library' | 'render' | 'settings')}
+                variant="light"
+                classNames={{
+                  tabList: 'gap-2',
+                  cursor: 'bg-background shadow-sm',
+                  tab: 'h-9 px-6',
+                  tabContent: 'group-data-[selected=true]:text-primary font-medium'
+                }}>
+                <Tab key="library" title="1. 素材库" />
+                <Tab key="settings" title="2. 图生文设置" />
+                <Tab key="render" title="3. 一键成片" />
+              </Tabs>
+            </TabsContainer>
 
             {activeTab === 'library' ? <ProjectLibraryTab /> : null}
             {activeTab === 'settings' ? <ApiSettingsTab /> : null}
             {activeTab === 'render' ? <RenderTab /> : null}
 
             {endpoint ? (
-              <div className="text-center text-foreground/40 text-xs">
-                dataDir: {endpoint.dataDir} · backendRoot: {endpoint.backendRoot} · pid: {endpoint.pid} · port: {endpoint.port}
-              </div>
+              <MetaLine>
+                dataDir: {endpoint.dataDir} · backendRoot: {endpoint.backendRoot} · pid: {endpoint.pid} · port:{' '}
+                {endpoint.port}
+              </MetaLine>
             ) : null}
-          </div>
-        </div>
-      </div>
-    </>
+          </MainInner>
+        </MainScrollArea>
+      </ContentContainer>
+    </Container>
   )
 }
+
+const Container = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+`
+
+const HeaderBar = styled.div`
+  width: 100%;
+  height: var(--navbar-height);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  -webkit-app-region: drag;
+`
+
+const LeftGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex-wrap: wrap;
+`
+
+const TitleGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+`
+
+const TitleIcon = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-icon);
+`
+
+const PageTitle = styled.h1`
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-1);
+`
+
+const BackendActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  -webkit-app-region: no-drag;
+`
+
+const TopNavbarHeader = styled.div`
+  width: 100%;
+  height: var(--navbar-height);
+  border-bottom: 0.5px solid var(--color-border);
+`
+
+const ContentContainer = styled.div`
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: calc(100vh - var(--navbar-height));
+  padding: 12px 16px;
+  overflow: hidden;
+
+  [navbar-position='top'] & {
+    height: calc(100vh - var(--navbar-height) - 6px);
+  }
+`
+
+const MainScrollArea = styled.div`
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-app-region: no-drag;
+`
+
+const MainInner = styled.div`
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`
+
+const TabsContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding: 6px;
+  border-radius: 16px;
+  border: 0.5px solid var(--color-border);
+  background: var(--color-background-soft);
+`
+
+const MetaLine = styled.div`
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-text-3);
+`

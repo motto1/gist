@@ -152,7 +152,7 @@ export const oauthWithTokenFlux = async () => {
   )
 }
 export const oauthWith302AI = async (setKey) => {
-  const authUrl = 'https://dash.302.ai/sso/login?app=github.com/motto1/Read-No-More&name=Read-No-More'
+  const authUrl = 'https://dash.302.ai/sso/login?app=github.com/motto1/gist-downloads&name=gist'
 
   const popup = window.open(
     authUrl,

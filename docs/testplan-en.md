@@ -1,6 +1,6 @@
 # Test Plan
 
-To provide users with a more stable application experience and faster iteration speed, Read-No-More has launched the "Test Plan".
+To provide users with a more stable application experience and faster iteration speed, gist has launched the "Test Plan".
 
 ## User Guide
 

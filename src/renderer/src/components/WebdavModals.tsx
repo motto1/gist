@@ -41,7 +41,7 @@ export function useWebdavBackupModal({ backupMethod }: { backupMethod?: typeof b
     const deviceType = await window.api.system.getDeviceType()
     const hostname = await window.api.system.getHostname()
     const timestamp = dayjs().format('YYYYMMDDHHmmss')
-    const defaultFileName = `read-no-more.${timestamp}.${hostname}.${deviceType}.zip`
+    const defaultFileName = `gist.${timestamp}.${hostname}.${deviceType}.zip`
     setCustomFileName(defaultFileName)
     setIsModalVisible(true)
   }, [])

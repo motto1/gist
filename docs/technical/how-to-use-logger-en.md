@@ -2,7 +2,7 @@
 
 This is a developer document on how to use the logger.
 
-Read-No-More uses a unified logging service to print and record logs. **Unless there is a special reason, do not use `console.xxx` to print logs**.
+gist uses a unified logging service to print and record logs. **Unless there is a special reason, do not use `console.xxx` to print logs**.
 
 The following are detailed instructions.
 
@@ -178,7 +178,7 @@ Note:
 
 ## Log Level Usage Guidelines
 
-There are many log levels. The following are the guidelines that should be followed in Read-No-More for when to use each level:
+There are many log levels. The following are the guidelines that should be followed in gist for when to use each level:
 (Arranged from highest to lowest log level)
 
 | Log Level     | Core Definition & Use case                                                                                                                                                                          | Example                                                                                                                                                                                                            |

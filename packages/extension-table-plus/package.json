@@ -2,7 +2,7 @@
   "name": "@readnomore/extension-table-plus",
   "description": "table extension for tiptap forked from tiptap/extension-table",
   "version": "3.0.11",
-  "homepage": "https://github.com/motto1/Read-No-More",
+  "homepage": "https://github.com/motto1/gist-downloads",
   "keywords": [
     "tiptap",
     "tiptap extension"
@@ -82,7 +82,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/motto1/Read-No-More",
+    "url": "https://github.com/motto1/gist-downloads",
     "directory": "packages/extension-table-plus"
   },
   "scripts": {

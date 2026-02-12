@@ -127,8 +127,8 @@
       Your system: $1$\r$\n\
       App architecture: $3$\r$\n$\r$\n\
       Please download the correct version from:$\r$\n\
-      https://github.com/motto1/Read-No-More/releases"
-    ExecShell "open" "https://github.com/motto1/Read-No-More/releases"
+      https://github.com/motto1/gist-downloads/releases"
+    ExecShell "open" "https://github.com/motto1/gist-downloads/releases"
     Abort
   ${EndIf}
 

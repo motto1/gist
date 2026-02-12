@@ -1,6 +1,6 @@
-# Read-No-More 贡献指南
+# gist 贡献指南
 
-欢迎贡献 Read-No-More。
+欢迎贡献 gist。
 
 ## 开发
 

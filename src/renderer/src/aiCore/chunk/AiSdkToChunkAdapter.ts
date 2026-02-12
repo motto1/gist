@@ -1,6 +1,6 @@
 /**
- * AI SDK 到 Read-No-More Chunk 适配器
- * 用于将 AI SDK 的 fullStream 转换为 Read-No-More 的 chunk 格式
+ * AI SDK 到 gist Chunk 适配器
+ * 用于将 AI SDK 的 fullStream 转换为 gist 的 chunk 格式
  */
 
 import { loggerService } from '@logger'
@@ -14,8 +14,8 @@ import { ToolCallChunkHandler } from './handleToolCallChunk'
 const logger = loggerService.withContext('AiSdkToChunkAdapter')
 
 /**
- * AI SDK 到 Read-No-More Chunk 适配器类
- * 处理 fullStream 到 Read-No-More chunk 的转换
+ * AI SDK 到 gist Chunk 适配器类
+ * 处理 fullStream 到 gist chunk 的转换
  */
 export class AiSdkToChunkAdapter {
   toolCallHandler: ToolCallChunkHandler
@@ -50,7 +50,7 @@ export class AiSdkToChunkAdapter {
   }
 
   /**
-   * 读取 fullStream 并转换为 Read-No-More chunks
+   * 读取 fullStream 并转换为 gist chunks
    * @param fullStream AI SDK 的 fullStream (ReadableStream)
    */
   private async readFullStream(fullStream: ReadableStream<TextStreamPart<ToolSet>>) {
@@ -91,7 +91,7 @@ export class AiSdkToChunkAdapter {
   }
 
   /**
-   * 转换 AI SDK chunk 为 Read-No-More chunk 并调用回调
+   * 转换 AI SDK chunk 为 gist chunk 并调用回调
    * @param chunk AI SDK 的 chunk 数据
    */
   private convertAndEmitChunk(

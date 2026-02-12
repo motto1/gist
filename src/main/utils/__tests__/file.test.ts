@@ -226,7 +226,7 @@ describe('file', () => {
   describe('getTempDir', () => {
     it('should return correct temp directory path', () => {
       const tempDir = getTempDir()
-      expect(tempDir).toBe('/mock/temp/Read-No-More')
+      expect(tempDir).toBe('/mock/temp/gist')
     })
   })
 

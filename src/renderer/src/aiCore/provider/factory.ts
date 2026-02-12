@@ -22,7 +22,7 @@ const logger = loggerService.withContext('ProviderFactory')
 
 /**
  * 静态Provider映射表
- * 处理 Read-No-More 特有的 provider ID 到 AI SDK 标准 ID 的映射
+ * 处理 gist 特有的 provider ID 到 AI SDK 标准 ID 的映射
  */
 const STATIC_PROVIDER_MAPPING: Record<string, ProviderId> = {
   gemini: 'google', // Google Gemini -> google

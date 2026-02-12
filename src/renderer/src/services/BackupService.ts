@@ -63,7 +63,7 @@ async function deleteWebdavFileWithRetry(fileName: string, webdavConfig: WebDavC
 }
 
 export async function backup(skipBackupFile: boolean) {
-  const filename = `read-no-more.${dayjs().format('YYYYMMDDHHmm')}.zip`
+  const filename = `gist.${dayjs().format('YYYYMMDDHHmm')}.zip`
   const fileContnet = await getBackupData()
   const selectFolder = await window.api.file.selectFolder()
   if (selectFolder) {
@@ -178,7 +178,7 @@ export async function backupToWebdav({
     logger.error('Failed to get device type or hostname:', error as Error)
   }
   const timestamp = dayjs().format('YYYYMMDDHHmmss')
-  const backupFileName = customFileName || `read-no-more.${timestamp}.${hostname}.${deviceType}.zip`
+  const backupFileName = customFileName || `gist.${timestamp}.${hostname}.${deviceType}.zip`
   const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
   const backupData = await getBackupData()
 
@@ -352,7 +352,7 @@ export async function backupToS3({
     logger.error('Failed to get device type or hostname:', error as Error)
   }
   const timestamp = dayjs().format('YYYYMMDDHHmmss')
-  const backupFileName = customFileName || `read-no-more.${timestamp}.${hostname}.${deviceType}.zip`
+  const backupFileName = customFileName || `gist.${timestamp}.${hostname}.${deviceType}.zip`
   const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
   const backupData = await getBackupData()
 
@@ -944,7 +944,7 @@ export async function backupToLocal({
     logger.error('Failed to get device type or hostname:', error as Error)
   }
   const timestamp = dayjs().format('YYYYMMDDHHmmss')
-  const backupFileName = customFileName || `read-no-more.${timestamp}.${hostname}.${deviceType}.zip`
+  const backupFileName = customFileName || `gist.${timestamp}.${hostname}.${deviceType}.zip`
   const finalFileName = backupFileName.endsWith('.zip') ? backupFileName : `${backupFileName}.zip`
   const backupData = await getBackupData()
 

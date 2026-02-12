@@ -89,7 +89,7 @@ app.get('/health', (_req, res) => {
  *               properties:
  *                 name:
  *                   type: string
- *                   example: Read-No-More API
+ *                   example: gist API
  *                 version:
  *                   type: string
  *                   example: 1.0.0

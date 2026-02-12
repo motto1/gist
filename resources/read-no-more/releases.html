@@ -83,7 +83,7 @@
             try {
               this.loading = true
               this.error = null
-              const response = await fetch('https://api.github.com/repos/motto1/Read-No-More/releases')
+              const response = await fetch('https://api.github.com/repos/motto1/gist-downloads/releases')
               if (!response.ok) {
                 throw new Error('Failed to fetch releases')
               }

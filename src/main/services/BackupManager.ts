@@ -423,7 +423,7 @@ class BackupManager {
   }
 
   async backupToWebdav(_: Electron.IpcMainInvokeEvent, data: string, webdavConfig: WebDavConfig) {
-    const filename = webdavConfig.fileName || 'read-no-more.backup.zip'
+    const filename = webdavConfig.fileName || 'gist.backup.zip'
     const backupedFilePath = await this.backup(_, filename, data, undefined, webdavConfig.skipBackupFile)
     const webdavClient = this.getWebDavInstance(webdavConfig)
     try {
@@ -451,7 +451,7 @@ class BackupManager {
   }
 
   async restoreFromWebdav(_: Electron.IpcMainInvokeEvent, webdavConfig: WebDavConfig) {
-    const filename = webdavConfig.fileName || 'read-no-more.backup.zip'
+    const filename = webdavConfig.fileName || 'gist.backup.zip'
     const webdavClient = this.getWebDavInstance(webdavConfig)
     try {
       const retrievedFile = await webdavClient.getFileContents(filename)
@@ -623,7 +623,7 @@ class BackupManager {
       .toISOString()
       .replace(/[-:T.Z]/g, '')
       .slice(0, 14)
-    const filename = s3Config.fileName || `read-no-more.backup.${deviceName}.${timestamp}.zip`
+    const filename = s3Config.fileName || `gist.backup.${deviceName}.${timestamp}.zip`
 
     logger.debug(`Starting S3 backup to ${filename}`)
 
@@ -702,7 +702,7 @@ class BackupManager {
   }
 
   async restoreFromS3(_: Electron.IpcMainInvokeEvent, s3Config: S3Config) {
-    const filename = s3Config.fileName || 'read-no-more.backup.zip'
+    const filename = s3Config.fileName || 'gist.backup.zip'
 
     logger.debug(`Starting restore from S3: ${filename}`)
 

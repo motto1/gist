@@ -349,7 +349,7 @@ async function getCachedRelease(env) {
 async function checkNewRelease(env) {
   try {
     // 获取 GitHub 最新版本
-    const githubResponse = await fetch('https://api.github.com/repos/motto1/Read-No-More/releases/latest', {
+    const githubResponse = await fetch('https://api.github.com/repos/motto1/gist-downloads/releases/latest', {
       headers: { 'User-Agent': 'CloudflareWorker' }
     })
 

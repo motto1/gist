@@ -46,7 +46,7 @@ const SiyuanSettings: FC = () => {
     openMinapp({
       id: 'siyuan-help',
       name: 'Siyuan Help',
-      url: 'https://github.com/motto1/Read-No-More'
+      url: 'https://github.com/motto1/gist-downloads'
     })
   }
 

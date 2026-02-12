@@ -1,13 +1,14 @@
 import { Button, Card, CardBody, Tab, Tabs, Textarea } from '@heroui/react'
+import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
 import { isBasicEdition } from '@renderer/config/edition'
 import { useLocalStorageState } from '@renderer/hooks/useLocalStorageState'
+import { useNavbarPosition } from '@renderer/hooks/useSettings'
 import { useRuntime } from '@renderer/hooks/useRuntime'
 import { Download, FileText, Mic, Play, Trash2 } from 'lucide-react'
 import { type CSSProperties, FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
-
-import DragBar from './components/DragBar'
+import styled from 'styled-components'
 import { getLocaleLabelZh } from './components/ttsLabels'
 import TtsVoiceConfigCard, { type AdvancedTTSProvider } from './components/TtsVoiceConfigCard'
 import { useAdaptiveScale } from './components/useAdaptiveScale'
@@ -135,8 +136,12 @@ const saveHistoryToStorage = (items: HistoryItem[]) => {
   }
 }
 
+const dragStyle = { WebkitAppRegion: 'drag' } as CSSProperties
+const noDragStyle = { WebkitAppRegion: 'no-drag' } as CSSProperties
+
 const TTSGenerator: FC = () => {
   const { t } = useTranslation()
+  const { isTopNavbar } = useNavbarPosition()
   const { hostRef: layoutHostRef, scaledStyle } = useAdaptiveScale(1380)
   const location = useLocation()
   const { edition } = useRuntime()
@@ -188,11 +193,7 @@ const TTSGenerator: FC = () => {
         : false
       : isLoadingNormalVoices
   const voiceLoadError =
-    ttsMode === 'advanced'
-      ? advancedProvider === 'microsoft'
-        ? advancedVoiceLoadError
-        : null
-      : normalVoiceLoadError
+    ttsMode === 'advanced' ? (advancedProvider === 'microsoft' ? advancedVoiceLoadError : null) : normalVoiceLoadError
 
   const [voice, setVoice] = useLocalStorageState<string>(
     `${PREF_KEY_PREFIX}.normal.voice`,
@@ -251,12 +252,7 @@ const TTSGenerator: FC = () => {
   const previewCacheRef = useRef<Map<string, PreviewCacheItem>>(new Map())
   const previewInFlightRef = useRef<Map<string, Promise<PreviewCacheItem>>>(new Map())
 
-  const activeVoice =
-    ttsMode === 'advanced'
-      ? advancedProvider === 'zai'
-        ? advancedZaiVoice
-        : advancedVoice
-      : voice
+  const activeVoice = ttsMode === 'advanced' ? (advancedProvider === 'zai' ? advancedZaiVoice : advancedVoice) : voice
 
   const setActiveVoice = useCallback(
     (value: string) => {
@@ -742,7 +738,6 @@ const TTSGenerator: FC = () => {
     [prunePreviewCache]
   )
 
-
   const handleGenerate = useCallback(async () => {
     if (!currentText) return
     setIsGenerating(true)
@@ -957,224 +952,300 @@ const TTSGenerator: FC = () => {
 
   const isBusy = isGenerating || isPreviewing
 
-  return (
-    <>
-      <DragBar />
-      <audio ref={previewAudioRef} className="hidden" preload="auto" />
-      <div className="relative flex h-full w-full flex-col bg-background">
-        <div
-          className="relative z-10 flex min-h-[72px] items-center gap-4 border-foreground/10 border-b px-6 py-4"
-          style={{ WebkitAppRegion: 'drag' } as CSSProperties}>
-          <div
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-content2 text-foreground/60"
-            style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}
-          >
-            <Mic size={18} />
-          </div>
-          <h1 className="font-semibold text-xl">{t('workflow.tts.title', '语音生成')}</h1>
-        </div>
+  const headerContent = (
+    <HeaderBar style={dragStyle}>
+      <TitleGroup style={noDragStyle}>
+        <TitleIcon>
+          <Mic size={18} className="icon" />
+        </TitleIcon>
+        <PageTitle>{t('workflow.tts.title', '语音生成')}</PageTitle>
+      </TitleGroup>
+    </HeaderBar>
+  )
 
-        <div ref={layoutHostRef} className="flex-1 overflow-y-auto px-6 py-8">
+  return (
+    <Container id="tts-generator-page">
+      <audio ref={previewAudioRef} className="hidden" preload="auto" />
+
+      {isTopNavbar ? (
+        <TopNavbarHeader>{headerContent}</TopNavbarHeader>
+      ) : (
+        <Navbar>
+          <NavbarCenter style={{ borderRight: 'none', padding: 0 }}>{headerContent}</NavbarCenter>
+        </Navbar>
+      )}
+
+      <ContentContainer id="content-container">
+        <MainScrollArea ref={layoutHostRef}>
           <div className="mx-auto w-full max-w-6xl overflow-visible">
             <div className="grid grid-cols-[minmax(0,1fr)_320px] gap-6" style={scaledStyle}>
               <div className="space-y-5">
-              <div className="flex flex-col items-center gap-4">
-                <div className="rounded-2xl border border-white/5 bg-content2/30 p-1.5 backdrop-blur-sm">
-                  <Tabs
-                    size="lg"
-                    selectedKey={ttsMode}
-                    onSelectionChange={(key) => {
-                      if (!allowAdvanced && key === 'advanced') return
-                      setTtsMode(key as 'normal' | 'advanced')
-                      // 切换模式时重置筛选，避免沿用上一个模式的筛选导致“区域/音色”跳动
-                      setLanguageFilter('zh')
-                      setRegionFilter('all')
-                      setGenderFilter('all')
-                    }}
-                    variant="light"
-                    classNames={{
-                      tabList: 'gap-2',
-                      cursor: 'bg-background shadow-sm',
-                      tab: 'h-9 px-6',
-                      tabContent: 'group-data-[selected=true]:text-primary font-medium'
-                    }}>
-                    <Tab key="normal" title={t('workflow.tts.mode.normal', '普通版')} />
-                    {allowAdvanced && <Tab key="advanced" title={t('workflow.tts.mode.advanced', '高级版')} />}
-                  </Tabs>
+                <div className="flex flex-col items-center gap-4">
+                  <div className="rounded-2xl border border-white/5 bg-content2/30 p-1.5 backdrop-blur-sm">
+                    <Tabs
+                      size="lg"
+                      selectedKey={ttsMode}
+                      onSelectionChange={(key) => {
+                        if (!allowAdvanced && key === 'advanced') return
+                        setTtsMode(key as 'normal' | 'advanced')
+                        // 切换模式时重置筛选，避免沿用上一个模式的筛选导致“区域/音色”跳动
+                        setLanguageFilter('zh')
+                        setRegionFilter('all')
+                        setGenderFilter('all')
+                      }}
+                      variant="light"
+                      classNames={{
+                        tabList: 'gap-2',
+                        cursor: 'bg-background shadow-sm',
+                        tab: 'h-9 px-6',
+                        tabContent: 'group-data-[selected=true]:text-primary font-medium'
+                      }}>
+                      <Tab key="normal" title={t('workflow.tts.mode.normal', '普通版')} />
+                      {allowAdvanced && <Tab key="advanced" title={t('workflow.tts.mode.advanced', '高级版')} />}
+                    </Tabs>
+                  </div>
+
+                  <TtsVoiceConfigCard
+                    isGenerating={isBusy}
+                    isPreviewing={isPreviewing}
+                    onPreview={handlePreview}
+                    ttsMode={ttsMode}
+                    advancedProvider={advancedProvider}
+                    setAdvancedProvider={setAdvancedProvider}
+                    portalContainer={popoverPortalContainer}
+                    voiceLoadError={voiceLoadError}
+                    isLoadingVoices={isLoadingVoices}
+                    languageFilter={languageFilter}
+                    setLanguageFilter={setLanguageFilter}
+                    regionFilter={regionFilter}
+                    setRegionFilter={setRegionFilter}
+                    genderFilter={genderFilter}
+                    setGenderFilter={setGenderFilter}
+                    languageSelectItems={languageSelectItems}
+                    regionSelectItems={regionSelectItems}
+                    genderSelectItems={genderSelectItems}
+                    filteredVoices={filteredVoices}
+                    activeVoice={activeVoice}
+                    setActiveVoice={setActiveVoice}
+                    advancedStyle={advancedStyle}
+                    setAdvancedStyle={setAdvancedStyle}
+                    styleOptions={styleOptions}
+                    isLoadingStyles={isLoadingStyles}
+                    rateValue={rateValue}
+                    setRateValue={setRateValue}
+                    pitchValue={pitchValue}
+                    setPitchValue={setPitchValue}
+                    advancedRateValue={advancedRateValue}
+                    setAdvancedRateValue={setAdvancedRateValue}
+                    advancedPitchValue={advancedPitchValue}
+                    setAdvancedPitchValue={setAdvancedPitchValue}
+                  />
                 </div>
 
-                <TtsVoiceConfigCard
-                  isGenerating={isBusy}
-                  isPreviewing={isPreviewing}
-                  onPreview={handlePreview}
-                  ttsMode={ttsMode}
-                  advancedProvider={advancedProvider}
-                  setAdvancedProvider={setAdvancedProvider}
-                  portalContainer={popoverPortalContainer}
-                  voiceLoadError={voiceLoadError}
-                  isLoadingVoices={isLoadingVoices}
-                  languageFilter={languageFilter}
-                  setLanguageFilter={setLanguageFilter}
-                  regionFilter={regionFilter}
-                  setRegionFilter={setRegionFilter}
-                  genderFilter={genderFilter}
-                  setGenderFilter={setGenderFilter}
-                  languageSelectItems={languageSelectItems}
-                  regionSelectItems={regionSelectItems}
-                  genderSelectItems={genderSelectItems}
-                  filteredVoices={filteredVoices}
-                  activeVoice={activeVoice}
-                  setActiveVoice={setActiveVoice}
-                  advancedStyle={advancedStyle}
-                  setAdvancedStyle={setAdvancedStyle}
-                  styleOptions={styleOptions}
-                  isLoadingStyles={isLoadingStyles}
-                  rateValue={rateValue}
-                  setRateValue={setRateValue}
-                  pitchValue={pitchValue}
-                  setPitchValue={setPitchValue}
-                  advancedRateValue={advancedRateValue}
-                  setAdvancedRateValue={setAdvancedRateValue}
-                  advancedPitchValue={advancedPitchValue}
-                  setAdvancedPitchValue={setAdvancedPitchValue}
-                />
-              </div>
-
-              <Card>
-                <CardBody className="space-y-4 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 font-medium text-lg">
-                      <FileText size={18} />
-                      {t('workflow.tts.text', '文本内容')}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="light"
-                      onPress={() => {
-                        if (sourceType === 'custom') {
-                          setCustomTextValue('')
-                        } else {
-                          setSourceType('custom')
-                          setCustomTextValue(currentText || '')
-                        }
-                      }}>
-                      {t('workflow.tts.clear', '清空')}
-                    </Button>
-                  </div>
-
-                  <Tabs
-                    size="sm"
-                    selectedKey={sourceType}
-                    onSelectionChange={(key) => setSourceType(key as 'summary' | 'monologue' | 'custom')}
-                    variant="underlined">
-                    <Tab key="summary" title={t('workflow.character.secondary.bio', '人物志')} />
-                    <Tab key="monologue" title={t('workflow.character.secondary.monologue', '心理独白')} />
-                    <Tab key="custom" title={t('workflow.tts.custom', '自定义文本')} />
-                  </Tabs>
-
-                  <Textarea
-                    value={currentText ?? ''}
-                    onValueChange={sourceType === 'custom' ? setCustomTextValue : undefined}
-                    placeholder={t('workflow.tts.customPlaceholder', '请输入需要合成的文本')}
-                    variant="bordered"
-                    minRows={8}
-                    isReadOnly={sourceType !== 'custom'}
-                  />
-
-                  <div className="flex justify-end">
-                    <Button
-                      color="primary"
-                      startContent={<Mic size={16} />}
-                      onPress={handleGenerate}
-                      isDisabled={!currentText || isBusy}
-                      isLoading={isGenerating}>
-                      {isGenerating
-                        ? t('workflow.tts.generating', '生成中...')
-                        : t('workflow.tts.generate', '立即生成')}
-                    </Button>
-                  </div>
-                </CardBody>
-              </Card>
-            </div>
-
-            <div className="space-y-5">
-              {audioUrl && (
-                <Card className="border-success-200 bg-success-50">
+                <Card>
                   <CardBody className="space-y-4 p-4">
-                    <div className="flex items-center gap-2 font-medium text-success-700">
-                      <Play size={18} />
-                      {t('workflow.tts.result', '生成结果')}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-medium text-lg">
+                        <FileText size={18} />
+                        {t('workflow.tts.text', '文本内容')}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="light"
+                        onPress={() => {
+                          if (sourceType === 'custom') {
+                            setCustomTextValue('')
+                          } else {
+                            setSourceType('custom')
+                            setCustomTextValue(currentText || '')
+                          }
+                        }}>
+                        {t('workflow.tts.clear', '清空')}
+                      </Button>
                     </div>
 
-                    <audio controls preload="metadata" className="w-full">
-                      <source src={audioUrl} type={audioMime} />
-                      {audioPath && <source src={toFileUrl(audioPath)} type={audioMime} />}
-                    </audio>
+                    <Tabs
+                      size="sm"
+                      selectedKey={sourceType}
+                      onSelectionChange={(key) => setSourceType(key as 'summary' | 'monologue' | 'custom')}
+                      variant="underlined">
+                      <Tab key="summary" title={t('workflow.character.secondary.bio', '人物志')} />
+                      <Tab key="monologue" title={t('workflow.character.secondary.monologue', '心理独白')} />
+                      <Tab key="custom" title={t('workflow.tts.custom', '自定义文本')} />
+                    </Tabs>
 
-                    <Button
-                      variant="flat"
-                      color="success"
-                      className="w-full"
-                      startContent={<Download size={16} />}
-                      onPress={handleDownload}>
-                      {t('workflow.tts.openFile', '打开文件位置')}
-                    </Button>
+                    <Textarea
+                      value={currentText ?? ''}
+                      onValueChange={sourceType === 'custom' ? setCustomTextValue : undefined}
+                      placeholder={t('workflow.tts.customPlaceholder', '请输入需要合成的文本')}
+                      variant="bordered"
+                      minRows={8}
+                      isReadOnly={sourceType !== 'custom'}
+                    />
+
+                    <div className="flex justify-end">
+                      <Button
+                        color="primary"
+                        startContent={<Mic size={16} />}
+                        onPress={handleGenerate}
+                        isDisabled={!currentText || isBusy}
+                        isLoading={isGenerating}>
+                        {isGenerating
+                          ? t('workflow.tts.generating', '生成中...')
+                          : t('workflow.tts.generate', '立即生成')}
+                      </Button>
+                    </div>
                   </CardBody>
                 </Card>
-              )}
+              </div>
 
-              <Card>
-                <CardBody className="space-y-4 p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 font-medium text-lg">
-                      <Play size={18} />
-                      {t('workflow.tts.history', '历史记录')}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="light"
-                      onPress={handleClearHistory}
-                      isDisabled={historyItems.length === 0}>
-                      <Trash2 size={14} />
-                      {t('workflow.tts.clear', '清空')}
-                    </Button>
-                  </div>
+              <div className="space-y-5">
+                {audioUrl && (
+                  <Card className="border-success-200 bg-success-50">
+                    <CardBody className="space-y-4 p-4">
+                      <div className="flex items-center gap-2 font-medium text-success-700">
+                        <Play size={18} />
+                        {t('workflow.tts.result', '生成结果')}
+                      </div>
 
-                  {historyItems.length === 0 ? (
-                    <div className="py-6 text-center text-foreground/40 text-sm">
-                      {t('workflow.tts.emptyHistory', '暂无历史记录')}
+                      <audio controls preload="metadata" className="w-full">
+                        <source src={audioUrl} type={audioMime} />
+                        {audioPath && <source src={toFileUrl(audioPath)} type={audioMime} />}
+                      </audio>
+
+                      <Button
+                        variant="flat"
+                        color="success"
+                        className="w-full"
+                        startContent={<Download size={16} />}
+                        onPress={handleDownload}>
+                        {t('workflow.tts.openFile', '打开文件位置')}
+                      </Button>
+                    </CardBody>
+                  </Card>
+                )}
+
+                <Card>
+                  <CardBody className="space-y-4 p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-medium text-lg">
+                        <Play size={18} />
+                        {t('workflow.tts.history', '历史记录')}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="light"
+                        onPress={handleClearHistory}
+                        isDisabled={historyItems.length === 0}>
+                        <Trash2 size={14} />
+                        {t('workflow.tts.clear', '清空')}
+                      </Button>
                     </div>
-                  ) : (
-                    <div className="flex max-h-[520px] flex-col gap-2 overflow-y-auto">
-                      {historyItems.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          className="rounded-lg border border-divider bg-content1 p-3 text-left transition-colors hover:bg-content2"
-                          onClick={() => void handleSelectHistory(item)}>
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="truncate font-medium text-sm">{item.voiceLabel}</span>
-                            <span className="text-foreground/40 text-xs">{formatDate(item.createdAt)}</span>
-                          </div>
-                          <p className="mt-1 truncate text-foreground/60 text-xs">{item.textPreview}</p>
-                          {item.style && (
-                            <p className="mt-1 text-foreground/40 text-xs">
-                              {t('workflow.tts.style', '风格')}: {item.style}
-                            </p>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </CardBody>
-              </Card>
+
+                    {historyItems.length === 0 ? (
+                      <div className="py-6 text-center text-foreground/40 text-sm">
+                        {t('workflow.tts.emptyHistory', '暂无历史记录')}
+                      </div>
+                    ) : (
+                      <div className="flex max-h-[520px] flex-col gap-2 overflow-y-auto">
+                        {historyItems.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className="rounded-lg border border-divider bg-content1 p-3 text-left transition-colors hover:bg-content2"
+                            onClick={() => void handleSelectHistory(item)}>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate font-medium text-sm">{item.voiceLabel}</span>
+                              <span className="text-foreground/40 text-xs">{formatDate(item.createdAt)}</span>
+                            </div>
+                            <p className="mt-1 truncate text-foreground/60 text-xs">{item.textPreview}</p>
+                            {item.style && (
+                              <p className="mt-1 text-foreground/40 text-xs">
+                                {t('workflow.tts.style', '风格')}: {item.style}
+                              </p>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </CardBody>
+                </Card>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
-      </div>
-    </>
+        </MainScrollArea>
+      </ContentContainer>
+    </Container>
   )
 }
+
+const Container = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+`
+
+const HeaderBar = styled.div`
+  width: 100%;
+  height: var(--navbar-height);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  -webkit-app-region: drag;
+`
+
+const TitleGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+`
+
+const TitleIcon = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-icon);
+`
+
+const PageTitle = styled.h1`
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-1);
+`
+
+const TopNavbarHeader = styled.div`
+  width: 100%;
+  height: var(--navbar-height);
+  border-bottom: 0.5px solid var(--color-border);
+`
+
+const ContentContainer = styled.div`
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: calc(100vh - var(--navbar-height));
+  padding: 12px 16px;
+  overflow: hidden;
+
+  [navbar-position='top'] & {
+    height: calc(100vh - var(--navbar-height) - 6px);
+  }
+`
+
+const MainScrollArea = styled.div`
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-app-region: no-drag;
+`
 
 export default TTSGenerator

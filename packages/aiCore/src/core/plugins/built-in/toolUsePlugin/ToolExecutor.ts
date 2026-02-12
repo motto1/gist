@@ -87,7 +87,7 @@ export class ToolExecutor {
   }
 
   /**
-   * 格式化工具结果为 Read-No-More 标准格式
+   * 格式化工具结果为 gist 标准格式
    */
   formatToolResults(executedResults: ExecutedResult[]): string {
     return executedResults

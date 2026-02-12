@@ -2,11 +2,11 @@
 
 ## 📢 Reporting a Vulnerability
 
-In Read-No-More, we take security seriously and appreciate your efforts to responsibly disclose vulnerabilities. If you discover a security issue, please report it as soon as possible.
+In gist, we take security seriously and appreciate your efforts to responsibly disclose vulnerabilities. If you discover a security issue, please report it as soon as possible.
 
 **Please do not create public issues for security-related reports.**
 
-- To report a security issue, please use the GitHub Security Advisories tab to "[Open a draft security advisory](https://github.com/motto1/Read-No-More/security/advisories/new)".
+- To report a security issue, please use the GitHub Security Advisories tab to "[Open a draft security advisory](https://github.com/motto1/gist-downloads/security/advisories/new)".
 - Include a detailed description of the issue, steps to reproduce, potential impact, and any possible mitigations.
 - If applicable, please also attach proof-of-concept code or screenshots.
 
@@ -30,7 +30,7 @@ If you are using an unsupported version, we strongly recommend updating to the l
 
 ## 💡 Security Measures
 
-Read-No-More integrates several security best practices, including:
+gist integrates several security best practices, including:
 
 - Strict dependency updates and regular vulnerability scanning.
 - TypeScript strict mode and linting to reduce potential injection or runtime issues.
@@ -50,7 +50,7 @@ Read-No-More integrates several security best practices, including:
 
 ## 🤝 Acknowledgements
 
-We greatly appreciate contributions from the security community and strive to recognize all researchers who help keep Read-No-More safe.
+We greatly appreciate contributions from the security community and strive to recognize all researchers who help keep gist safe.
 
 ---
 
@@ -61,4 +61,4 @@ For any security-related questions not involving vulnerabilities, please reach o
 
 ---
 
-Thank you for helping keep Read-No-More and its users secure!
+Thank you for helping keep gist and its users secure!

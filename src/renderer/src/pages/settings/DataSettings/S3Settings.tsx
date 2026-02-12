@@ -65,7 +65,7 @@ const S3Settings: FC = () => {
     openMinapp({
       id: 's3-help',
       name: 'S3 Compatible Storage Help',
-      url: 'https://github.com/motto1/Read-No-More'
+      url: 'https://github.com/motto1/gist-downloads'
     })
   }
 

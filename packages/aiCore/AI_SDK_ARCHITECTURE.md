@@ -28,7 +28,7 @@
 
 ```mermaid
 graph TD
-    subgraph "用户应用 (如 Read-No-More)"
+    subgraph "用户应用 (如 gist)"
         UI["用户界面"]
         Components["应用组件"]
     end

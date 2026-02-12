@@ -1,5 +1,5 @@
 # provider: generic
 provider: github
 owner: motto1
-repo: Read-No-More
+repo: gist-downloads
 updaterCacheDirName: read-no-more-updater

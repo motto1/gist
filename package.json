@@ -2,10 +2,10 @@
   "name": "read-no-more",
   "version": "1.3.0",
   "private": true,
-  "description": "Read-No-More",
+  "description": "gist",
   "main": "./out/main/index.js",
   "author": "motto1",
-  "homepage": "https://github.com/motto1/Read-No-More",
+  "homepage": "https://github.com/motto1/gist-downloads",
   "engines": {
     "node": ">=22.0.0"
   },

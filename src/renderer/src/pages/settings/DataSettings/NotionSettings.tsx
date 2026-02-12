@@ -70,7 +70,7 @@ const NotionSettings: FC = () => {
     openMinapp({
       id: 'notion-help',
       name: 'Notion Help',
-      url: 'https://github.com/motto1/Read-No-More'
+      url: 'https://github.com/motto1/gist-downloads'
     })
   }
 

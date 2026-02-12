@@ -74,7 +74,7 @@ export const builtinMCPServers: BuiltinMCPServer[] = [
   {
     id: nanoid(),
     name: BuiltinMCPServerNames.mcpAutoInstall,
-    reference: 'https://github.com/motto1/Read-No-More',
+    reference: 'https://github.com/motto1/gist-downloads',
     type: 'inMemory',
     command: 'npx',
     args: ['-y', '@mcpmarket/mcp-auto-install', 'connect', '--json'],

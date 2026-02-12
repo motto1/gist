@@ -4,20 +4,20 @@
  */
 
 import { Button, Card, CardBody, Input, Select, SelectItem, Tab, Tabs } from '@heroui/react'
+import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
 import Sortable from '@renderer/components/dnd/Sortable'
 import { useDndReorder } from '@renderer/components/dnd/useDndReorder'
+import { useNavbarPosition } from '@renderer/hooks/useSettings'
 import { useTextEditorLibrary } from '@renderer/hooks/useTextEditorLibrary'
 import type { TextBook } from '@shared/types'
-import { BookOpen, Search, Upload } from 'lucide-react'
+import { BookOpen, PenTool, Search, Upload } from 'lucide-react'
 import { type CSSProperties, FC, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import styled from 'styled-components'
 
-import DragBar from '../workflow/components/DragBar'
 import { useAdaptiveScale } from '../workflow/components/useAdaptiveScale'
 import BookCard from './components/BookCard'
 import BookCardSkeleton from './components/BookCardSkeleton'
-
-// 布局尺寸配置
 
 type GridSize = 'large' | 'medium' | 'small'
 
@@ -48,12 +48,13 @@ const getGridStyle = (config: GridConfig): React.CSSProperties => ({
   justifyContent: 'start'
 })
 
+const dragStyle = { WebkitAppRegion: 'drag' } as CSSProperties
 const noDragStyle = { WebkitAppRegion: 'no-drag' } as CSSProperties
 
 const TextEditorPage: FC = () => {
   const { t } = useTranslation()
-  const { books, isLoading, importBook, updateTitle, deleteBook, openReadView, reorderBooks } =
-    useTextEditorLibrary()
+  const { isTopNavbar } = useNavbarPosition()
+  const { books, isLoading, importBook, updateTitle, deleteBook, openReadView, reorderBooks } = useTextEditorLibrary()
 
   const [gridSize, setGridSize] = useState<GridSize>(() => {
     const raw = localStorage.getItem(GRID_SIZE_STORAGE_KEY)
@@ -78,10 +79,7 @@ const TextEditorPage: FC = () => {
     const query = searchText.trim().toLowerCase()
     const filtered = query
       ? books.filter((book) => {
-          return (
-            book.title.toLowerCase().includes(query) ||
-            book.originalFileName.toLowerCase().includes(query)
-          )
+          return book.title.toLowerCase().includes(query) || book.originalFileName.toLowerCase().includes(query)
         })
       : books
 
@@ -127,43 +125,47 @@ const TextEditorPage: FC = () => {
     (book: TextBook, { dragging }: { dragging: boolean }) => (
       <BookCard
         book={book}
+        size={gridSize}
         isDragging={dragging}
         onTitleChange={(newTitle) => updateTitle(book.id, newTitle)}
         onDelete={() => deleteBook(book.id)}
         onRead={() => openReadView(book.id)}
       />
     ),
-    [updateTitle, deleteBook, openReadView]
+    [gridSize, updateTitle, deleteBook, openReadView]
   )
 
   const isLibraryEmpty = books.length === 0
 
-  return (
-    <>
-      <DragBar />
-      <div className="relative flex h-full w-full flex-col bg-background">
-        {/* Header */}
-        <div
-          className="relative z-10 flex min-h-[72px] items-center justify-between gap-4 border-foreground/10 border-b px-6 py-4"
-          style={{ WebkitAppRegion: 'drag' } as CSSProperties}
-        >
-          <div className="flex items-center gap-3" style={noDragStyle}>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-content2 text-foreground/60">
-              <BookOpen size={18} />
-            </div>
-            <div className="flex items-baseline gap-3">
-              <h1 className="font-semibold text-xl">{t('textEditor.title', '文案编辑')}</h1>
-              <span className="text-foreground/60 text-sm font-normal">
-                {t('textEditor.count', '{{count}} 本', { count: books.length })}
-              </span>
-            </div>
-          </div>
-
+  const headerContent = (
+    <HeaderBar style={dragStyle}>
+      <TitleGroup style={noDragStyle}>
+        <TitleIcon>
+          <PenTool size={18} className="icon" />
+        </TitleIcon>
+        <div className="flex items-baseline gap-3">
+          <PageTitle>{t('textEditor.title', '文案编辑')}</PageTitle>
+          <span className="font-normal text-foreground/60 text-sm">
+            {t('textEditor.count', '{{count}} 本', { count: books.length })}
+          </span>
         </div>
+      </TitleGroup>
+    </HeaderBar>
+  )
 
-        {/* Content */}
-        <div ref={layoutHostRef} className="flex-1 overflow-y-auto px-6 pt-3 pb-8">
-          <div className="mx-auto w-full max-w-6xl space-y-6 overflow-visible" style={scaledStyle}>
+  return (
+    <Container id="text-editor-page">
+      {isTopNavbar ? (
+        <TopNavbarHeader>{headerContent}</TopNavbarHeader>
+      ) : (
+        <Navbar>
+          <NavbarCenter style={{ borderRight: 'none', padding: 0 }}>{headerContent}</NavbarCenter>
+        </Navbar>
+      )}
+
+      <ContentContainer id="content-container">
+        <MainScrollArea ref={layoutHostRef}>
+          <MainInner style={scaledStyle}>
             {/* Controls */}
             <div className="border-foreground/10 border-b pb-3" style={noDragStyle}>
               <div className="flex items-center gap-3 overflow-x-auto">
@@ -183,8 +185,7 @@ const TextEditorPage: FC = () => {
                   color="primary"
                   startContent={<Upload size={14} />}
                   onPress={handleImport}
-                  className="shrink-0"
-                >
+                  className="shrink-0">
                   {t('textEditor.import', '导入TXT')}
                 </Button>
 
@@ -197,8 +198,7 @@ const TextEditorPage: FC = () => {
                     const selected = Array.from(keys)[0] as SortKey
                     setSortKey(selected)
                   }}
-                  aria-label="Sort by"
-                >
+                  aria-label="Sort by">
                   <SelectItem key="custom">{t('textEditor.sort.custom', '自定义排序')}</SelectItem>
                   <SelectItem key="updatedDesc">{t('textEditor.sort.updatedDesc', '最近更新')}</SelectItem>
                   <SelectItem key="createdDesc">{t('textEditor.sort.createdDesc', '最近导入')}</SelectItem>
@@ -217,8 +217,7 @@ const TextEditorPage: FC = () => {
                     cursor: 'bg-content2 shadow-sm',
                     tab: 'h-8 px-5',
                     tabContent: 'group-data-[selected=true]:text-primary font-medium'
-                  }}
-                >
+                  }}>
                   <Tab key="large" title={t('textEditor.size.large', '大')} isDisabled={isLibraryEmpty} />
                   <Tab key="medium" title={t('textEditor.size.medium', '中')} isDisabled={isLibraryEmpty} />
                   <Tab key="small" title={t('textEditor.size.small', '小')} isDisabled={isLibraryEmpty} />
@@ -236,32 +235,24 @@ const TextEditorPage: FC = () => {
             {isLoading ? (
               <div style={gridStyle}>
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <BookCardSkeleton key={i} />
+                  <BookCardSkeleton key={i} size={gridSize} />
                 ))}
               </div>
             ) : isLibraryEmpty ? (
-              <Card className="border-2 border-dashed border-divider bg-content1">
+              <Card className="border-2 border-divider border-dashed bg-content1">
                 <CardBody className="flex flex-col items-center justify-center gap-6 p-10 text-center">
                   <div className="flex h-24 w-24 items-center justify-center rounded-full bg-content2">
                     <BookOpen size={44} className="text-foreground/40" />
                   </div>
                   <div className="space-y-2">
-                    <div className="text-xl font-semibold text-foreground">
+                    <div className="font-semibold text-foreground text-xl">
                       {t('textEditor.emptyTitle', '还没有图书')}
                     </div>
                     <div className="text-foreground/60 text-sm">
-                      {t(
-                        'textEditor.emptyDescription',
-                        '点击下方按钮导入您的第一本TXT文件，开始您的阅读之旅'
-                      )}
+                      {t('textEditor.emptyDescription', '点击下方按钮导入您的第一本TXT文件，开始您的阅读之旅')}
                     </div>
                   </div>
-                  <Button
-                    color="primary"
-                    size="lg"
-                    startContent={<Upload size={18} />}
-                    onPress={handleImport}
-                  >
+                  <Button color="primary" size="lg" startContent={<Upload size={18} />} onPress={handleImport}>
                     {t('textEditor.import', '导入TXT')}
                   </Button>
                 </CardBody>
@@ -286,11 +277,92 @@ const TextEditorPage: FC = () => {
                 restrictions={{ scrollableAncestor: true }}
               />
             )}
-          </div>
-        </div>
-      </div>
-    </>
+          </MainInner>
+        </MainScrollArea>
+      </ContentContainer>
+    </Container>
   )
 }
+
+const Container = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+`
+
+const HeaderBar = styled.div`
+  width: 100%;
+  height: var(--navbar-height);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  -webkit-app-region: drag;
+`
+
+const TitleGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+`
+
+const TitleIcon = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-icon);
+`
+
+const PageTitle = styled.h1`
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-1);
+`
+
+const TopNavbarHeader = styled.div`
+  width: 100%;
+  height: var(--navbar-height);
+  border-bottom: 0.5px solid var(--color-border);
+`
+
+const ContentContainer = styled.div`
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: calc(100vh - var(--navbar-height));
+  padding: 12px 16px;
+  overflow: hidden;
+
+  [navbar-position='top'] & {
+    height: calc(100vh - var(--navbar-height) - 6px);
+  }
+`
+
+const MainScrollArea = styled.div`
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-app-region: no-drag;
+`
+
+const MainInner = styled.div`
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow: visible;
+  padding-top: 3px;
+  padding-bottom: 32px;
+`
 
 export default TextEditorPage

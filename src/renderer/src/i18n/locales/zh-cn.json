@@ -2283,7 +2283,7 @@
     "ppio": "PPIO 派欧云",
     "qiniu": "七牛云 AI 推理",
     "qwenlm": "QwenLM",
-    "readnomore": "Read-No-More",
+    "readnomore": "gist",
     "silicon": "硅基流动",
     "stepfun": "阶跃星辰",
     "tencent-cloud-ti": "腾讯云 TI",
@@ -2729,7 +2729,7 @@
         "open": "打开",
         "title": "调试面板"
       },
-      "description": "Read-No-More - 一款终结文字阐述性工作的AI助手",
+      "description": "gist - 一款终结文字阐述性工作的AI助手",
       "downloading": "正在下载更新...",
       "feedback": {
         "button": "反馈",
@@ -3178,7 +3178,7 @@
         },
         "root": {
           "label": "备份目录（可选）",
-          "placeholder": "例如：/read-no-more"
+          "placeholder": "例如：/gist"
         },
         "secretAccessKey": {
           "label": "Secret Access Key",
@@ -3214,7 +3214,7 @@
           "title": "连接检测"
         },
         "root_path": "文档根路径",
-        "root_path_placeholder": "例如：/ReadNoMore",
+        "root_path_placeholder": "例如：/gist",
         "title": "思源笔记配置",
         "token": {
           "help": "在思源笔记 -> 设置 -> 关于中获取",

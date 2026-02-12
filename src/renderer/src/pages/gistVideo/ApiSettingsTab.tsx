@@ -154,7 +154,7 @@ export default function ApiSettingsTab() {
           <CardBody className="space-y-5 p-4">
             <div className="text-center">
               <h3 className="font-semibold text-lg">图生文配置</h3>
-              <p className="text-foreground/55 text-sm">视频页面样式与语音生成页保持一致。</p>
+              <p className="text-foreground/55 text-sm">已与助手页面的导航与内容层级风格对齐。</p>
             </div>
 
             <VisionModelSelector
@@ -190,8 +190,10 @@ export default function ApiSettingsTab() {
                 selectedKeys={[backend]}
                 onChange={(e) => setBackend(e.target.value)}
                 variant="flat"
-                classNames={{ trigger: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12', value: 'text-base' }}
-              >
+                classNames={{
+                  trigger: 'bg-content2/50 hover:bg-content2/80 transition-colors h-12',
+                  value: 'text-base'
+                }}>
                 <SelectItem key="auto">自动</SelectItem>
                 <SelectItem key="gemini_proxy">第三方中转站</SelectItem>
                 <SelectItem key="null">关闭图生文</SelectItem>
@@ -249,12 +251,18 @@ export default function ApiSettingsTab() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="text-foreground/60 text-sm">Vision 模型列表</div>
-                <Button size="sm" variant="flat" onPress={() => void fetchModels()} isDisabled={!providerReady || !canFetchModels}>
+                <Button
+                  size="sm"
+                  variant="flat"
+                  onPress={() => void fetchModels()}
+                  isDisabled={!providerReady || !canFetchModels}>
                   获取模型列表
                 </Button>
               </div>
 
-              <div className="text-foreground/40 text-xs">当前：{(selectedModel?.id || visionModel || '').trim() || '未选择'}</div>
+              <div className="text-foreground/40 text-xs">
+                当前：{(selectedModel?.id || visionModel || '').trim() || '未选择'}
+              </div>
 
               {modelChoices.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
@@ -267,8 +275,7 @@ export default function ApiSettingsTab() {
                       onClick={() => {
                         setVisionModel(m)
                         pushLog(`已选择：${m}（未应用）`)
-                      }}
-                    >
+                      }}>
                       {m}
                     </Chip>
                   ))}
@@ -277,7 +284,10 @@ export default function ApiSettingsTab() {
             </div>
 
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <Button color="primary" onPress={() => void applyToBackend()} isDisabled={!selectedModel || !providerReady}>
+              <Button
+                color="primary"
+                onPress={() => void applyToBackend()}
+                isDisabled={!selectedModel || !providerReady}>
                 应用配置
               </Button>
               <Button variant="flat" onPress={() => void testCaption()} isDisabled={!providerReady}>

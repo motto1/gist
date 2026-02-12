@@ -78,7 +78,7 @@ export default defineConfig([
         {
           selector: 'CallExpression[callee.object.name="console"]',
           message:
-            '❗Read-No-More uses unified LoggerService: 📖 docs/technical/how-to-use-logger-en.md\n❗Read-No-More 使用统一的日志服务：📖 docs/technical/how-to-use-logger-zh.md\n\n'
+            '❗gist uses unified LoggerService: 📖 docs/technical/how-to-use-logger-en.md\n❗gist 使用统一的日志服务：📖 docs/technical/how-to-use-logger-zh.md\n\n'
         }
       ]
     }
