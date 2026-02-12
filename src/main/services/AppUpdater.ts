@@ -228,32 +228,50 @@ export default class AppUpdater {
   }
 
   private async fetchLatestPublicRelease(): Promise<GithubRelease> {
-    const abortController = new AbortController()
-    const timeout = setTimeout(() => abortController.abort(), 10_000)
+    const maxAttempts = 2
+    let lastError: unknown = null
 
-    try {
-      const response = await fetch(PUBLIC_RELEASE_API, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'User-Agent': generateUserAgent()
-        },
-        signal: abortController.signal
-      })
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const abortController = new AbortController()
+      const timeout = setTimeout(() => abortController.abort(), 20_000)
 
-      if (!response.ok) {
-        throw new Error(`GitHub releases request failed: ${response.status} ${response.statusText}`)
+      try {
+        const response = await fetch(PUBLIC_RELEASE_API, {
+          method: 'GET',
+          headers: {
+            Accept: 'application/vnd.github+json',
+            'User-Agent': generateUserAgent()
+          },
+          signal: abortController.signal
+        })
+
+        if (!response.ok) {
+          throw new Error(`GitHub releases request failed: ${response.status} ${response.statusText}`)
+        }
+
+        const data = (await response.json()) as GithubRelease
+        if (!data || !data.tag_name) {
+          throw new Error('Invalid release payload from GitHub')
+        }
+
+        return data
+      } catch (error) {
+        lastError = error
+
+        if (attempt < maxAttempts) {
+          logger.warn('fetch latest release failed, retrying', {
+            attempt,
+            error: error instanceof Error ? error.message : String(error)
+          })
+          await new Promise((resolve) => setTimeout(resolve, 1_000))
+          continue
+        }
+      } finally {
+        clearTimeout(timeout)
       }
-
-      const data = (await response.json()) as GithubRelease
-      if (!data || !data.tag_name) {
-        throw new Error('Invalid release payload from GitHub')
-      }
-
-      return data
-    } finally {
-      clearTimeout(timeout)
     }
+
+    throw lastError instanceof Error ? lastError : new Error('Failed to fetch latest release')
   }
 
   private getCurrentEdition(): AppEdition {

@@ -106,16 +106,15 @@ export function useAppInit() {
         logger.error('Auto update check on launch failed', error as Error)
 
         const defaultMessage = i18n.t('settings.about.updateError')
-        const errorMessage = error instanceof Error ? error.message : defaultMessage
 
         if (window.modal?.info) {
           window.modal.info({
             title: defaultMessage,
-            content: errorMessage,
+            content: defaultMessage,
             icon: null
           })
         } else {
-          window.toast?.error(errorMessage)
+          window.toast?.error(defaultMessage)
         }
       }
     })

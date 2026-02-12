@@ -68,7 +68,7 @@ export default function useUpdateHandler() {
           })
         )
       }),
-      ipcRenderer.on(IpcChannel.UpdateError, (_, error) => {
+      ipcRenderer.on(IpcChannel.UpdateError, () => {
         dispatch(
           setUpdateState({
             checking: false,
@@ -78,16 +78,15 @@ export default function useUpdateHandler() {
         )
 
         const defaultMessage = t('settings.about.updateError')
-        const errorMessage = error?.message || defaultMessage
 
         if (window.modal?.info) {
           window.modal.info({
             title: defaultMessage,
-            content: errorMessage,
+            content: defaultMessage,
             icon: null
           })
         } else {
-          window.toast?.error(errorMessage)
+          window.toast?.error(defaultMessage)
         }
       })
     ]
