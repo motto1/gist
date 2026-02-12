@@ -44,7 +44,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
       - name: Resolve release version
         id: version
@@ -112,10 +112,84 @@ jobs:
 
           echo "Resolved release: base=${BASE_VERSION}, bump=${BUMP}, next=${NEXT_VERSION}"
 
-  package-windows:
+  build-windows-bundles:
     needs: prepare
     runs-on: windows-latest
-    timeout-minutes: 150
+    timeout-minutes: 120
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NODE_OPTIONS: --max-old-space-size=8192
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v5
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install corepack
+        run: corepack enable && corepack prepare yarn@4.9.1 --activate
+
+      - name: Set package.json version
+        shell: bash
+        run: |
+          npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Resolve cache paths
+        id: cache-paths
+        shell: pwsh
+        run: |
+          "yarn_cache=$(yarn config get cacheFolder)" >> $env:GITHUB_OUTPUT
+          "electron_cache=$env:LOCALAPPDATA\electron\Cache" >> $env:GITHUB_OUTPUT
+          "electron_builder_cache=$env:LOCALAPPDATA\electron-builder\Cache" >> $env:GITHUB_OUTPUT
+          "node_gyp_cache=$env:LOCALAPPDATA\node-gyp\Cache" >> $env:GITHUB_OUTPUT
+
+      - name: Cache yarn dependencies and native cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.cache-paths.outputs.yarn_cache }}
+            node_modules
+            ${{ steps.cache-paths.outputs.node_gyp_cache }}
+          key: ${{ runner.os }}-node20-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node20-yarn-
+
+      - name: Cache electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.cache-paths.outputs.electron_cache }}
+            ${{ steps.cache-paths.outputs.electron_builder_cache }}
+          key: ${{ runner.os }}-node20-electron-${{ hashFiles('**/yarn.lock', 'package.json', 'electron-builder.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-node20-electron-
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Build app bundles (once)
+        run: yarn build
+
+      - name: Upload prebuilt bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-bundles
+          path: |
+            out/**
+            packages/**/dist/**
+          if-no-files-found: error
+          retention-days: 1
+
+  package-windows:
+    needs:
+      - prepare
+      - build-windows-bundles
+    runs-on: windows-latest
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -136,36 +210,62 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
       - name: Install corepack
-        run: corepack enable && corepack prepare yarn@4.6.0 --activate
+        run: corepack enable && corepack prepare yarn@4.9.1 --activate
 
       - name: Set package.json version
         shell: bash
         run: |
           npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version --allow-same-version
 
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        shell: bash
-        run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
+      - name: Resolve cache paths
+        id: cache-paths
+        shell: pwsh
+        run: |
+          "yarn_cache=$(yarn config get cacheFolder)" >> $env:GITHUB_OUTPUT
+          "electron_cache=$env:LOCALAPPDATA\electron\Cache" >> $env:GITHUB_OUTPUT
+          "electron_builder_cache=$env:LOCALAPPDATA\electron-builder\Cache" >> $env:GITHUB_OUTPUT
+          "node_gyp_cache=$env:LOCALAPPDATA\node-gyp\Cache" >> $env:GITHUB_OUTPUT
 
-      - name: Cache yarn dependencies
+      - name: Cache yarn dependencies and native cache
         uses: actions/cache@v4
         with:
           path: |
-            ${{ steps.yarn-cache-dir-path.outputs.dir }}
+            ${{ steps.cache-paths.outputs.yarn_cache }}
             node_modules
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+            ${{ steps.cache-paths.outputs.node_gyp_cache }}
+          key: ${{ runner.os }}-node20-yarn-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-yarn-
+            ${{ runner.os }}-node20-yarn-
+
+      - name: Cache electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.cache-paths.outputs.electron_cache }}
+            ${{ steps.cache-paths.outputs.electron_builder_cache }}
+          key: ${{ runner.os }}-node20-electron-${{ hashFiles('**/yarn.lock', 'package.json', 'electron-builder.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-node20-electron-
 
       - name: Install Dependencies
         run: yarn install
 
-      - name: Build app bundles
-        run: yarn build
+      - name: Download prebuilt bundles
+        uses: actions/download-artifact@v4
+        with:
+          name: app-bundles
+          path: .
+
+      - name: Validate prebuilt bundles
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "out")) {
+            throw "Missing prebuilt 'out' directory."
+          }
+          Get-ChildItem -Path out -Recurse -File | Select-Object -First 5 FullName
 
       - name: Package ${{ matrix.edition }} edition
         shell: pwsh
@@ -176,6 +276,7 @@ jobs:
           $env:APP_EDITION = "${{ matrix.edition }}"
           $env:BUILD_VOICE = "${{ matrix.voice }}"
           Remove-Item Env:BUILD_SUFFIX -ErrorAction SilentlyContinue
+
           yarn run electron-builder --win --x64 --publish never --config.directories.output="$outDir"
 
       - name: Collect ${{ matrix.edition }} installer
@@ -217,7 +318,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
       - name: Set package.json version
         shell: bash
@@ -325,3 +426,136 @@ jobs:
           gh release upload "$TAG" artifacts/*.exe \
             --repo "$TARGET_REPO" \
             --clobber
+
+  publish-gitee:
+    needs:
+      - prepare
+      - package-windows
+      - publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Generate release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PREV_TAG="v${{ needs.prepare.outputs.base }}"
+          FROM_ARG=()
+          if git rev-parse -q --verify "refs/tags/${PREV_TAG}" >/dev/null; then
+            FROM_ARG=(--from "${PREV_TAG}")
+          fi
+
+          node scripts/generate-release-notes.js \
+            "${FROM_ARG[@]}" \
+            --to HEAD \
+            --version "${{ needs.prepare.outputs.tag }}" \
+            --repo "${{ github.repository }}" > release-notes.md
+
+      - name: Download pro installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-pro
+          path: artifacts
+
+      - name: Download basic installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-basic
+          path: artifacts
+
+      - name: Validate Gitee settings
+        shell: bash
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_RELEASE_REPO: ${{ vars.GITEE_RELEASE_REPO }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GITEE_TOKEN}" ]; then
+            echo "::error::Missing secret GITEE_TOKEN"
+            echo "Please create GITEE_TOKEN with Releases read/write permissions."
+            exit 1
+          fi
+
+          if [ -z "${GITEE_RELEASE_REPO}" ] || [[ "${GITEE_RELEASE_REPO}" != */* ]]; then
+            echo "::error::Missing vars.GITEE_RELEASE_REPO (format: owner/repo)"
+            exit 1
+          fi
+
+      - name: Sync release to Gitee
+        shell: bash
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_RELEASE_REPO: ${{ vars.GITEE_RELEASE_REPO }}
+        run: |
+          set -euo pipefail
+
+          TAG="${{ needs.prepare.outputs.tag }}"
+          TITLE="Release ${TAG}"
+          BODY="$(cat release-notes.md)"
+
+          OWNER="${GITEE_RELEASE_REPO%%/*}"
+          REPO="${GITEE_RELEASE_REPO#*/}"
+          API_BASE="https://gitee.com/api/v5/repos/${OWNER}/${REPO}"
+
+          echo "Syncing ${TAG} to Gitee repo: ${OWNER}/${REPO}"
+
+          RELEASE_ID=$(curl -sS -G "${API_BASE}/releases/tags/${TAG}" \
+            --data-urlencode "access_token=${GITEE_TOKEN}" | jq -r '.id // empty')
+
+          if [ -n "${RELEASE_ID}" ]; then
+            echo "Release exists on Gitee (id=${RELEASE_ID}), updating metadata"
+            curl -sS -X PATCH "${API_BASE}/releases/${RELEASE_ID}" \
+              --data-urlencode "access_token=${GITEE_TOKEN}" \
+              --data-urlencode "name=${TITLE}" \
+              --data-urlencode "body=${BODY}" > gitee-release.json
+          else
+            echo "Release does not exist on Gitee, creating"
+            curl -sS -X POST "${API_BASE}/releases" \
+              --data-urlencode "access_token=${GITEE_TOKEN}" \
+              --data-urlencode "tag_name=${TAG}" \
+              --data-urlencode "name=${TITLE}" \
+              --data-urlencode "body=${BODY}" > gitee-release.json
+          fi
+
+          RELEASE_ID=$(jq -r '.id // empty' gitee-release.json)
+          if [ -z "${RELEASE_ID}" ]; then
+            echo "::error::Failed to resolve Gitee release id"
+            cat gitee-release.json
+            exit 1
+          fi
+
+          echo "Gitee release id: ${RELEASE_ID}"
+
+          RELEASE_DETAIL=$(curl -sS -G "${API_BASE}/releases/${RELEASE_ID}" \
+            --data-urlencode "access_token=${GITEE_TOKEN}")
+
+          for file in artifacts/*.exe; do
+            name="$(basename "$file")"
+            echo "Uploading $name"
+
+            existing_id=$(printf '%s' "$RELEASE_DETAIL" | jq -r --arg name "$name" '.assets[]? | select(.name == $name) | .id' | head -n 1)
+            if [ -n "${existing_id}" ]; then
+              echo "Deleting existing asset: ${name} (id=${existing_id})"
+              curl -sS -X DELETE "${API_BASE}/releases/${RELEASE_ID}/attach_files/${existing_id}" \
+                --data-urlencode "access_token=${GITEE_TOKEN}" >/dev/null || true
+            fi
+
+            curl -sS -X POST "${API_BASE}/releases/${RELEASE_ID}/attach_files" \
+              -F "access_token=${GITEE_TOKEN}" \
+              -F "file=@${file}" >/dev/null
+          done
+
+          echo "Gitee release sync completed: ${OWNER}/${REPO} ${TAG}"
