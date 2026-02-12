@@ -347,7 +347,7 @@ jobs:
       - package-windows
       - publish
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 180
 
     steps:
       - name: Check out Git repository
@@ -424,13 +424,24 @@ jobs:
           REPO="${GITEE_RELEASE_REPO#*/}"
           API_BASE="https://gitee.com/api/v5/repos/${OWNER}/${REPO}"
 
+          CURL_API_OPTS=(
+            --silent
+            --show-error
+            --fail-with-body
+            --retry 5
+            --retry-all-errors
+            --retry-delay 5
+            --retry-max-time 600
+            --connect-timeout 30
+          )
+
           echo "Syncing ${TAG} to Gitee repo: ${OWNER}/${REPO}"
 
-          TARGET_COMMITISH=$(curl -sS -G "${API_BASE}" \
+          TARGET_COMMITISH=$(curl "${CURL_API_OPTS[@]}" -G "${API_BASE}" \
             --data-urlencode "access_token=${GITEE_TOKEN}" | jq -r '.default_branch // empty')
 
           if [ -z "${TARGET_COMMITISH}" ]; then
-            TARGET_COMMITISH=$(curl -sS -G "${API_BASE}/branches" \
+            TARGET_COMMITISH=$(curl "${CURL_API_OPTS[@]}" -G "${API_BASE}/branches" \
               --data-urlencode "access_token=${GITEE_TOKEN}" | jq -r '.[0].name // empty')
           fi
 
@@ -439,18 +450,19 @@ jobs:
             exit 1
           fi
 
-          RELEASE_ID=$(curl -sS -G "${API_BASE}/releases/tags/${TAG}" \
-            --data-urlencode "access_token=${GITEE_TOKEN}" | jq -r '.id // empty')
+          RELEASE_LOOKUP=$(curl --silent --show-error -G "${API_BASE}/releases/tags/${TAG}" \
+            --data-urlencode "access_token=${GITEE_TOKEN}" || true)
+          RELEASE_ID=$(printf '%s' "${RELEASE_LOOKUP}" | jq -r '.id // empty')
 
           if [ -n "${RELEASE_ID}" ]; then
             echo "Release exists on Gitee (id=${RELEASE_ID}), updating metadata"
-            curl -sS -X PATCH "${API_BASE}/releases/${RELEASE_ID}" \
+            curl "${CURL_API_OPTS[@]}" -X PATCH "${API_BASE}/releases/${RELEASE_ID}" \
               --data-urlencode "access_token=${GITEE_TOKEN}" \
               --data-urlencode "name=${TITLE}" \
               --data-urlencode "body=${BODY}" > gitee-release.json
           else
             echo "Release does not exist on Gitee, creating"
-            curl -sS -X POST "${API_BASE}/releases" \
+            curl "${CURL_API_OPTS[@]}" -X POST "${API_BASE}/releases" \
               --data-urlencode "access_token=${GITEE_TOKEN}" \
               --data-urlencode "tag_name=${TAG}" \
               --data-urlencode "target_commitish=${TARGET_COMMITISH}" \
@@ -467,23 +479,58 @@ jobs:
 
           echo "Gitee release id: ${RELEASE_ID}"
 
-          RELEASE_DETAIL=$(curl -sS -G "${API_BASE}/releases/${RELEASE_ID}" \
+          RELEASE_DETAIL=$(curl "${CURL_API_OPTS[@]}" -G "${API_BASE}/releases/${RELEASE_ID}" \
             --data-urlencode "access_token=${GITEE_TOKEN}")
+
+          upload_with_retry() {
+            local file="$1"
+            local name="$2"
+            local attempt
+
+            for attempt in 1 2 3; do
+              echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Uploading ${name} (attempt ${attempt}/3)"
+              if curl "${CURL_API_OPTS[@]}" \
+                --max-time 7200 \
+                -X POST "${API_BASE}/releases/${RELEASE_ID}/attach_files" \
+                -F "access_token=${GITEE_TOKEN}" \
+                -F "file=@${file}" >/dev/null; then
+                echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Upload success: ${name}"
+                return 0
+              fi
+
+              if [ "${attempt}" -lt 3 ]; then
+                local backoff=$((attempt * 30))
+                echo "Upload failed for ${name}, retry after ${backoff}s..."
+                sleep "${backoff}"
+              fi
+            done
+
+            return 1
+          }
 
           for file in artifacts/*.exe; do
             name="$(basename "$file")"
-            echo "Uploading $name"
+            start_ts=$(date +%s)
+            echo "Preparing upload: ${name}"
 
             existing_id=$(printf '%s' "$RELEASE_DETAIL" | jq -r --arg name "$name" '.assets[]? | select(.name == $name) | .id' | head -n 1)
             if [ -n "${existing_id}" ]; then
               echo "Deleting existing asset: ${name} (id=${existing_id})"
-              curl -sS -X DELETE "${API_BASE}/releases/${RELEASE_ID}/attach_files/${existing_id}" \
+              curl "${CURL_API_OPTS[@]}" -X DELETE "${API_BASE}/releases/${RELEASE_ID}/attach_files/${existing_id}" \
                 --data-urlencode "access_token=${GITEE_TOKEN}" >/dev/null || true
             fi
 
-            curl -sS -X POST "${API_BASE}/releases/${RELEASE_ID}/attach_files" \
-              -F "access_token=${GITEE_TOKEN}" \
-              -F "file=@${file}" >/dev/null
+            if ! upload_with_retry "$file" "$name"; then
+              echo "::error::Upload failed after retries: ${name}"
+              exit 1
+            fi
+
+            end_ts=$(date +%s)
+            duration=$((end_ts - start_ts))
+            echo "Finished ${name}, duration=${duration}s"
+
+            RELEASE_DETAIL=$(curl "${CURL_API_OPTS[@]}" -G "${API_BASE}/releases/${RELEASE_ID}" \
+              --data-urlencode "access_token=${GITEE_TOKEN}")
           done
 
           echo "Gitee release sync completed: ${OWNER}/${REPO} ${TAG}"
