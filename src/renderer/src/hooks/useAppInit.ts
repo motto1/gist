@@ -17,7 +17,7 @@ import { checkDataLimit } from '@renderer/utils'
 import { defaultLanguage } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { useDefaultModel } from './useAssistant'
 import useFullScreenNotice from './useFullScreenNotice'
@@ -29,13 +29,24 @@ const logger = loggerService.withContext('useAppInit')
 
 export function useAppInit() {
   const dispatch = useAppDispatch()
-  const { proxyUrl, proxyBypassRules, language, windowStyle, proxyMode, customCss, enableDataCollection } = useSettings()
+  const {
+    proxyUrl,
+    proxyBypassRules,
+    language,
+    windowStyle,
+    proxyMode,
+    customCss,
+    enableDataCollection,
+    autoCheckUpdate
+  } = useSettings()
   const { isLeftNavbar } = useNavbarPosition()
   const { minappShow } = useRuntime()
   const { setDefaultModel, setQuickModel, setTranslateModel } = useDefaultModel()
   const avatar = useLiveQuery(() => db.settings.get('image://avatar'))
   const { theme } = useTheme()
   const memoryConfig = useAppSelector(selectMemoryConfig)
+  const [isProxyInitialized, setIsProxyInitialized] = useState(false)
+  const startupUpdateCheckedRef = useRef(false)
 
   useEffect(() => {
     document.getElementById('spinner')?.remove()
@@ -70,12 +81,18 @@ export function useAppInit() {
   useEffect(() => {
     runAsyncFunction(async () => {
       try {
+        if (!autoCheckUpdate || !isProxyInitialized || startupUpdateCheckedRef.current) {
+          return
+        }
+
         const { isPackaged } = await window.api.getAppInfo()
         if (!isPackaged) {
           return
         }
 
-        // 启动时总是检查更新：只要发现新版本就主动弹窗提示
+        startupUpdateCheckedRef.current = true
+
+        // 启动时自动检查更新：发现新版本就主动弹窗提示
         await delay(2)
         const { updateInfo } = await window.api.checkForUpdate()
         dispatch(setUpdateState({ info: updateInfo }))
@@ -87,18 +104,49 @@ export function useAppInit() {
         }
       } catch (error) {
         logger.error('Auto update check on launch failed', error as Error)
+
+        const defaultMessage = i18n.t('settings.about.updateError')
+        const errorMessage = error instanceof Error ? error.message : defaultMessage
+
+        if (window.modal?.info) {
+          window.modal.info({
+            title: defaultMessage,
+            content: errorMessage,
+            icon: null
+          })
+        } else {
+          window.toast?.error(errorMessage)
+        }
       }
     })
-  }, [dispatch])
+  }, [autoCheckUpdate, dispatch, isProxyInitialized])
 
   useEffect(() => {
-    if (proxyMode === 'system') {
-      window.api.setProxy('system', undefined)
-    } else if (proxyMode === 'custom') {
-      proxyUrl && window.api.setProxy(proxyUrl, proxyBypassRules)
-    } else {
-      // set proxy to none for direct mode
-      window.api.setProxy('', undefined)
+    let cancelled = false
+
+    runAsyncFunction(async () => {
+      try {
+        if (proxyMode === 'system') {
+          await window.api.setProxy('system', undefined)
+        } else if (proxyMode === 'custom') {
+          if (proxyUrl) {
+            await window.api.setProxy(proxyUrl, proxyBypassRules)
+          }
+        } else {
+          // set proxy to none for direct mode
+          await window.api.setProxy('', undefined)
+        }
+      } catch (error) {
+        logger.error('Failed to apply proxy settings', error as Error)
+      } finally {
+        if (!cancelled) {
+          setIsProxyInitialized(true)
+        }
+      }
+    })
+
+    return () => {
+      cancelled = true
     }
   }, [proxyUrl, proxyMode, proxyBypassRules])
 

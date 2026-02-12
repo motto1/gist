@@ -76,12 +76,18 @@ export default function useUpdateHandler() {
             downloadProgress: 0
           })
         )
-        if (window.location.hash.includes('settings/about')) {
+
+        const defaultMessage = t('settings.about.updateError')
+        const errorMessage = error?.message || defaultMessage
+
+        if (window.modal?.info) {
           window.modal.info({
-            title: t('settings.about.updateError'),
-            content: error?.message || t('settings.about.updateError'),
+            title: defaultMessage,
+            content: errorMessage,
             icon: null
           })
+        } else {
+          window.toast?.error(errorMessage)
         }
       })
     ]
