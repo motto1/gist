@@ -482,21 +482,42 @@ jobs:
           RELEASE_DETAIL=$(curl "${CURL_API_OPTS[@]}" -G "${API_BASE}/releases/${RELEASE_ID}" \
             --data-urlencode "access_token=${GITEE_TOKEN}")
 
+          MAX_GITEE_ASSET_SIZE=$((100 * 1024 * 1024))
+          GITHUB_DOWNLOAD_REPO="motto1/gist-downloads"
+          FALLBACK_LINKS=()
+
           upload_with_retry() {
             local file="$1"
             local name="$2"
             local attempt
+            local resp_file
+            local http_code
 
             for attempt in 1 2 3; do
               echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Uploading ${name} (attempt ${attempt}/3)"
-              if curl "${CURL_API_OPTS[@]}" \
+              resp_file=$(mktemp)
+              http_code=$(curl --silent --show-error \
+                --retry 2 \
+                --retry-all-errors \
+                --retry-delay 5 \
+                --retry-max-time 300 \
+                --connect-timeout 30 \
                 --max-time 7200 \
+                --write-out "%{http_code}" \
+                --output "${resp_file}" \
                 -X POST "${API_BASE}/releases/${RELEASE_ID}/attach_files" \
                 -F "access_token=${GITEE_TOKEN}" \
-                -F "file=@${file}" >/dev/null; then
+                -F "file=@${file}" || true)
+
+              if [[ "${http_code}" =~ ^2 ]]; then
+                rm -f "${resp_file}"
                 echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Upload success: ${name}"
                 return 0
               fi
+
+              echo "Upload response code=${http_code} for ${name}"
+              head -c 500 "${resp_file}" || true
+              rm -f "${resp_file}"
 
               if [ "${attempt}" -lt 3 ]; then
                 local backoff=$((attempt * 30))
@@ -510,8 +531,16 @@ jobs:
 
           for file in artifacts/*.exe; do
             name="$(basename "$file")"
+            size_bytes=$(stat -c%s "$file")
             start_ts=$(date +%s)
-            echo "Preparing upload: ${name}"
+            echo "Preparing upload: ${name}, size=${size_bytes} bytes"
+
+            if [ "${size_bytes}" -gt "${MAX_GITEE_ASSET_SIZE}" ]; then
+              fallback_url="https://github.com/${GITHUB_DOWNLOAD_REPO}/releases/download/${TAG}/${name}"
+              echo "Skip direct upload (>100MB): ${name}"
+              FALLBACK_LINKS+=("- ${name}: ${fallback_url}")
+              continue
+            fi
 
             existing_id=$(printf '%s' "$RELEASE_DETAIL" | jq -r --arg name "$name" '.assets[]? | select(.name == $name) | .id' | head -n 1)
             if [ -n "${existing_id}" ]; then
@@ -532,5 +561,20 @@ jobs:
             RELEASE_DETAIL=$(curl "${CURL_API_OPTS[@]}" -G "${API_BASE}/releases/${RELEASE_ID}" \
               --data-urlencode "access_token=${GITEE_TOKEN}")
           done
+
+          if [ "${#FALLBACK_LINKS[@]}" -gt 0 ]; then
+            echo "Applying fallback download links for large files"
+            EXTRA_SECTION=$'\n\n## 大文件下载（GitHub）\n'
+            EXTRA_SECTION+=$'由于 Gitee Release 单文件大小限制为 100 MB，以下安装包使用 GitHub 公共下载链接：\n'
+            for link in "${FALLBACK_LINKS[@]}"; do
+              EXTRA_SECTION+="${link}"$'\n'
+            done
+
+            FINAL_BODY="${BODY}${EXTRA_SECTION}"
+            curl "${CURL_API_OPTS[@]}" -X PATCH "${API_BASE}/releases/${RELEASE_ID}" \
+              --data-urlencode "access_token=${GITEE_TOKEN}" \
+              --data-urlencode "name=${TITLE}" \
+              --data-urlencode "body=${FINAL_BODY}" >/dev/null
+          fi
 
           echo "Gitee release sync completed: ${OWNER}/${REPO} ${TAG}"
