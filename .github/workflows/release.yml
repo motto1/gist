@@ -209,7 +209,7 @@ jobs:
           Copy-Item -Path $setup -Destination "artifacts/gist-$version-x64-setup-${{ matrix.edition }}.exe" -Force
 
       - name: Upload ${{ matrix.edition }} installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: installer-${{ matrix.edition }}
           path: artifacts/*.exe
