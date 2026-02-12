@@ -112,84 +112,10 @@ jobs:
 
           echo "Resolved release: base=${BASE_VERSION}, bump=${BUMP}, next=${NEXT_VERSION}"
 
-  build-windows-bundles:
+  package-windows:
     needs: prepare
     runs-on: windows-latest
-    timeout-minutes: 120
-
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      NODE_OPTIONS: --max-old-space-size=8192
-
-    steps:
-      - name: Check out Git repository
-        uses: actions/checkout@v5
-
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install corepack
-        run: corepack enable && corepack prepare yarn@4.9.1 --activate
-
-      - name: Set package.json version
-        shell: bash
-        run: |
-          npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version --allow-same-version
-
-      - name: Resolve cache paths
-        id: cache-paths
-        shell: pwsh
-        run: |
-          "yarn_cache=$(yarn config get cacheFolder)" >> $env:GITHUB_OUTPUT
-          "electron_cache=$env:LOCALAPPDATA\electron\Cache" >> $env:GITHUB_OUTPUT
-          "electron_builder_cache=$env:LOCALAPPDATA\electron-builder\Cache" >> $env:GITHUB_OUTPUT
-          "node_gyp_cache=$env:LOCALAPPDATA\node-gyp\Cache" >> $env:GITHUB_OUTPUT
-
-      - name: Cache yarn dependencies and native cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ steps.cache-paths.outputs.yarn_cache }}
-            node_modules
-            ${{ steps.cache-paths.outputs.node_gyp_cache }}
-          key: ${{ runner.os }}-node20-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-node20-yarn-
-
-      - name: Cache electron binaries
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ steps.cache-paths.outputs.electron_cache }}
-            ${{ steps.cache-paths.outputs.electron_builder_cache }}
-          key: ${{ runner.os }}-node20-electron-${{ hashFiles('**/yarn.lock', 'package.json', 'electron-builder.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-node20-electron-
-
-      - name: Install Dependencies
-        run: yarn install
-
-      - name: Build app bundles (once)
-        run: yarn build
-
-      - name: Upload prebuilt bundles
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-bundles
-          path: |
-            out/**
-            packages/**/dist/**
-          if-no-files-found: error
-          retention-days: 1
-
-  package-windows:
-    needs:
-      - prepare
-      - build-windows-bundles
-    runs-on: windows-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -253,19 +179,8 @@ jobs:
       - name: Install Dependencies
         run: yarn install
 
-      - name: Download prebuilt bundles
-        uses: actions/download-artifact@v4
-        with:
-          name: app-bundles
-          path: .
-
-      - name: Validate prebuilt bundles
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "out")) {
-            throw "Missing prebuilt 'out' directory."
-          }
-          Get-ChildItem -Path out -Recurse -File | Select-Object -First 5 FullName
+      - name: Build app bundles
+        run: yarn build
 
       - name: Package ${{ matrix.edition }} edition
         shell: pwsh
@@ -276,7 +191,6 @@ jobs:
           $env:APP_EDITION = "${{ matrix.edition }}"
           $env:BUILD_VOICE = "${{ matrix.voice }}"
           Remove-Item Env:BUILD_SUFFIX -ErrorAction SilentlyContinue
-
           yarn run electron-builder --win --x64 --publish never --config.directories.output="$outDir"
 
       - name: Collect ${{ matrix.edition }} installer
@@ -512,6 +426,19 @@ jobs:
 
           echo "Syncing ${TAG} to Gitee repo: ${OWNER}/${REPO}"
 
+          TARGET_COMMITISH=$(curl -sS -G "${API_BASE}" \
+            --data-urlencode "access_token=${GITEE_TOKEN}" | jq -r '.default_branch // empty')
+
+          if [ -z "${TARGET_COMMITISH}" ]; then
+            TARGET_COMMITISH=$(curl -sS -G "${API_BASE}/branches" \
+              --data-urlencode "access_token=${GITEE_TOKEN}" | jq -r '.[0].name // empty')
+          fi
+
+          if [ -z "${TARGET_COMMITISH}" ]; then
+            echo "::error::Gitee repo has no branch. Please initialize ${OWNER}/${REPO} with at least one commit (main/master)."
+            exit 1
+          fi
+
           RELEASE_ID=$(curl -sS -G "${API_BASE}/releases/tags/${TAG}" \
             --data-urlencode "access_token=${GITEE_TOKEN}" | jq -r '.id // empty')
 
@@ -526,6 +453,7 @@ jobs:
             curl -sS -X POST "${API_BASE}/releases" \
               --data-urlencode "access_token=${GITEE_TOKEN}" \
               --data-urlencode "tag_name=${TAG}" \
+              --data-urlencode "target_commitish=${TARGET_COMMITISH}" \
               --data-urlencode "name=${TITLE}" \
               --data-urlencode "body=${BODY}" > gitee-release.json
           fi
