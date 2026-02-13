@@ -16,14 +16,27 @@ export class PortalSafePointerSensor extends PointerSensor {
     {
       eventName: 'onPointerDown',
       handler: ({ nativeEvent: event }) => {
-        let target = event.target as HTMLElement
+        const target = event.target as HTMLElement | null
 
-        while (target) {
-          if (target.closest(PORTAL_NO_DND_SELECTORS) || target.dataset?.noDnd) {
-            return false
-          }
-          target = target.parentElement as HTMLElement
+        if (!target) {
+          return true
         }
+
+        // Explicit opt-out always wins
+        if (target.closest('[data-no-dnd]')) {
+          return false
+        }
+
+        // Explicit opt-in (used when we intentionally render Sortable inside portals like dropdown/select)
+        if (target.closest('[data-allow-dnd]')) {
+          return true
+        }
+
+        // Default: block dragging inside common portal containers
+        if (target.closest(PORTAL_NO_DND_SELECTORS)) {
+          return false
+        }
+
         return true
       }
     }

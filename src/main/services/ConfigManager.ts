@@ -18,6 +18,7 @@ export enum ConfigKeys {
   EnableQuickAssistant = 'enableQuickAssistant',
   AutoUpdate = 'autoUpdate',
   UpdateAcceleratorPrefixes = 'updateAcceleratorPrefixes',
+  UpdateAcceleratorOrder = 'updateAcceleratorOrder',
   TestPlan = 'testPlan',
   TestChannel = 'testChannel',
   EnableDataCollection = 'enableDataCollection',
@@ -33,7 +34,9 @@ export enum ConfigKeys {
   ClientId = 'clientId'
 }
 
-export const DEFAULT_UPDATE_ACCELERATOR_PREFIXES = ['https://ghfast.top/']
+export const DEFAULT_UPDATE_ACCELERATOR_PREFIXES = ['https://gh.felicity.ac.cn/', 'https://ghfast.top/']
+export const UPDATE_ACCELERATOR_NATIVE_SOURCE = 'native'
+export const DEFAULT_UPDATE_ACCELERATOR_ORDER = [...DEFAULT_UPDATE_ACCELERATOR_PREFIXES, UPDATE_ACCELERATOR_NATIVE_SOURCE]
 
 function normalizeUpdateAcceleratorPrefix(prefix: string): string | null {
   const normalized = String(prefix || '').trim()
@@ -64,6 +67,46 @@ function normalizeUpdateAcceleratorPrefixes(prefixes: string[]): string[] {
 
     seen.add(normalized)
     result.push(normalized)
+  }
+
+  return result
+}
+
+function normalizeUpdateAcceleratorOrder(order: string[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+
+  for (const item of order) {
+    const raw = String(item || '').trim()
+
+    if (!raw) {
+      continue
+    }
+
+    if (raw === UPDATE_ACCELERATOR_NATIVE_SOURCE) {
+      if (seen.has(raw)) {
+        continue
+      }
+      seen.add(raw)
+      result.push(raw)
+      continue
+    }
+
+    const normalizedPrefix = normalizeUpdateAcceleratorPrefix(raw)
+    if (!normalizedPrefix) {
+      continue
+    }
+
+    if (seen.has(normalizedPrefix)) {
+      continue
+    }
+
+    seen.add(normalizedPrefix)
+    result.push(normalizedPrefix)
+  }
+
+  if (!seen.has(UPDATE_ACCELERATOR_NATIVE_SOURCE)) {
+    result.push(UPDATE_ACCELERATOR_NATIVE_SOURCE)
   }
 
   return result
@@ -185,26 +228,41 @@ export class ConfigManager {
     this.set(ConfigKeys.AutoUpdate, value)
   }
 
-  getUpdateAcceleratorPrefixes(): string[] {
+  private getStoredUpdateAcceleratorPrefixes(): string[] {
     const raw = this.get<string[] | string>(ConfigKeys.UpdateAcceleratorPrefixes)
     const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : []
-    const normalized = normalizeUpdateAcceleratorPrefixes(list)
+    return normalizeUpdateAcceleratorPrefixes(list)
+  }
 
-    if (normalized.length > 0) {
-      return normalized
+  getUpdateAcceleratorOrder(): string[] {
+    const raw = this.get<string[] | string>(ConfigKeys.UpdateAcceleratorOrder)
+
+    if (raw === undefined) {
+      const storedPrefixes = this.getStoredUpdateAcceleratorPrefixes()
+      const prefixes = storedPrefixes.length > 0 ? storedPrefixes : [...DEFAULT_UPDATE_ACCELERATOR_PREFIXES]
+      return normalizeUpdateAcceleratorOrder([...prefixes, UPDATE_ACCELERATOR_NATIVE_SOURCE])
     }
 
-    return [...DEFAULT_UPDATE_ACCELERATOR_PREFIXES]
+    const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : []
+    return normalizeUpdateAcceleratorOrder(list)
+  }
+
+  setUpdateAcceleratorOrder(value: string[]) {
+    const normalizedOrder = normalizeUpdateAcceleratorOrder(value)
+    this.set(ConfigKeys.UpdateAcceleratorOrder, normalizedOrder)
+
+    // 同步一份 prefixes（兼容旧逻辑/外部依赖）
+    const prefixesOnly = normalizedOrder.filter((item) => item !== UPDATE_ACCELERATOR_NATIVE_SOURCE)
+    this.set(ConfigKeys.UpdateAcceleratorPrefixes, prefixesOnly)
+  }
+
+  getUpdateAcceleratorPrefixes(): string[] {
+    return this.getUpdateAcceleratorOrder().filter((item) => item !== UPDATE_ACCELERATOR_NATIVE_SOURCE)
   }
 
   setUpdateAcceleratorPrefixes(value: string[]) {
     const normalized = normalizeUpdateAcceleratorPrefixes(value)
-    if (normalized.length === 0) {
-      this.set(ConfigKeys.UpdateAcceleratorPrefixes, [...DEFAULT_UPDATE_ACCELERATOR_PREFIXES])
-      return
-    }
-
-    this.set(ConfigKeys.UpdateAcceleratorPrefixes, normalized)
+    this.setUpdateAcceleratorOrder([...normalized, UPDATE_ACCELERATOR_NATIVE_SOURCE])
   }
 
   getTestPlan(): boolean {

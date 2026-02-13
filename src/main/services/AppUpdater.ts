@@ -6,8 +6,10 @@ import { isWin } from '@main/constant'
 import { locales } from '@main/utils/locales'
 import { generateUserAgent } from '@main/utils/systemInfo'
 import { IpcChannel } from '@shared/IpcChannel'
+import * as cheerio from 'cheerio'
 import { app, BrowserWindow, dialog, shell } from 'electron'
 import { AppUpdater as _AppUpdater, autoUpdater, Logger, NsisUpdater, UpdateCheckResult, UpdateInfo } from 'electron-updater'
+import TurndownService from 'turndown'
 
 import icon from '../../../build/icon.ico?asset'
 import { configManager } from './ConfigManager'
@@ -92,6 +94,7 @@ export default class AppUpdater {
   private updateSource: UpdateSource = null
   private manualDownloadUrl: string | null = null
   private manualDownloadFallbackUrl: string | null = null
+  private manualDownloadNativeUrl: string | null = null
 
   constructor() {
     autoUpdater.logger = logger as Logger
@@ -131,6 +134,7 @@ export default class AppUpdater {
       this.updateSource = 'electron-updater'
       this.manualDownloadUrl = null
       this.manualDownloadFallbackUrl = null
+      this.manualDownloadNativeUrl = null
       logger.info('update downloaded', releaseInfo)
     })
 
@@ -156,6 +160,7 @@ export default class AppUpdater {
     const currentVersion = app.getVersion()
     this.manualDownloadUrl = null
     this.manualDownloadFallbackUrl = null
+    this.manualDownloadNativeUrl = null
 
     try {
       const latestRelease = await this.fetchLatestPublicRelease()
@@ -180,6 +185,7 @@ export default class AppUpdater {
       }
 
       const nativeDownloadUrl = installer.browser_download_url
+      this.manualDownloadNativeUrl = nativeDownloadUrl
       const { preferredDownloadUrl, fallbackDownloadUrl } = await this.resolvePreferredDownloadUrl(nativeDownloadUrl)
 
       const releaseInfo = this.buildPublicReleaseInfo(latestRelease, latestVersion, installer, preferredDownloadUrl)
@@ -209,6 +215,7 @@ export default class AppUpdater {
     } catch (error) {
       this.releaseInfo = undefined
       this.updateSource = null
+      this.manualDownloadNativeUrl = null
       logger.error('failed to check updates from public releases', error as Error)
       windowService.getMainWindow()?.webContents.send(IpcChannel.UpdateError, error)
       return {
@@ -247,6 +254,16 @@ export default class AppUpdater {
           return
         }
 
+        if (this.updateSource === 'public-release' && this.manualDownloadNativeUrl) {
+          // 用户可能在检测更新后调整了优先级；此处按最新配置重新选择下载地址
+          const { preferredDownloadUrl, fallbackDownloadUrl } = await this.resolvePreferredDownloadUrl(
+            this.manualDownloadNativeUrl
+          )
+          const downloadUrl = await this.resolveDownloadUrl(preferredDownloadUrl, fallbackDownloadUrl)
+          await shell.openExternal(downloadUrl)
+          return
+        }
+
         if (this.updateSource === 'public-release' && this.manualDownloadUrl) {
           const downloadUrl = await this.resolveDownloadUrl(this.manualDownloadUrl, this.manualDownloadFallbackUrl)
           await shell.openExternal(downloadUrl)
@@ -259,17 +276,20 @@ export default class AppUpdater {
   }
 
   private async fetchLatestPublicRelease(): Promise<GithubRelease> {
-    const acceleratorPrefixes = configManager.getUpdateAcceleratorPrefixes()
-    const fetchers = [
-      ...acceleratorPrefixes.map((prefix, index) => ({
-        source: `accelerated-${index + 1}`,
-        run: () => this.fetchLatestPublicReleaseFromAcceleratedLatestPage(prefix)
-      })),
-      {
-        source: 'github',
-        run: () => this.fetchLatestPublicReleaseFromApi(PUBLIC_RELEASE_API, 'github')
+    const acceleratorOrder = configManager.getUpdateAcceleratorOrder()
+    const fetchers = acceleratorOrder.map((source, index) => {
+      if (source === 'native') {
+        return {
+          source: 'github',
+          run: () => this.fetchLatestPublicReleaseFromApi(PUBLIC_RELEASE_API, 'github')
+        }
       }
-    ]
+
+      return {
+        source: `accelerated-${index + 1}`,
+        run: () => this.fetchLatestPublicReleaseFromAcceleratedLatestPage(source)
+      }
+    })
 
     let lastError: unknown = null
 
@@ -319,13 +339,44 @@ export default class AppUpdater {
         throw new Error(`[accelerated:${prefix}] invalid release tag`)
       }
 
-      logger.info('fetched latest release from accelerated latest page', { prefix, finalUrl, tagName })
+      const html = await response.text()
+
+      let releaseBody: string | null = null
+      let publishedAt: string | null = null
+
+      try {
+        const $ = cheerio.load(html)
+        const notesEl = $('div[data-test-selector="body-content"].markdown-body').first()
+        const notesHtml = notesEl.length > 0 ? notesEl.html() : null
+
+        if (notesHtml && notesHtml.trim().length > 0) {
+          const turndownService = new TurndownService()
+          const markdown = turndownService.turndown(notesHtml)
+          const normalizedMarkdown = markdown.trim()
+          releaseBody = normalizedMarkdown.length > 0 ? normalizedMarkdown : null
+        }
+
+        const datetime = $('relative-time[datetime]').first().attr('datetime')
+        publishedAt = datetime ? String(datetime) : null
+      } catch (error) {
+        logger.warn('failed to parse release notes from accelerated html', {
+          prefix,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+
+      logger.info('fetched latest release from accelerated latest page', {
+        prefix,
+        finalUrl,
+        tagName,
+        hasReleaseBody: Boolean(releaseBody)
+      })
 
       return {
         tag_name: tagName,
         name: `Release v${version}`,
-        body: null,
-        published_at: null,
+        body: releaseBody,
+        published_at: publishedAt,
         assets: this.buildAssetsFromReleaseTag(tagName)
       }
     } finally {
@@ -400,10 +451,17 @@ export default class AppUpdater {
   private async resolvePreferredDownloadUrl(
     nativeDownloadUrl: string
   ): Promise<{ preferredDownloadUrl: string; fallbackDownloadUrl: string | null }> {
-    const acceleratorPrefixes = configManager.getUpdateAcceleratorPrefixes()
+    const acceleratorOrder = configManager.getUpdateAcceleratorOrder()
 
-    for (const prefix of acceleratorPrefixes) {
-      const acceleratedUrl = toAcceleratedUrl(nativeDownloadUrl, prefix)
+    for (const source of acceleratorOrder) {
+      if (source === 'native') {
+        return {
+          preferredDownloadUrl: nativeDownloadUrl,
+          fallbackDownloadUrl: null
+        }
+      }
+
+      const acceleratedUrl = toAcceleratedUrl(nativeDownloadUrl, source)
       const isAvailable = await this.canAccessUrl(acceleratedUrl)
 
       if (isAvailable) {
@@ -414,7 +472,7 @@ export default class AppUpdater {
       }
 
       logger.warn('accelerated download url unavailable during update check', {
-        prefix,
+        prefix: source,
         acceleratedUrl,
         nativeDownloadUrl
       })

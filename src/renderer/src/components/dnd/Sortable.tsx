@@ -45,6 +45,8 @@ interface SortableProps<T> {
   onDragStart?: (event: { active: Active }) => void
   /** Callback when drag ends, will be passed to dnd-kit's onDragEnd */
   onDragEnd?: (event: { over: Over }) => void
+  /** Callback when drag is cancelled, will be passed to dnd-kit's onDragCancel */
+  onDragCancel?: () => void
   /** Function to render individual item, receives item data and drag state */
   renderItem: RenderItemType<T>
   /** Layout type - 'list' for vertical/horizontal list, 'grid' for grid layout */
@@ -80,6 +82,7 @@ function Sortable<T>({
   onSortEnd,
   onDragStart: customOnDragStart,
   onDragEnd: customOnDragEnd,
+  onDragCancel: customOnDragCancel,
   renderItem,
   layout = 'list',
   horizontal = false,
@@ -144,6 +147,7 @@ function Sortable<T>({
 
   const handleDragCancel = () => {
     setActiveId(null)
+    customOnDragCancel?.()
   }
 
   const strategy =
