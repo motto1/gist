@@ -260,13 +260,13 @@ jobs:
           cat release-notes.md
 
       - name: Download pro installer artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: installer-pro
           path: artifacts
 
       - name: Download basic installer artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: installer-basic
           path: artifacts
