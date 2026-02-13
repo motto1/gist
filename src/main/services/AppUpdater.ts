@@ -17,6 +17,7 @@ const logger = loggerService.withContext('AppUpdater')
 
 const PUBLIC_DOWNLOADS_REPO = 'motto1/gist-downloads'
 const PUBLIC_RELEASE_API = `https://api.github.com/repos/${PUBLIC_DOWNLOADS_REPO}/releases/latest`
+const GITHUB_ACCELERATOR_PREFIX = 'https://github.abskoop.workers.dev/'
 
 type AppEdition = 'basic' | 'pro'
 type UpdateSource = 'electron-updater' | 'public-release' | null
@@ -69,12 +70,25 @@ function compareVersions(left: string, right: string): number {
   return a.prerelease.localeCompare(b.prerelease)
 }
 
+function toAcceleratedUrl(url: string): string {
+  if (!url) {
+    return url
+  }
+
+  if (url.startsWith(GITHUB_ACCELERATOR_PREFIX)) {
+    return url
+  }
+
+  return `${GITHUB_ACCELERATOR_PREFIX}${url}`
+}
+
 export default class AppUpdater {
   autoUpdater: _AppUpdater = autoUpdater
   private releaseInfo: UpdateInfo | undefined
   private updateCheckResult: UpdateCheckResult | null = null
   private updateSource: UpdateSource = null
   private manualDownloadUrl: string | null = null
+  private manualDownloadFallbackUrl: string | null = null
 
   constructor() {
     autoUpdater.logger = logger as Logger
@@ -113,6 +127,7 @@ export default class AppUpdater {
       this.releaseInfo = releaseInfo
       this.updateSource = 'electron-updater'
       this.manualDownloadUrl = null
+      this.manualDownloadFallbackUrl = null
       logger.info('update downloaded', releaseInfo)
     })
 
@@ -136,6 +151,8 @@ export default class AppUpdater {
 
   public async checkForUpdates() {
     const currentVersion = app.getVersion()
+    this.manualDownloadUrl = null
+    this.manualDownloadFallbackUrl = null
 
     try {
       const latestRelease = await this.fetchLatestPublicRelease()
@@ -143,6 +160,8 @@ export default class AppUpdater {
 
       if (compareVersions(latestVersion, currentVersion) <= 0) {
         logger.info('no update found on public releases', { currentVersion, latestVersion })
+        this.releaseInfo = undefined
+        this.updateSource = null
         windowService.getMainWindow()?.webContents.send(IpcChannel.UpdateNotAvailable)
         return {
           currentVersion,
@@ -157,16 +176,33 @@ export default class AppUpdater {
         throw new Error(`No installer asset found for edition=${edition} in ${PUBLIC_DOWNLOADS_REPO}`)
       }
 
-      const releaseInfo = this.buildPublicReleaseInfo(latestRelease, latestVersion, installer)
+      const nativeDownloadUrl = installer.browser_download_url
+      const acceleratedDownloadUrl = toAcceleratedUrl(nativeDownloadUrl)
+
+      const isAcceleratedAvailable = await this.canAccessUrl(acceleratedDownloadUrl)
+      const preferredDownloadUrl = isAcceleratedAvailable ? acceleratedDownloadUrl : nativeDownloadUrl
+      const fallbackDownloadUrl = isAcceleratedAvailable ? nativeDownloadUrl : null
+
+      if (!isAcceleratedAvailable) {
+        logger.warn('accelerated download url unavailable during update check, use native github url', {
+          acceleratedDownloadUrl,
+          nativeDownloadUrl
+        })
+      }
+
+      const releaseInfo = this.buildPublicReleaseInfo(latestRelease, latestVersion, installer, preferredDownloadUrl)
       this.releaseInfo = releaseInfo
       this.updateSource = 'public-release'
-      this.manualDownloadUrl = installer.browser_download_url
+      this.manualDownloadUrl = preferredDownloadUrl
+      this.manualDownloadFallbackUrl = fallbackDownloadUrl
 
       logger.info('update available from public releases', {
         currentVersion,
         latestVersion,
         edition,
-        installer: installer.name
+        installer: installer.name,
+        preferredDownloadUrl,
+        fallbackDownloadUrl
       })
 
       // 触发“可用更新”通知
@@ -179,6 +215,8 @@ export default class AppUpdater {
         updateInfo: releaseInfo
       }
     } catch (error) {
+      this.releaseInfo = undefined
+      this.updateSource = null
       logger.error('failed to check updates from public releases', error as Error)
       windowService.getMainWindow()?.webContents.send(IpcChannel.UpdateError, error)
       return {
@@ -218,7 +256,8 @@ export default class AppUpdater {
         }
 
         if (this.updateSource === 'public-release' && this.manualDownloadUrl) {
-          await shell.openExternal(this.manualDownloadUrl)
+          const downloadUrl = await this.resolveDownloadUrl(this.manualDownloadUrl, this.manualDownloadFallbackUrl)
+          await shell.openExternal(downloadUrl)
           return
         }
 
@@ -228,6 +267,95 @@ export default class AppUpdater {
   }
 
   private async fetchLatestPublicRelease(): Promise<GithubRelease> {
+    const fetchers = [
+      {
+        source: 'accelerated',
+        run: () => this.fetchLatestPublicReleaseFromAcceleratedLatestPage()
+      },
+      {
+        source: 'github',
+        run: () => this.fetchLatestPublicReleaseFromApi(PUBLIC_RELEASE_API, 'github')
+      }
+    ]
+
+    let lastError: unknown = null
+
+    for (const fetcher of fetchers) {
+      try {
+        return await fetcher.run()
+      } catch (error) {
+        lastError = error
+        logger.warn('fetch latest release from candidate failed', {
+          source: fetcher.source,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('Failed to fetch latest release')
+  }
+
+  private async fetchLatestPublicReleaseFromAcceleratedLatestPage(): Promise<GithubRelease> {
+    const acceleratedLatestUrl = toAcceleratedUrl(`https://github.com/${PUBLIC_DOWNLOADS_REPO}/releases/latest`)
+    const abortController = new AbortController()
+    const timeout = setTimeout(() => abortController.abort(), 20_000)
+
+    try {
+      const response = await fetch(acceleratedLatestUrl, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: abortController.signal,
+        headers: {
+          'User-Agent': generateUserAgent()
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`[accelerated] latest release page request failed: ${response.status} ${response.statusText}`)
+      }
+
+      const finalUrl = response.url || acceleratedLatestUrl
+      const tagMatch = finalUrl.match(/\/releases\/tag\/([^/?#]+)/)
+      if (!tagMatch || !tagMatch[1]) {
+        throw new Error('[accelerated] failed to parse release tag from redirect url')
+      }
+
+      const tagName = decodeURIComponent(tagMatch[1])
+      const version = normalizeVersion(tagName)
+      if (!version) {
+        throw new Error('[accelerated] invalid release tag')
+      }
+
+      logger.info('fetched latest release from accelerated latest page', { finalUrl, tagName })
+
+      return {
+        tag_name: tagName,
+        name: `Release v${version}`,
+        body: null,
+        published_at: null,
+        assets: this.buildAssetsFromReleaseTag(tagName)
+      }
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
+  private buildAssetsFromReleaseTag(tagName: string): GithubReleaseAsset[] {
+    const normalizedVersion = normalizeVersion(tagName)
+    const normalizedTag = String(tagName || '').trim()
+    const releaseTag = normalizedTag.length > 0 ? normalizedTag : `v${normalizedVersion}`
+
+    return ['basic', 'pro'].map((edition) => {
+      const name = `gist-${normalizedVersion}-x64-setup-${edition}.exe`
+      const nativeUrl = `https://github.com/${PUBLIC_DOWNLOADS_REPO}/releases/download/${releaseTag}/${name}`
+      return {
+        name,
+        browser_download_url: nativeUrl
+      }
+    })
+  }
+
+  private async fetchLatestPublicReleaseFromApi(apiUrl: string, source: string): Promise<GithubRelease> {
     const maxAttempts = 2
     let lastError: unknown = null
 
@@ -236,7 +364,7 @@ export default class AppUpdater {
       const timeout = setTimeout(() => abortController.abort(), 20_000)
 
       try {
-        const response = await fetch(PUBLIC_RELEASE_API, {
+        const response = await fetch(apiUrl, {
           method: 'GET',
           headers: {
             Accept: 'application/vnd.github+json',
@@ -246,32 +374,86 @@ export default class AppUpdater {
         })
 
         if (!response.ok) {
-          throw new Error(`GitHub releases request failed: ${response.status} ${response.statusText}`)
+          throw new Error(`[${source}] releases request failed: ${response.status} ${response.statusText}`)
         }
 
         const data = (await response.json()) as GithubRelease
         if (!data || !data.tag_name) {
-          throw new Error('Invalid release payload from GitHub')
+          throw new Error(`[${source}] invalid release payload`)
         }
 
+        logger.info('fetched latest release from source', { source, apiUrl })
         return data
       } catch (error) {
         lastError = error
 
         if (attempt < maxAttempts) {
           logger.warn('fetch latest release failed, retrying', {
+            source,
+            apiUrl,
             attempt,
             error: error instanceof Error ? error.message : String(error)
           })
           await new Promise((resolve) => setTimeout(resolve, 1_000))
-          continue
         }
       } finally {
         clearTimeout(timeout)
       }
     }
 
-    throw lastError instanceof Error ? lastError : new Error('Failed to fetch latest release')
+    throw lastError instanceof Error ? lastError : new Error(`[${source}] failed to fetch latest release`)
+  }
+
+  private async resolveDownloadUrl(primaryUrl: string, fallbackUrl: string | null): Promise<string> {
+    if (!fallbackUrl || primaryUrl === fallbackUrl) {
+      return primaryUrl
+    }
+
+    const isPrimaryAvailable = await this.canAccessUrl(primaryUrl)
+    if (isPrimaryAvailable) {
+      return primaryUrl
+    }
+
+    logger.warn('accelerated download url unavailable, fallback to native github url', {
+      primaryUrl,
+      fallbackUrl
+    })
+    return fallbackUrl
+  }
+
+  private async canAccessUrl(url: string): Promise<boolean> {
+    const abortController = new AbortController()
+    const timeout = setTimeout(() => abortController.abort(), 8_000)
+
+    try {
+      const response = await fetch(url, {
+        method: 'HEAD',
+        redirect: 'follow',
+        signal: abortController.signal,
+        headers: {
+          'User-Agent': generateUserAgent()
+        }
+      })
+
+      if (response.ok) {
+        return true
+      }
+
+      // 某些代理不支持 HEAD（405）或需要浏览器处理鉴权（403），视为可用
+      if (response.status === 405 || response.status === 403) {
+        return true
+      }
+
+      return false
+    } catch (error) {
+      logger.warn('probe download url failed', {
+        url,
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return false
+    } finally {
+      clearTimeout(timeout)
+    }
   }
 
   private getCurrentEdition(): AppEdition {
@@ -301,7 +483,12 @@ export default class AppUpdater {
     return fallback || null
   }
 
-  private buildPublicReleaseInfo(release: GithubRelease, version: string, asset: GithubReleaseAsset): UpdateInfo {
+  private buildPublicReleaseInfo(
+    release: GithubRelease,
+    version: string,
+    asset: GithubReleaseAsset,
+    downloadUrl: string = asset.browser_download_url
+  ): UpdateInfo {
     const releaseDate = release.published_at || new Date().toISOString()
     const releaseNotes = release.body && release.body.trim().length > 0 ? release.body : null
 
@@ -309,7 +496,7 @@ export default class AppUpdater {
       version,
       files: [
         {
-          url: asset.browser_download_url,
+          url: downloadUrl,
           sha512: '',
           size: asset.size
         }
