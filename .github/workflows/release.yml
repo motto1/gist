@@ -138,6 +138,15 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            resources/gist-video/backend/requirements-dev.txt
+            scripts/build-gist-video-backend.js
+
       - name: Install corepack
         run: corepack enable && corepack prepare yarn@4.9.1 --activate
 
@@ -177,7 +186,7 @@ jobs:
             ${{ runner.os }}-node20-electron-
 
       - name: Install Dependencies
-        run: yarn install
+        run: yarn install --immutable
 
       - name: Build app bundles
         run: yarn build

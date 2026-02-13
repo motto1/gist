@@ -123,8 +123,8 @@ exports.default = async function (context) {
       )
     }
 
-    // Always rebuild in packaging to avoid shipping a stale backend executable after backend code changes.
-    process.env.GIST_VIDEO_FORCE_REBUILD = '1'
+    // build-gist-video-backend 默认会在输出存在时复用产物；
+    // 如需强制重建可显式设置 GIST_VIDEO_FORCE_REBUILD=1。
     const buildGistVideoBackend = require('./build-gist-video-backend')
     await buildGistVideoBackend()
   }

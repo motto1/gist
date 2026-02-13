@@ -1,4 +1,5 @@
 const cp = require('child_process')
+const crypto = require('crypto')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
@@ -35,6 +36,85 @@ function resolveBackendRoot() {
 function resolveVenvPython(venvDir) {
   if (process.platform === 'win32') return path.join(venvDir, 'Scripts', 'python.exe')
   return path.join(venvDir, 'bin', 'python')
+}
+
+function isSignatureTrackedFile(relPath) {
+  if (relPath === '_backend_entry.py') return true
+  if (/^requirements.*\.txt$/i.test(relPath)) return true
+  if (/^app\/.+\.(py|json|ya?ml|toml|ini|cfg|txt)$/i.test(relPath)) return true
+  return false
+}
+
+function listFilesRecursively(rootDir, currentDir = rootDir) {
+  const entries = fs.readdirSync(currentDir, { withFileTypes: true })
+  const files = []
+
+  const ignoredDirs = new Set([
+    '.git',
+    '.venv',
+    '.pytest_cache',
+    '__pycache__',
+    'venv',
+    'gist-video-backend',
+    'build',
+    'dist',
+    'data',
+    'm3e-small',
+    'bin'
+  ])
+
+  for (const entry of entries) {
+    const absPath = path.join(currentDir, entry.name)
+    const relPath = path.relative(rootDir, absPath).replace(/\\/g, '/')
+
+    if (entry.isDirectory()) {
+      if (ignoredDirs.has(entry.name)) continue
+      files.push(...listFilesRecursively(rootDir, absPath))
+      continue
+    }
+
+    if (!entry.isFile()) continue
+    if (/\.(pyc|pyo|log)$/i.test(entry.name)) continue
+    if (!isSignatureTrackedFile(relPath)) continue
+    files.push(relPath)
+  }
+
+  return files.sort((a, b) => a.localeCompare(b))
+}
+
+function computeBackendBuildSignature(backendRoot) {
+  const hash = crypto.createHash('sha256')
+  const files = listFilesRecursively(backendRoot)
+
+  for (const relPath of files) {
+    const absPath = path.join(backendRoot, relPath)
+    const content = fs.readFileSync(absPath)
+    hash.update(relPath)
+    hash.update('\0')
+    hash.update(content)
+    hash.update('\0')
+  }
+
+  const selfScript = fs.readFileSync(__filename)
+  hash.update('__build_script__')
+  hash.update('\0')
+  hash.update(selfScript)
+
+  return hash.digest('hex')
+}
+
+function readBuildSignature(signatureFile) {
+  try {
+    if (!fs.existsSync(signatureFile)) return ''
+    return String(fs.readFileSync(signatureFile, 'utf8') || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+function writeBuildSignature(signatureFile, signature) {
+  fs.mkdirSync(path.dirname(signatureFile), { recursive: true })
+  fs.writeFileSync(signatureFile, `${signature}\n`, 'utf8')
 }
 
 function ensureWindowsVcRuntime(outDir) {
@@ -104,14 +184,27 @@ async function buildGistVideoBackend() {
   const exeName = process.platform === 'win32' ? 'gist-video-backend.exe' : 'gist-video-backend'
   const outDir = path.join(backendRoot, 'gist-video-backend')
   const outExe = path.join(outDir, exeName)
+  const signatureFile = path.join(outDir, '.build-signature')
 
   const force = String(process.env.GIST_VIDEO_FORCE_REBUILD || '').trim() === '1'
-  if (fs.existsSync(outExe) && !force) {
-    console.log(`[gist-video] backend exe already exists: ${outExe}`)
-    console.log('[gist-video] set GIST_VIDEO_FORCE_REBUILD=1 to rebuild it')
+  const currentSignature = computeBackendBuildSignature(backendRoot)
+  const previousSignature = readBuildSignature(signatureFile)
+
+  if (fs.existsSync(outExe) && !force && previousSignature && previousSignature === currentSignature) {
+    console.log(`[gist-video] backend exe is up-to-date: ${outExe}`)
     // Even if we skip rebuilding, keep the output directory healthy for packaging.
     ensureWindowsVcRuntime(outDir)
     return
+  }
+
+  if (force) {
+    console.log('[gist-video] force rebuild enabled by GIST_VIDEO_FORCE_REBUILD=1')
+  } else if (!fs.existsSync(outExe)) {
+    console.log('[gist-video] backend exe missing, triggering rebuild')
+  } else if (!previousSignature) {
+    console.log('[gist-video] build signature missing, triggering rebuild')
+  } else if (previousSignature !== currentSignature) {
+    console.log('[gist-video] backend sources changed, triggering rebuild')
   }
 
   if (!fs.existsSync(entry)) throw new Error(`[gist-video] entry not found: ${entry}`)
@@ -209,6 +302,7 @@ async function buildGistVideoBackend() {
     // that can break onnxruntime.dll initialization under PyInstaller. Overwrite with system32
     // copies to make the bundled backend reliable.
     ensureWindowsVcRuntime(outDir)
+    writeBuildSignature(signatureFile, currentSignature)
     console.log(`[gist-video] backend exe built: ${outExe}`)
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true })
