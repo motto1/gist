@@ -68,7 +68,7 @@ jobs:
           Get-ChildItem -Path artifacts -File | Select-Object Name, Length | Format-Table -AutoSize
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: windows-setup-${{ github.sha }}
           path: artifacts/**
