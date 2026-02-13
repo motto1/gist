@@ -3430,6 +3430,16 @@
         "version_options": "版本选择"
       },
       "title": "常规设置",
+      "update_accelerator": {
+        "description": "每行一个加速前缀（优先级从上到下），例如：https://ghfast.top/",
+        "invalid": "请输入至少一个有效的 http(s) 加速地址",
+        "load_error": "加载更新加速地址失败",
+        "placeholder": "https://ghfast.top/",
+        "reset": "恢复默认",
+        "save": "保存",
+        "saved": "更新加速地址已保存",
+        "title": "更新加速地址"
+      },
       "user_name": {
         "label": "用户名",
         "placeholder": "输入您的姓名"

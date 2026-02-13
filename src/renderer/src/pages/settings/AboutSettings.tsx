@@ -11,11 +11,11 @@ import { setUpdateState } from '@renderer/store/runtime'
 import { ThemeMode } from '@renderer/types'
 import { runAsyncFunction } from '@renderer/utils'
 import { UpgradeChannel } from '@shared/config/constant'
-import { Avatar, Button, Progress, Radio, Row, Switch, Tag, Tooltip } from 'antd'
+import { Avatar, Button, Input, Progress, Radio, Row, Switch, Tag, Tooltip } from 'antd'
 import { debounce } from 'lodash'
 import { Bug, FileCheck, Globe, Mail, Rss } from 'lucide-react'
 import { BadgeQuestionMark } from 'lucide-react'
-import { FC, useEffect, useState } from 'react'
+import { FC, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Markdown from 'react-markdown'
 import { Link } from 'react-router-dom'
@@ -23,9 +23,35 @@ import styled from 'styled-components'
 
 import { SettingContainer, SettingDivider, SettingGroup, SettingRow, SettingTitle } from '.'
 
+const UPDATE_ACCELERATOR_CONFIG_KEY = 'updateAcceleratorPrefixes'
+const DEFAULT_UPDATE_ACCELERATOR_PREFIXES = ['https://ghfast.top/']
+
+const normalizeUpdateAcceleratorPrefix = (prefix: string): string | null => {
+  const normalized = String(prefix || '').trim()
+  if (!normalized) {
+    return null
+  }
+
+  if (!/^https?:\/\//i.test(normalized)) {
+    return null
+  }
+
+  return normalized.endsWith('/') ? normalized : `${normalized}/`
+}
+
+const normalizeUpdateAcceleratorPrefixes = (input: string): string[] => {
+  const prefixes = input
+    .split(/[\n,]/)
+    .map((item) => normalizeUpdateAcceleratorPrefix(item))
+    .filter((item): item is string => Boolean(item))
+
+  return Array.from(new Set(prefixes))
+}
+
 const AboutSettings: FC = () => {
   const [version, setVersion] = useState('')
   const [isPortable, setIsPortable] = useState(false)
+  const [updateAcceleratorInput, setUpdateAcceleratorInput] = useState(DEFAULT_UPDATE_ACCELERATOR_PREFIXES.join('\n'))
   const { t } = useTranslation()
   const { autoCheckUpdate, setAutoCheckUpdate, testPlan, setTestPlan, testChannel, setTestChannel } = useSettings()
   const { theme } = useTheme()
@@ -161,14 +187,51 @@ const AboutSettings: FC = () => {
     return testChannel
   }
 
+  const loadUpdateAcceleratorPrefixes = useCallback(async () => {
+    try {
+      const value = await window.api.config.get(UPDATE_ACCELERATOR_CONFIG_KEY)
+      const list = Array.isArray(value)
+        ? value.map((item) => String(item))
+        : typeof value === 'string'
+          ? [value]
+          : []
+      const normalized = Array.from(
+        new Set(list.map((item) => normalizeUpdateAcceleratorPrefix(item)).filter((item): item is string => Boolean(item)))
+      )
+      const next = normalized.length > 0 ? normalized : DEFAULT_UPDATE_ACCELERATOR_PREFIXES
+      setUpdateAcceleratorInput(next.join('\n'))
+    } catch (error) {
+      window.toast.error(t('settings.general.update_accelerator.load_error'))
+    }
+  }, [t])
+
+  const saveUpdateAcceleratorPrefixes = async () => {
+    const normalized = normalizeUpdateAcceleratorPrefixes(updateAcceleratorInput)
+    if (normalized.length === 0) {
+      window.toast.warning(t('settings.general.update_accelerator.invalid'))
+      return
+    }
+
+    await window.api.config.set(UPDATE_ACCELERATOR_CONFIG_KEY, normalized)
+    setUpdateAcceleratorInput(normalized.join('\n'))
+    window.toast.success(t('settings.general.update_accelerator.saved'))
+  }
+
+  const resetUpdateAcceleratorPrefixes = async () => {
+    await window.api.config.set(UPDATE_ACCELERATOR_CONFIG_KEY, DEFAULT_UPDATE_ACCELERATOR_PREFIXES)
+    setUpdateAcceleratorInput(DEFAULT_UPDATE_ACCELERATOR_PREFIXES.join('\n'))
+    window.toast.success(t('settings.general.update_accelerator.saved'))
+  }
+
   useEffect(() => {
     runAsyncFunction(async () => {
       const appInfo = await window.api.getAppInfo()
       setVersion(appInfo.version)
       setIsPortable(appInfo.isPortable)
+      await loadUpdateAcceleratorPrefixes()
     })
     setAutoCheckUpdate(autoCheckUpdate)
-  }, [autoCheckUpdate, setAutoCheckUpdate])
+  }, [autoCheckUpdate, loadUpdateAcceleratorPrefixes, setAutoCheckUpdate])
 
   const onOpenDocs = () => {
     window.api.openWebsite('https://github.com/motto1/gist-downloads')
@@ -258,6 +321,25 @@ const AboutSettings: FC = () => {
                 </SettingRow>
               </>
             )}
+            <SettingDivider />
+            <UpdateAcceleratorSection>
+              <SettingRowTitle>{t('settings.general.update_accelerator.title')}</SettingRowTitle>
+              <UpdateAcceleratorDescription>{t('settings.general.update_accelerator.description')}</UpdateAcceleratorDescription>
+              <Input.TextArea
+                value={updateAcceleratorInput}
+                onChange={(event) => setUpdateAcceleratorInput(event.target.value)}
+                autoSize={{ minRows: 2, maxRows: 5 }}
+                placeholder={t('settings.general.update_accelerator.placeholder')}
+              />
+              <UpdateAcceleratorActions>
+                <Button size="small" onClick={resetUpdateAcceleratorPrefixes}>
+                  {t('settings.general.update_accelerator.reset')}
+                </Button>
+                <Button size="small" type="primary" onClick={saveUpdateAcceleratorPrefixes}>
+                  {t('settings.general.update_accelerator.save')}
+                </Button>
+              </UpdateAcceleratorActions>
+            </UpdateAcceleratorSection>
           </>
         )}
       </SettingGroup>
@@ -408,6 +490,24 @@ export const SettingRowTitle = styled.div`
     font-size: 16px;
     color: var(--color-text-1);
   }
+`
+
+const UpdateAcceleratorSection = styled.div`
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`
+
+const UpdateAcceleratorDescription = styled.div`
+  color: var(--color-text-2);
+  font-size: 12px;
+`
+
+const UpdateAcceleratorActions = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 `
 
 const UpdateNotesWrapper = styled.div`

@@ -17,6 +17,7 @@ export enum ConfigKeys {
   ClickTrayToShowQuickAssistant = 'clickTrayToShowQuickAssistant',
   EnableQuickAssistant = 'enableQuickAssistant',
   AutoUpdate = 'autoUpdate',
+  UpdateAcceleratorPrefixes = 'updateAcceleratorPrefixes',
   TestPlan = 'testPlan',
   TestChannel = 'testChannel',
   EnableDataCollection = 'enableDataCollection',
@@ -30,6 +31,42 @@ export enum ConfigKeys {
   Proxy = 'proxy',
   EnableDeveloperMode = 'enableDeveloperMode',
   ClientId = 'clientId'
+}
+
+export const DEFAULT_UPDATE_ACCELERATOR_PREFIXES = ['https://ghfast.top/']
+
+function normalizeUpdateAcceleratorPrefix(prefix: string): string | null {
+  const normalized = String(prefix || '').trim()
+  if (!normalized) {
+    return null
+  }
+
+  if (!/^https?:\/\//i.test(normalized)) {
+    return null
+  }
+
+  return normalized.endsWith('/') ? normalized : `${normalized}/`
+}
+
+function normalizeUpdateAcceleratorPrefixes(prefixes: string[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+
+  for (const prefix of prefixes) {
+    const normalized = normalizeUpdateAcceleratorPrefix(prefix)
+    if (!normalized) {
+      continue
+    }
+
+    if (seen.has(normalized)) {
+      continue
+    }
+
+    seen.add(normalized)
+    result.push(normalized)
+  }
+
+  return result
 }
 
 export class ConfigManager {
@@ -146,6 +183,28 @@ export class ConfigManager {
 
   setAutoUpdate(value: boolean) {
     this.set(ConfigKeys.AutoUpdate, value)
+  }
+
+  getUpdateAcceleratorPrefixes(): string[] {
+    const raw = this.get<string[] | string>(ConfigKeys.UpdateAcceleratorPrefixes)
+    const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : []
+    const normalized = normalizeUpdateAcceleratorPrefixes(list)
+
+    if (normalized.length > 0) {
+      return normalized
+    }
+
+    return [...DEFAULT_UPDATE_ACCELERATOR_PREFIXES]
+  }
+
+  setUpdateAcceleratorPrefixes(value: string[]) {
+    const normalized = normalizeUpdateAcceleratorPrefixes(value)
+    if (normalized.length === 0) {
+      this.set(ConfigKeys.UpdateAcceleratorPrefixes, [...DEFAULT_UPDATE_ACCELERATOR_PREFIXES])
+      return
+    }
+
+    this.set(ConfigKeys.UpdateAcceleratorPrefixes, normalized)
   }
 
   getTestPlan(): boolean {

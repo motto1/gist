@@ -17,7 +17,6 @@ const logger = loggerService.withContext('AppUpdater')
 
 const PUBLIC_DOWNLOADS_REPO = 'motto1/gist-downloads'
 const PUBLIC_RELEASE_API = `https://api.github.com/repos/${PUBLIC_DOWNLOADS_REPO}/releases/latest`
-const GITHUB_ACCELERATOR_PREFIX = 'https://github.abskoop.workers.dev/'
 
 type AppEdition = 'basic' | 'pro'
 type UpdateSource = 'electron-updater' | 'public-release' | null
@@ -70,16 +69,20 @@ function compareVersions(left: string, right: string): number {
   return a.prerelease.localeCompare(b.prerelease)
 }
 
-function toAcceleratedUrl(url: string): string {
+function toAcceleratedUrl(url: string, prefix: string): string {
   if (!url) {
     return url
   }
 
-  if (url.startsWith(GITHUB_ACCELERATOR_PREFIX)) {
+  if (!prefix) {
     return url
   }
 
-  return `${GITHUB_ACCELERATOR_PREFIX}${url}`
+  if (url.startsWith(prefix)) {
+    return url
+  }
+
+  return `${prefix}${url}`
 }
 
 export default class AppUpdater {
@@ -177,18 +180,7 @@ export default class AppUpdater {
       }
 
       const nativeDownloadUrl = installer.browser_download_url
-      const acceleratedDownloadUrl = toAcceleratedUrl(nativeDownloadUrl)
-
-      const isAcceleratedAvailable = await this.canAccessUrl(acceleratedDownloadUrl)
-      const preferredDownloadUrl = isAcceleratedAvailable ? acceleratedDownloadUrl : nativeDownloadUrl
-      const fallbackDownloadUrl = isAcceleratedAvailable ? nativeDownloadUrl : null
-
-      if (!isAcceleratedAvailable) {
-        logger.warn('accelerated download url unavailable during update check, use native github url', {
-          acceleratedDownloadUrl,
-          nativeDownloadUrl
-        })
-      }
+      const { preferredDownloadUrl, fallbackDownloadUrl } = await this.resolvePreferredDownloadUrl(nativeDownloadUrl)
 
       const releaseInfo = this.buildPublicReleaseInfo(latestRelease, latestVersion, installer, preferredDownloadUrl)
       this.releaseInfo = releaseInfo
@@ -267,11 +259,12 @@ export default class AppUpdater {
   }
 
   private async fetchLatestPublicRelease(): Promise<GithubRelease> {
+    const acceleratorPrefixes = configManager.getUpdateAcceleratorPrefixes()
     const fetchers = [
-      {
-        source: 'accelerated',
-        run: () => this.fetchLatestPublicReleaseFromAcceleratedLatestPage()
-      },
+      ...acceleratorPrefixes.map((prefix, index) => ({
+        source: `accelerated-${index + 1}`,
+        run: () => this.fetchLatestPublicReleaseFromAcceleratedLatestPage(prefix)
+      })),
       {
         source: 'github',
         run: () => this.fetchLatestPublicReleaseFromApi(PUBLIC_RELEASE_API, 'github')
@@ -295,8 +288,8 @@ export default class AppUpdater {
     throw lastError instanceof Error ? lastError : new Error('Failed to fetch latest release')
   }
 
-  private async fetchLatestPublicReleaseFromAcceleratedLatestPage(): Promise<GithubRelease> {
-    const acceleratedLatestUrl = toAcceleratedUrl(`https://github.com/${PUBLIC_DOWNLOADS_REPO}/releases/latest`)
+  private async fetchLatestPublicReleaseFromAcceleratedLatestPage(prefix: string): Promise<GithubRelease> {
+    const acceleratedLatestUrl = toAcceleratedUrl(`https://github.com/${PUBLIC_DOWNLOADS_REPO}/releases/latest`, prefix)
     const abortController = new AbortController()
     const timeout = setTimeout(() => abortController.abort(), 20_000)
 
@@ -311,22 +304,22 @@ export default class AppUpdater {
       })
 
       if (!response.ok) {
-        throw new Error(`[accelerated] latest release page request failed: ${response.status} ${response.statusText}`)
+        throw new Error(`[accelerated:${prefix}] latest release page request failed: ${response.status} ${response.statusText}`)
       }
 
       const finalUrl = response.url || acceleratedLatestUrl
       const tagMatch = finalUrl.match(/\/releases\/tag\/([^/?#]+)/)
       if (!tagMatch || !tagMatch[1]) {
-        throw new Error('[accelerated] failed to parse release tag from redirect url')
+        throw new Error(`[accelerated:${prefix}] failed to parse release tag from redirect url`)
       }
 
       const tagName = decodeURIComponent(tagMatch[1])
       const version = normalizeVersion(tagName)
       if (!version) {
-        throw new Error('[accelerated] invalid release tag')
+        throw new Error(`[accelerated:${prefix}] invalid release tag`)
       }
 
-      logger.info('fetched latest release from accelerated latest page', { finalUrl, tagName })
+      logger.info('fetched latest release from accelerated latest page', { prefix, finalUrl, tagName })
 
       return {
         tag_name: tagName,
@@ -402,6 +395,35 @@ export default class AppUpdater {
     }
 
     throw lastError instanceof Error ? lastError : new Error(`[${source}] failed to fetch latest release`)
+  }
+
+  private async resolvePreferredDownloadUrl(
+    nativeDownloadUrl: string
+  ): Promise<{ preferredDownloadUrl: string; fallbackDownloadUrl: string | null }> {
+    const acceleratorPrefixes = configManager.getUpdateAcceleratorPrefixes()
+
+    for (const prefix of acceleratorPrefixes) {
+      const acceleratedUrl = toAcceleratedUrl(nativeDownloadUrl, prefix)
+      const isAvailable = await this.canAccessUrl(acceleratedUrl)
+
+      if (isAvailable) {
+        return {
+          preferredDownloadUrl: acceleratedUrl,
+          fallbackDownloadUrl: nativeDownloadUrl
+        }
+      }
+
+      logger.warn('accelerated download url unavailable during update check', {
+        prefix,
+        acceleratedUrl,
+        nativeDownloadUrl
+      })
+    }
+
+    return {
+      preferredDownloadUrl: nativeDownloadUrl,
+      fallbackDownloadUrl: null
+    }
   }
 
   private async resolveDownloadUrl(primaryUrl: string, fallbackUrl: string | null): Promise<string> {

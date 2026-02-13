@@ -3430,6 +3430,16 @@
         "version_options": "Version Options"
       },
       "title": "General Settings",
+      "update_accelerator": {
+        "description": "One prefix per line (top to bottom priority), e.g. https://ghfast.top/",
+        "invalid": "Please enter at least one valid http(s) accelerator prefix",
+        "load_error": "Failed to load update accelerator prefixes",
+        "placeholder": "https://ghfast.top/",
+        "reset": "Reset to default",
+        "save": "Save",
+        "saved": "Update accelerator prefixes saved",
+        "title": "Update accelerator prefixes"
+      },
       "user_name": {
         "label": "User Name",
         "placeholder": "Enter your name"
